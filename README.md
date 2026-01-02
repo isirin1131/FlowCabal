@@ -12,6 +12,13 @@ FlowWrite is a local-first web application that lets writers create custom text 
 
 ## Tech Stack
 
-- Frontend: Svelte as fe framwork, Svelte Flow(powered by xyflow) as node workflow ui, vite as build system
-- Backend: sqlite3
-- AI: API integration only (bring your own API keys)
+- **Frontend Framework**: Svelte 5 (Runes API: `$state`, `$derived`, `$effect`)
+- **Node Editor**: @xyflow/svelte (Svelte Flow)
+- **Build System**: Vite 7
+- **Language**: TypeScript
+- **State Management**: Svelte 5 Runes + Context API
+- **Persistence**: IndexedDB
+
+## License
+
+MIT
