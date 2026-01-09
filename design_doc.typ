@@ -610,6 +610,99 @@ function deserializeWorkflow(data: string): Workflow {
 }
 ```
 
+=== 嵌套结构序列化
+
+TextBlockList、Node、ApiConfiguration 等嵌套结构直接序列化为 JSON，无需特殊处理：
+
+==== TextBlockList 序列化
+
+```typescript
+// TextBlockList 及其包含的块直接序列化
+const textBlockList: TextBlockList = {
+  id: 'list-123',
+  blocks: [
+    { type: 'text', id: 'tb-1', content: '请分析以下内容：' },
+    {
+      type: 'virtual',
+      id: 'vtb-1',
+      sourceNodeId: 'node-abc',
+      state: 'pending',
+      resolvedContent: null,
+      frozen: false,
+      displayName: '上游输出'
+    }
+  ]
+};
+
+// JSON.stringify 直接处理，无需转换
+JSON.stringify(textBlockList);
+// => {"id":"list-123","blocks":[{"type":"text","id":"tb-1","content":"请分析以下内容："},{"type":"virtual","id":"vtb-1","sourceNodeId":"node-abc","state":"pending","resolvedContent":null,"frozen":false,"displayName":"上游输出"}]}
+```
+
+==== Node 序列化
+
+```typescript
+// 节点包含 ApiConfiguration，其中包含两个 TextBlockList
+const node: Node = {
+  id: 'node-123',
+  name: '内容总结',
+  apiConfig: {
+    connection: {
+      endpoint: 'https://api.openai.com/v1',
+      apiKey: 'sk-...',
+      model: 'gpt-4o'
+    },
+    parameters: {
+      temperature: 0.7,
+      maxTokens: 4096,
+      topP: 1,
+      presencePenalty: 0,
+      frequencyPenalty: 0,
+      stopSequences: [],
+      streaming: true
+    },
+    systemPrompt: {
+      id: 'sys-prompt',
+      blocks: [{ type: 'text', id: 'sp-1', content: '你是一个专业的内容总结助手。' }]
+    },
+    userPrompt: {
+      id: 'user-prompt',
+      blocks: [
+        { type: 'text', id: 'up-1', content: '请总结以下内容：\n' },
+        { type: 'virtual', id: 'up-2', sourceNodeId: 'node-source', state: 'pending', resolvedContent: null, frozen: false }
+      ]
+    }
+  },
+  output: null,
+  state: 'idle',
+  position: { x: 200, y: 150 }
+};
+
+// 直接序列化，所有嵌套结构自动处理
+JSON.stringify(node);
+```
+
+==== 完整工作流存储结构
+
+```json
+{
+  "id": "workflow-abc",
+  "name": "文章润色工作流",
+  "nodes": [
+    ["node-1", { /* Node 对象 */ }],
+    ["node-2", { /* Node 对象 */ }]
+  ],
+  "state": "idle",
+  "executionOrder": [],
+  "currentIndex": 0
+}
+```
+
+关键点：
+- `nodes` 字段是 `[nodeId, node]` 元组数组（由 `Map.entries()` 生成）
+- 每个 Node 包含完整的 `apiConfig`，其中 `systemPrompt` 和 `userPrompt` 都是 TextBlockList
+- VirtualTextBlock 的 `resolvedContent` 在未解析时为 `null`，解析后存储实际内容
+
 == 安全考虑
 
 API 密钥存储在 IndexedDB 中，具有以下特性：
