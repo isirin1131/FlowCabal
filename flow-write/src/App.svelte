@@ -2,6 +2,7 @@
   import NavBar from './lib/NavBar.svelte';
   import FlowEditor from './lib/FlowEditor.svelte';
   import ApiTest from './lib/ApiTest.svelte';
+  import FloatingBall from './lib/FloatingBall.svelte';
 
   let activePage = $state('flow');
 </script>
@@ -18,6 +19,8 @@
     {/if}
   </div>
 </div>
+
+<FloatingBall />
 
 <style>
   :global(html) {
