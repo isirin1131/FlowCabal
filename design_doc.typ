@@ -28,18 +28,6 @@ AI 可以大幅提高写作的效率，但真正的创作往往需要反复打�
 - *实时依赖解析*：智能处理节点间的数据流转与依赖关系
 - *创作友好设计*：为文字工作者的使用习惯深度优化
 
-\
-\
-\
-\
-\
-\
-\
-\
-\
-\
-\
-
 = workflow 功能模块的总体设计
 
 基于对交互方式的设想，我们发现具体组件的设计可以是低耦合而优雅的。
@@ -191,5 +179,219 @@ isListReady(final); // => true
 // 获取最终 prompt
 getListContent(final);
 // => '请参照以下要求：要求内容...\n\n将以下内容进行总结：\n源文本内容...'
+```
+
+\
+\
+\
+\
+
+=== 节点系统 (Node)
+
+节点是工作流的核心执行单元，代表一次 LLM API 调用。
+
+==== 节点结构
+
+```typescript
+interface Node {
+  readonly id: NodeId;
+  name: string;                      // 显示名称
+  input: TextBlockList;              // 输入 prompt（文本块列表）
+  output: TextBlock | null;          // LLM 输出（执行完成后填充）
+  state: NodeState;                  // 执行状态
+  errorMessage?: string;             // 错误信息
+  llmConfig: LLMConfig;              // LLM 配置
+  position: { x: number; y: number }; // 画布位置
+}
+
+type NodeState = 'idle' | 'pending' | 'running' | 'completed' | 'error';
+```
+
+==== 节点状态流转
+
+```
+           依赖就绪
+  idle ──────────────► pending ──────────► running
+    ▲                                         │
+    │                      成功               ▼
+    └──── reset ◄──────── completed ◄────────┘
+                              │
+                          失败 ▼
+                            error
+```
+
+- `idle`: 初始状态，等待依赖或用户触发
+- `pending`: 所有依赖已就绪，排队等待执行
+- `running`: 正在执行 LLM API 调用
+- `completed`: 执行成功，`output` 已填充
+- `error`: 执行失败，`errorMessage` 记录错误
+
+==== LLM 配置
+
+```typescript
+interface LLMConfig {
+  provider: string;      // API 提供商 ('openai', 'anthropic', 'custom')
+  model: string;         // 模型标识符
+  endpoint?: string;     // 自定义 API 端点
+  temperature?: number;  // 采样温度 (0-2)
+  maxTokens?: number;    // 最大生成 token 数
+  systemPrompt?: string; // 系统提示词
+}
+```
+
+==== 核心操作
+
+- `getNodeDependencies(node)`: 获取节点依赖的上游节点 ID 列表
+- `isNodeReady(node)`: 检查节点是否可执行（所有依赖已解析）
+- `getNodePrompt(node)`: 获取最终的 prompt 字符串
+- `getNodeOutput(node)`: 获取输出内容（未完成时返回空字符串）
+
+=== 工作流系统 (Workflow)
+
+工作流管理节点集合，负责依赖解析和执行调度。
+
+==== 工作流结构
+
+```typescript
+interface Workflow {
+  readonly id: string;
+  name: string;
+  nodes: NodeMap;              // 节点集合 (Map<NodeId, Node>)
+  state: WorkflowState;        // 执行状态
+  executionOrder: NodeId[];    // 拓扑排序后的执行顺序
+  currentIndex: number;        // 当前执行位置
+}
+
+type WorkflowState = 'idle' | 'running' | 'completed' | 'error';
+```
+
+==== 拓扑排序 (Kahn's Algorithm)
+
+工作流执行前，需要对节点进行拓扑排序以确定执行顺序：
+
+```typescript
+function topologicalSort(nodes: NodeMap): TopologicalSortResult {
+  // 1. 计算每个节点的入度（依赖数量）
+  // 2. 将入度为 0 的节点加入队列
+  // 3. 依次处理队列中的节点：
+  //    - 将其加入结果列表
+  //    - 将其下游节点的入度减 1
+  //    - 若下游节点入度变为 0，加入队列
+  // 4. 检测循环依赖（未处理完所有节点）
+}
+```
+
+错误处理：
+- `missing`: 引用了不存在的节点
+- `cycle`: 检测到循环依赖
+
+==== 执行流程
+
+```typescript
+// 1. 准备工作流（拓扑排序 + 状态初始化）
+const prepared = prepareWorkflow(workflow);
+
+// 2. 定义节点执行器（实际的 LLM API 调用）
+const executor: NodeExecutor = async (nodeId, prompt, node) => {
+  const response = await callLLMAPI(node.llmConfig, prompt);
+  return response.content;
+};
+
+// 3. 执行工作流
+const result = await executeWorkflow(prepared, executor, (progress) => {
+  console.log(`执行进度: ${progress.currentIndex}/${progress.executionOrder.length}`);
+});
+```
+
+==== 状态传播
+
+当一个节点执行完成时，其输出会自动传播到所有依赖它的下游节点：
+
+```typescript
+function propagateNodeOutput(nodes, completedNodeId, outputContent) {
+  // 遍历所有节点
+  // 若节点的 input 中有虚拟块引用 completedNodeId
+  // 则调用 resolveNodeOutput 更新该虚拟块
+}
+```
+
+=== 完整示例
+
+```typescript
+import {
+  createWorkflow,
+  createNode,
+  addNode,
+  updateNodeInput,
+  createTextBlockList,
+  createTextBlock,
+  createVirtualTextBlock,
+  executeWorkflow
+} from './lib/core';
+
+// 创建工作流
+let workflow = createWorkflow('文章润色工作流');
+
+// 创建节点 A: 生成大纲
+const nodeA = createNode('生成大纲', { x: 100, y: 100 });
+nodeA.input = createTextBlockList([
+  createTextBlock('请为以下主题生成一个文章大纲：\n\n人工智能的未来发展')
+]);
+
+// 创建节点 B: 扩写第一部分
+const nodeB = createNode('扩写第一部分', { x: 100, y: 250 });
+nodeB.input = createTextBlockList([
+  createTextBlock('基于以下大纲，扩写第一部分：\n\n'),
+  createVirtualTextBlock(nodeA.id, '大纲')
+]);
+
+// 创建节点 C: 扩写第二部分
+const nodeC = createNode('扩写第二部分', { x: 300, y: 250 });
+nodeC.input = createTextBlockList([
+  createTextBlock('基于以下大纲，扩写第二部分：\n\n'),
+  createVirtualTextBlock(nodeA.id, '大纲')
+]);
+
+// 创建节点 D: 合并润色
+const nodeD = createNode('合并润色', { x: 200, y: 400 });
+nodeD.input = createTextBlockList([
+  createTextBlock('请将以下两部分内容合并并润色：\n\n第一部分：\n'),
+  createVirtualTextBlock(nodeB.id, '第一部分'),
+  createTextBlock('\n\n第二部分：\n'),
+  createVirtualTextBlock(nodeC.id, '第二部分')
+]);
+
+// 添加节点到工作流
+workflow = addNode(workflow, nodeA);
+workflow = addNode(workflow, nodeB);
+workflow = addNode(workflow, nodeC);
+workflow = addNode(workflow, nodeD);
+
+// 执行工作流
+// 执行顺序将是: A → B, C (并行) → D
+const result = await executeWorkflow(workflow, executor);
+```
+
+依赖图：
+
+```
+    ┌──────────┐
+    │  Node A  │  (生成大纲)
+    │  大纲生成  │
+    └────┬─────┘
+         │
+    ┌────┴────┐
+    ▼         ▼
+┌──────┐  ┌──────┐
+│Node B│  │Node C│  (扩写各部分)
+│ 第一部分│  │ 第二部分│
+└───┬──┘  └──┬───┘
+    │        │
+    └───┬────┘
+        ▼
+   ┌─────────┐
+   │  Node D │  (合并润色)
+   │  最终输出 │
+   └─────────┘
 ```
 
