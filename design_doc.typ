@@ -73,4 +73,123 @@ AI 可以大幅提高写作的效率，但真正的创作往往需要反复打�
 
 综合来看，状态设计不会很复杂。
 
+\
+\
+\
+\
+\
+
 == 组件设计
+
+=== 文本块系统
+
+文本块是 FlowWrite 中最基础的数据单元，用于构建节点的输入内容。系统设计了三种核心抽象：
+
+==== 基础文本块 (TextBlock)
+
+最简单的文本单元，包含静态的文本内容，不依赖任何外部状态。
+
+```typescript
+interface TextBlock {
+  readonly type: 'text';
+  readonly id: TextBlockId;
+  content: string;
+}
+```
+
+特点：
+- 内容由用户直接编辑
+- 始终处于就绪状态
+- 不参与依赖解析
+
+==== 虚拟文本块 (VirtualTextBlock)
+
+动态文本单元，引用某个节点的输出。这是实现节点间数据流转的关键抽象。
+
+```typescript
+interface VirtualTextBlock {
+  readonly type: 'virtual';
+  readonly id: TextBlockId;
+  readonly sourceNodeId: NodeId;    // 引用的源节点
+  state: 'pending' | 'resolved' | 'error';
+  resolvedContent: string | null;   // 解析后的内容
+  frozen: boolean;                  // 冻结状态
+  displayName?: string;             // 占位显示名称
+}
+```
+
+状态流转：
+- `pending`: 源节点尚未执行，显示为占位符 `[节点名称]`
+- `resolved`: 源节点已产出内容，显示实际文本
+- `error`: 源节点执行失败，显示错误占位符
+
+冻结功能：
+- 当 `frozen = true` 时，虚拟文本块表现为普通文本块
+- 冻结后不再响应源节点的更新
+- 适用于需要"快照"某个中间结果的场景
+
+==== 文本块列表 (TextBlockList)
+
+文本块的有序容器，代表一个节点的完整输入内容。
+
+```typescript
+interface TextBlockList {
+  readonly id: string;
+  blocks: AnyTextBlock[];  // TextBlock | VirtualTextBlock
+}
+```
+
+核心操作：
+- `getListContent()`: 拼接所有块的内容，生成最终 prompt
+- `isListReady()`: 检查所有块是否就绪（可用于判断节点能否执行）
+- `getDependencies()`: 获取所有未冻结的虚拟块依赖的节点 ID 列表
+- `resolveNodeOutput()`: 当某节点产出内容时，更新所有引用该节点的虚拟块
+
+=== 依赖解析
+
+基于文本块列表的 `getDependencies()` 方法，可以构建节点间的依赖图：
+
+```
+Node A ──────────────────────────┐
+                                 ▼
+Node B ──┬───────────────────► Node D
+         │                       ▲
+Node C ──┘───────────────────────┘
+```
+
+工作流执行时，按拓扑顺序依次执行节点：
+1. 收集所有节点的依赖关系
+2. 找出无依赖的节点，优先执行
+3. 节点执行完成后，通过 `resolveNodeOutput()` 更新下游节点的虚拟块
+4. 重复步骤 2-3 直到所有节点执行完毕
+
+=== 使用示例
+
+```typescript
+// 创建一个节点的输入内容
+const inputList = createTextBlockList([
+  createTextBlock('请参照以下要求：'),
+  createVirtualTextBlock('node-requirements', '要求'),
+  createTextBlock('\n\n将以下内容进行总结：\n'),
+  createVirtualTextBlock('node-source', '源文本'),
+]);
+
+// 检查依赖
+const deps = getDependencies(inputList);
+// => ['node-requirements', 'node-source']
+
+// 当 node-requirements 执行完成
+const updated = resolveNodeOutput(inputList, 'node-requirements', '要求内容...');
+
+// 检查是否就绪
+isListReady(updated); // => false (node-source 仍为 pending)
+
+// 当所有依赖都解析完成后
+const final = resolveNodeOutput(updated, 'node-source', '源文本内容...');
+isListReady(final); // => true
+
+// 获取最终 prompt
+getListContent(final);
+// => '请参照以下要求：要求内容...\n\n将以下内容进行总结：\n源文本内容...'
+```
+
