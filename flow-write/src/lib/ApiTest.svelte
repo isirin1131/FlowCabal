@@ -1,116 +1,79 @@
 <script lang="ts">
-  import { DeepSeekClient } from './api/providers/deepseek';
-  import { OpenAIClient } from './api/providers/openai';
+  import { OpenAICompatibleClient, buildChatRequest } from './api/client';
   import type {
     ChatMessage,
     ChatCompletionRequest,
-    StreamChunk,
-    ConnectionSettings,
-    RequestParameters,
-    FeatureToggles,
-    FIMSettings,
-    TestMessage,
-    ResponseState,
-    ExportToNodeData,
-    ProviderType,
-    FIMCompletionRequest
-  } from './api/types';
-  import {
-    PROVIDERS,
-    defaultConnectionSettings,
-    defaultRequestParameters,
-    defaultFeatureToggles,
-    defaultFIMSettings,
-    defaultResponseState,
-    createTestMessage
+    UsageInfo
   } from './api/types';
 
-  let connection = $state<ConnectionSettings>({ ...defaultConnectionSettings });
-  let parameters = $state<RequestParameters>({ ...defaultRequestParameters });
-  let features = $state<FeatureToggles>({ ...defaultFeatureToggles });
-  let fim = $state<FIMSettings>({ ...defaultFIMSettings });
-  let systemPrompt = $state('');
-  let messages = $state<TestMessage[]>([]);
-  let response = $state<ResponseState>({ ...defaultResponseState });
-  let userInput = $state('');
-  let prefixInput = $state('');
-  let showSettings = $state(true);
-  let abortController: AbortController | null = null;
+  // ============================================================================
+  // State Types
+  // ============================================================================
 
-  let currentProvider = $derived(PROVIDERS[connection.provider]);
-
-  let availableModels = $derived(
-    connection.provider === 'custom'
-      ? connection.model ? [connection.model] : []
-      : currentProvider.models
-  );
-
-  let isThinkingMode = $derived(
-    features.thinkingMode && currentProvider.supportsThinkingMode
-  );
-
-  let needsBetaEndpoint = $derived(
-    (features.prefixCompletion || features.fimMode) &&
-    connection.provider === 'deepseek'
-  );
-
-  let warnings = $derived.by(() => {
-    const w: string[] = [];
-
-    if (isThinkingMode) {
-      if (parameters.temperature !== 0.7) w.push('Temperature is ignored in thinking mode');
-      if (parameters.topP !== 1) w.push('Top P is ignored in thinking mode');
-    }
-
-    if (features.jsonMode) {
-      const allContent = systemPrompt + messages.map(m => m.content).join('') + userInput;
-      if (!allContent.toLowerCase().includes('json')) {
-        w.push('Prompt must contain "json" for JSON mode');
-      }
-    }
-
-    if (features.prefixCompletion && !currentProvider.supportsPrefixCompletion) {
-      w.push(`${currentProvider.name} does not support prefix completion`);
-    }
-
-    if (features.fimMode && !currentProvider.supportsFIM) {
-      w.push(`${currentProvider.name} does not support FIM mode`);
-    }
-
-    if (features.prefixCompletion && !prefixInput.trim()) {
-      w.push('Prefix completion requires assistant prefix content');
-    }
-
-    return w;
-  });
-
-  function handleProviderChange(e: Event) {
-    const target = e.target as HTMLSelectElement;
-    const provider = target.value as ProviderType;
-    connection.provider = provider;
-    const config = PROVIDERS[provider];
-    connection.model = config.defaultModel;
-    connection.baseUrl = provider === 'custom' ? '' : config.baseUrl;
+  interface TestMessage extends ChatMessage {
+    id: string;
+    timestamp: number;
   }
 
-  function getClient(): DeepSeekClient | OpenAIClient {
-    const isCustom = connection.provider === 'custom';
+  type ResponseStatus = 'idle' | 'loading' | 'streaming' | 'success' | 'error';
 
-    if (connection.provider === 'deepseek') {
-      const config: { apiKey: string; useBeta?: boolean; baseUrl?: string } = {
-        apiKey: connection.apiKey,
-        useBeta: needsBetaEndpoint
-      };
-      if (isCustom) {
-        config.baseUrl = connection.baseUrl;
-      }
-      return new DeepSeekClient(config);
-    }
+  interface ResponseState {
+    status: ResponseStatus;
+    content: string;
+    error: string | null;
+    usage: UsageInfo | null;
+    responseTime: number | null;
+  }
 
-    const baseUrl = isCustom ? connection.baseUrl : 'https://api.openai.com/v1';
-    return new OpenAIClient({
-      apiKey: connection.apiKey,
-      baseUrl
+  // ============================================================================
+  // State
+  // ============================================================================
+
+  let endpoint = $state('https://api.openai.com/v1');
+  let apiKey = $state('');
+  let model = $state('gpt-4o');
+
+  let temperature = $state(0.7);
+  let maxTokens = $state(4096);
+  let topP = $state(1);
+  let streaming = $state(true);
+  let stopSequences = $state<string[]>([]);
+
+  let systemPrompt = $state('');
+  let messages = $state<TestMessage[]>([]);
+  let userInput = $state('');
+  let showSettings = $state(true);
+
+  let response = $state<ResponseState>({
+    status: 'idle',
+    content: '',
+    error: null,
+    usage: null,
+    responseTime: null
+  });
+
+  let abortController: AbortController | null = null;
+
+  // ============================================================================
+  // Helpers
+  // ============================================================================
+
+  function createTestMessage(
+    role: ChatMessage['role'],
+    content: string
+  ): TestMessage {
+    return {
+      id: crypto.randomUUID(),
+      role,
+      content,
+      timestamp: Date.now()
+    };
+  }
+
+  function getClient(): OpenAICompatibleClient {
+    return new OpenAICompatibleClient({
+      endpoint,
+      apiKey
     });
   }
 
@@ -122,62 +85,49 @@
     }
 
     for (const msg of messages) {
-      req_messages.push({
-        role: msg.role,
-        content: msg.content,
-        ...(msg.reasoning_content ? { reasoning_content: msg.reasoning_content } : {})
-      });
+      req_messages.push({ role: msg.role, content: msg.content });
     }
 
-    if (userInput.trim() && !features.fimMode) {
+    if (userInput.trim()) {
       req_messages.push({ role: 'user', content: userInput });
     }
 
-    if (features.prefixCompletion && prefixInput.trim()) {
-      req_messages.push({
-        role: 'assistant',
-        content: prefixInput,
-        prefix: true
-      });
-    }
-
     const request: ChatCompletionRequest = {
-      model: connection.model,
+      model,
       messages: req_messages,
-      max_tokens: parameters.maxTokens,
-      stream: features.streaming
+      max_tokens: maxTokens,
+      temperature,
+      top_p: topP,
+      stream: streaming
     };
 
-    if (!isThinkingMode) {
-      request.temperature = parameters.temperature;
-      request.top_p = parameters.topP;
-      request.presence_penalty = parameters.presencePenalty;
-      request.frequency_penalty = parameters.frequencyPenalty;
-    }
-
-    if (features.thinkingMode && connection.provider === 'deepseek') {
-      request.thinking = { type: 'enabled' as const };
-    }
-
-    if (features.jsonMode) {
-      request.response_format = { type: 'json_object' as const };
-    }
-
-    if (parameters.stopSequences.length > 0) {
-      request.stop = parameters.stopSequences;
+    if (stopSequences.length > 0) {
+      request.stop = stopSequences;
     }
 
     return request;
   }
 
   async function sendRequest() {
-    if (!connection.apiKey) {
-      response = { ...defaultResponseState, status: 'error', error: 'API key is required' };
+    if (!apiKey) {
+      response = {
+        status: 'error',
+        content: '',
+        error: 'API key is required',
+        usage: null,
+        responseTime: null
+      };
       return;
     }
 
-    if (!connection.baseUrl && connection.provider === 'custom') {
-      response = { ...defaultResponseState, status: 'error', error: 'Base URL is required for custom provider' };
+    if (!endpoint) {
+      response = {
+        status: 'error',
+        content: '',
+        error: 'Endpoint URL is required',
+        usage: null,
+        responseTime: null
+      };
       return;
     }
 
@@ -185,58 +135,34 @@
     const request = buildRequest();
     const startTime = Date.now();
 
-    if (userInput.trim() && !features.fimMode) {
+    if (userInput.trim()) {
       messages = [...messages, createTestMessage('user', userInput)];
       userInput = '';
     }
 
     response = {
-      ...defaultResponseState,
-      status: features.streaming ? 'streaming' : 'loading'
+      status: streaming ? 'streaming' : 'loading',
+      content: '',
+      error: null,
+      usage: null,
+      responseTime: null
     };
 
     abortController = new AbortController();
 
     try {
-      if (features.fimMode) {
-        const fimRequest: FIMCompletionRequest = {
-          model: connection.model,
-          prompt: fim.prefix,
-          suffix: fim.suffix || undefined,
-          max_tokens: parameters.maxTokens,
-          temperature: parameters.temperature
-        };
-
-        if ('fimCompletion' in client) {
-          const fimResponse = await (client as DeepSeekClient).fimCompletion(fimRequest);
-          response = {
-            status: 'success',
-            content: fimResponse.choices[0]?.text ?? '',
-            reasoningContent: '',
-            error: null,
-            usage: fimResponse.usage,
-            responseTime: Date.now() - startTime
-          };
-        } else {
-          throw new Error('FIM mode is not supported by this provider');
-        }
-      } else if (features.streaming) {
+      if (streaming) {
         let content = '';
-        let reasoningContent = '';
 
         for await (const chunk of client.chatCompletionStream(request)) {
           const delta = chunk.choices[0]?.delta;
           if (delta?.content) {
             content += delta.content;
           }
-          if (delta?.reasoning_content) {
-            reasoningContent += delta.reasoning_content;
-          }
 
           response = {
             status: 'streaming',
             content,
-            reasoningContent,
             error: null,
             usage: chunk.usage ?? null,
             responseTime: Date.now() - startTime
@@ -246,9 +172,7 @@
         response = { ...response, status: 'success' };
 
         if (content) {
-          messages = [...messages, createTestMessage('assistant', content, {
-            reasoning_content: reasoningContent || undefined
-          })];
+          messages = [...messages, createTestMessage('assistant', content)];
         }
       } else {
         const chatResponse = await client.chatCompletion(request);
@@ -257,23 +181,21 @@
         response = {
           status: 'success',
           content: choice?.message.content ?? '',
-          reasoningContent: choice?.message.reasoning_content ?? '',
           error: null,
           usage: chatResponse.usage,
           responseTime: Date.now() - startTime
         };
 
         if (choice?.message.content) {
-          messages = [...messages, createTestMessage('assistant', choice.message.content, {
-            reasoning_content: choice.message.reasoning_content
-          })];
+          messages = [...messages, createTestMessage('assistant', choice.message.content)];
         }
       }
     } catch (err) {
       response = {
-        ...defaultResponseState,
         status: 'error',
+        content: '',
         error: err instanceof Error ? err.message : 'Unknown error',
+        usage: null,
         responseTime: Date.now() - startTime
       };
     }
@@ -288,46 +210,28 @@
 
   function clearHistory() {
     messages = [];
-    response = { ...defaultResponseState };
+    response = {
+      status: 'idle',
+      content: '',
+      error: null,
+      usage: null,
+      responseTime: null
+    };
   }
 
   function deleteMessage(id: string) {
     messages = messages.filter(m => m.id !== id);
   }
 
-  function exportToNode(): ExportToNodeData {
-    return {
-      systemPrompt,
-      messages: messages.map(m => ({
-        role: m.role,
-        content: m.content,
-        reasoning_content: m.reasoning_content
-      })),
-      model: connection.model,
-      parameters: { ...parameters },
-      features: { ...features },
-      lastResponse: response.content ? {
-        content: response.content,
-        reasoningContent: response.reasoningContent || undefined
-      } : null
-    };
-  }
-
-  function handleExportToNode() {
-    const data = exportToNode();
-    console.log('Export to Node:', data);
-    alert('Exported! Check console for data.\n\nIntegration with workflow coming soon.');
-  }
-
   function addStopSequence() {
     const seq = prompt('Enter stop sequence:');
     if (seq) {
-      parameters.stopSequences = [...parameters.stopSequences, seq];
+      stopSequences = [...stopSequences, seq];
     }
   }
 
   function removeStopSequence(index: number) {
-    parameters.stopSequences = parameters.stopSequences.filter((_, i) => i !== index);
+    stopSequences = stopSequences.filter((_, i) => i !== index);
   }
 </script>
 
@@ -338,9 +242,6 @@
       <button class="btn-icon" onclick={() => showSettings = !showSettings}>
         {showSettings ? '◀' : '▶'} Settings
       </button>
-      <button class="btn-primary" onclick={handleExportToNode} disabled={messages.length === 0}>
-        Export to Node
-      </button>
     </div>
   </div>
 
@@ -348,85 +249,46 @@
     {#if showSettings}
       <div class="settings-panel">
         <section class="settings-section">
-          <h3>Provider</h3>
-          <div class="form-group">
-            <label for="provider">Provider</label>
-            <select id="provider" value={connection.provider} onchange={handleProviderChange}>
-              <option value="deepseek">DeepSeek</option>
-              <option value="openai">OpenAI</option>
-              <option value="custom">Custom</option>
-            </select>
-          </div>
-        </section>
-
-        <section class="settings-section">
           <h3>Connection</h3>
+          <div class="form-group">
+            <label for="endpoint">Endpoint URL</label>
+            <input
+              id="endpoint"
+              type="text"
+              bind:value={endpoint}
+              placeholder="https://api.openai.com/v1"
+            />
+            <span class="hint">OpenAI-compatible API endpoint</span>
+          </div>
           <div class="form-group">
             <label for="api-key">API Key</label>
             <input
               id="api-key"
               type="password"
-              bind:value={connection.apiKey}
+              bind:value={apiKey}
               placeholder="sk-..."
             />
           </div>
           <div class="form-group">
             <label for="model">Model</label>
-            <select id="model" bind:value={connection.model}>
-              {#each availableModels as model}
-                <option value={model}>{model}</option>
-              {/each}
-            </select>
+            <input
+              id="model"
+              type="text"
+              bind:value={model}
+              placeholder="gpt-4o"
+            />
           </div>
-          <div class="form-group">
-            <label for="base-url">Base URL</label>
-            {#if connection.provider === 'custom'}
-              <input
-                type="text"
-                bind:value={connection.baseUrl}
-                placeholder="https://api.example.com/v1"
-              />
-            {:else}
-              <input
-                type="text"
-                value={currentProvider.baseUrl}
-                disabled
-                class="disabled"
-              />
-              <span class="hint">{currentProvider.name} endpoint</span>
-            {/if}
-          </div>
-        </section>
-
-        <section class="settings-section">
-          <h3>Features</h3>
-          <label class="toggle">
-            <input type="checkbox" bind:checked={features.streaming} />
-            <span>Streaming</span>
-          </label>
-          <label class="toggle">
-            <input type="checkbox" bind:checked={features.thinkingMode} disabled={!currentProvider.supportsThinkingMode} />
-            <span>Thinking Mode {currentProvider.supportsThinkingMode ? '' : '(unsupported)'}</span>
-          </label>
-          <label class="toggle">
-            <input type="checkbox" bind:checked={features.jsonMode} />
-            <span>JSON Mode</span>
-          </label>
-          <label class="toggle">
-            <input type="checkbox" bind:checked={features.prefixCompletion} disabled={!currentProvider.supportsPrefixCompletion} />
-            <span>Prefix Completion {currentProvider.supportsPrefixCompletion ? '' : '(unsupported)'}</span>
-          </label>
-          <label class="toggle">
-            <input type="checkbox" bind:checked={features.fimMode} disabled={!currentProvider.supportsFIM} />
-            <span>FIM Mode {currentProvider.supportsFIM ? '' : '(unsupported)'}</span>
-          </label>
         </section>
 
         <section class="settings-section">
           <h3>Parameters</h3>
+          <label class="toggle">
+            <input type="checkbox" bind:checked={streaming} />
+            <span>Streaming</span>
+          </label>
           <div class="form-group">
             <label for="temperature">
-              Temperature: {parameters.temperature.toFixed(1)}
+              Temperature: {temperature.toFixed(1)}
             </label>
             <input
               id="temperature"
@@ -434,37 +296,35 @@
               min="0"
               max="2"
               step="0.1"
-              bind:value={parameters.temperature}
-              disabled={isThinkingMode}
+              bind:value={temperature}
             />
           </div>
           <div class="form-group">
-            <label for="max-tokens">Max Tokens: {parameters.maxTokens}</label>
+            <label for="max-tokens">Max Tokens: {maxTokens}</label>
             <input
               id="max-tokens"
               type="range"
               min="256"
               max="8192"
               step="256"
-              bind:value={parameters.maxTokens}
+              bind:value={maxTokens}
             />
           </div>
           <div class="form-group">
-            <label for="top-p">Top P: {parameters.topP.toFixed(2)}</label>
+            <label for="top-p">Top P: {topP.toFixed(2)}</label>
             <input
               id="top-p"
               type="range"
               min="0"
               max="1"
               step="0.05"
-              bind:value={parameters.topP}
-              disabled={isThinkingMode}
+              bind:value={topP}
             />
           </div>
           <div class="form-group">
             <label for="stop-sequences">Stop Sequences</label>
             <div class="stop-sequences">
-              {#each parameters.stopSequences as seq, i}
+              {#each stopSequences as seq, i}
                 <span class="tag">
                   {seq}
                   <button onclick={() => removeStopSequence(i)}>×</button>
@@ -474,14 +334,6 @@
             </div>
           </div>
         </section>
-
-        {#if warnings.length > 0}
-          <section class="warnings">
-            {#each warnings as warning}
-              <div class="warning">{warning}</div>
-            {/each}
-          </section>
-        {/if}
       </div>
     {/if}
 
@@ -496,105 +348,57 @@
         ></textarea>
       </div>
 
-      {#if features.fimMode}
-        <div class="fim-panel">
-          <div class="form-group">
-            <label for="fim-prefix">Prefix (before cursor)</label>
-            <textarea
-              id="fim-prefix"
-              bind:value={fim.prefix}
-              placeholder="Code before the insertion point..."
-              rows="4"
-            ></textarea>
-          </div>
-          <div class="fim-cursor">▌ cursor position</div>
-          <div class="form-group">
-            <label for="fim-suffix">Suffix (after cursor)</label>
-            <textarea
-              id="fim-suffix"
-              bind:value={fim.suffix}
-              placeholder="Code after the insertion point..."
-              rows="4"
-            ></textarea>
-          </div>
-        </div>
-      {:else}
-        <div class="messages">
-          {#each messages as msg (msg.id)}
-            <div class="message {msg.role}">
-              <div class="message-header">
-                <span class="role">{msg.role}</span>
-                <button class="btn-delete" onclick={() => deleteMessage(msg.id)}>×</button>
-              </div>
-              {#if msg.reasoning_content}
-                <details class="reasoning">
-                  <summary>Thinking...</summary>
-                  <pre>{msg.reasoning_content}</pre>
-                </details>
-              {/if}
-              <div class="content">{msg.content}</div>
+      <div class="messages">
+        {#each messages as msg (msg.id)}
+          <div class="message {msg.role}">
+            <div class="message-header">
+              <span class="role">{msg.role}</span>
+              <button class="btn-delete" onclick={() => deleteMessage(msg.id)}>×</button>
             </div>
-          {/each}
+            <div class="content">{msg.content}</div>
+          </div>
+        {/each}
 
-          {#if response.status === 'streaming' || response.status === 'loading'}
-            <div class="message assistant streaming">
-              <div class="message-header">
-                <span class="role">assistant</span>
-                <span class="status">{response.status}...</span>
-              </div>
-              {#if response.reasoningContent}
-                <details class="reasoning" open>
-                  <summary>Thinking...</summary>
-                  <pre>{response.reasoningContent}</pre>
-                </details>
-              {/if}
-              <div class="content">
-                {response.content || '...'}
-                <span class="cursor">▌</span>
-              </div>
+        {#if response.status === 'streaming' || response.status === 'loading'}
+          <div class="message assistant streaming">
+            <div class="message-header">
+              <span class="role">assistant</span>
+              <span class="status">{response.status}...</span>
             </div>
-          {/if}
-        </div>
-
-        {#if features.prefixCompletion}
-          <div class="prefix-input">
-            <label for="prefix">Assistant Prefix</label>
-            <input
-              id="prefix"
-              type="text"
-              bind:value={prefixInput}
-              placeholder="Force response to start with..."
-            />
+            <div class="content">
+              {response.content || '...'}
+              <span class="cursor">▌</span>
+            </div>
           </div>
         {/if}
+      </div>
 
-        <div class="input-area">
-          <textarea
-            bind:value={userInput}
-            placeholder="Type your message..."
-            rows="3"
-            onkeydown={(e) => {
-              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-                sendRequest();
-              }
-            }}
-          ></textarea>
-          <div class="input-actions">
-            <button class="btn-secondary" onclick={clearHistory}>Clear</button>
-            {#if response.status === 'streaming' || response.status === 'loading'}
-              <button class="btn-danger" onclick={cancelRequest}>Cancel</button>
-            {:else}
-              <button
-                class="btn-primary"
-                onclick={sendRequest}
-                disabled={!connection.apiKey || (connection.provider === 'custom' && !connection.baseUrl)}
-              >
-                Send (Ctrl+Enter)
-              </button>
-            {/if}
-          </div>
+      <div class="input-area">
+        <textarea
+          bind:value={userInput}
+          placeholder="Type your message..."
+          rows="3"
+          onkeydown={(e) => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+              sendRequest();
+            }
+          }}
+        ></textarea>
+        <div class="input-actions">
+          <button class="btn-secondary" onclick={clearHistory}>Clear</button>
+          {#if response.status === 'streaming' || response.status === 'loading'}
+            <button class="btn-danger" onclick={cancelRequest}>Cancel</button>
+          {:else}
+            <button
+              class="btn-primary"
+              onclick={sendRequest}
+              disabled={!apiKey || !endpoint}
+            >
+              Send (Ctrl+Enter)
+            </button>
+          {/if}
         </div>
-      {/if}
+      </div>
 
       {#if response.status === 'success' || response.status === 'error'}
         <div class="response-info">
@@ -691,8 +495,7 @@
   }
 
   .form-group input[type="text"],
-  .form-group input[type="password"],
-  .form-group select {
+  .form-group input[type="password"] {
     width: 100%;
     padding: 8px 12px;
     background: #1a1a2e;
@@ -700,11 +503,6 @@
     border-radius: 6px;
     color: #e0e0e0;
     font-size: 13px;
-  }
-
-  .form-group input.disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
   }
 
   .form-group input[type="range"] {
@@ -732,11 +530,6 @@
     accent-color: #6366f1;
   }
 
-  .toggle input:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
   .stop-sequences {
     display: flex;
     flex-wrap: wrap;
@@ -760,20 +553,6 @@
     cursor: pointer;
     padding: 0;
     font-size: 14px;
-  }
-
-  .warnings {
-    margin-top: 16px;
-  }
-
-  .warning {
-    padding: 8px 12px;
-    background: #3d2d1a;
-    border-left: 3px solid #f59e0b;
-    border-radius: 0 4px 4px 0;
-    font-size: 12px;
-    color: #fbbf24;
-    margin-bottom: 8px;
   }
 
   .chat-panel {
@@ -805,31 +584,6 @@
     font-size: 14px;
     resize: vertical;
     font-family: inherit;
-  }
-
-  .fim-panel {
-    padding: 16px;
-    border-bottom: 1px solid #2d2d44;
-  }
-
-  .fim-panel textarea {
-    width: 100%;
-    padding: 12px;
-    background: #1a1a2e;
-    border: 1px solid #2d2d44;
-    border-radius: 8px;
-    color: #e0e0e0;
-    font-size: 13px;
-    font-family: monospace;
-    resize: vertical;
-  }
-
-  .fim-cursor {
-    padding: 8px 12px;
-    background: #2d2d44;
-    color: #6366f1;
-    font-size: 12px;
-    text-align: center;
   }
 
   .messages {
@@ -895,28 +649,6 @@
     color: #ef4444;
   }
 
-  .reasoning {
-    margin-bottom: 8px;
-    padding: 8px;
-    background: #12121f;
-    border-radius: 4px;
-    font-size: 13px;
-  }
-
-  .reasoning summary {
-    cursor: pointer;
-    color: #8b8b9e;
-    font-size: 12px;
-  }
-
-  .reasoning pre {
-    margin: 8px 0 0 0;
-    white-space: pre-wrap;
-    word-break: break-word;
-    color: #a0a0b0;
-    font-size: 12px;
-  }
-
   .content {
     white-space: pre-wrap;
     word-break: break-word;
@@ -930,28 +662,6 @@
 
   @keyframes blink {
     50% { opacity: 0; }
-  }
-
-  .prefix-input {
-    padding: 12px 16px;
-    border-bottom: 1px solid #2d2d44;
-  }
-
-  .prefix-input label {
-    display: block;
-    margin-bottom: 4px;
-    font-size: 12px;
-    color: #8b8b9e;
-  }
-
-  .prefix-input input {
-    width: 100%;
-    padding: 8px 12px;
-    background: #1a1a2e;
-    border: 1px solid #2d2d44;
-    border-radius: 6px;
-    color: #e0e0e0;
-    font-size: 13px;
   }
 
   .input-area {

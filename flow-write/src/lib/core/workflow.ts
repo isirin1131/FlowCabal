@@ -14,7 +14,6 @@ import {
   createNodeMap,
   getNodeDependencies,
   isNodeReady,
-  getNodePrompt,
   getNodeOutput,
   setNodePending,
   setNodeRunning,
@@ -23,7 +22,8 @@ import {
   resetNode,
   propagateNodeOutput
 } from './node';
-import { type NodeId, resetNodeDependents } from './textblock';
+import { type NodeId, type TextBlockList, resetNodeDependents } from './textblock';
+import { resolveApiConfigOutput } from './apiconfig';
 
 // ============================================================================
 // Workflow State
@@ -177,7 +177,7 @@ export function prepareWorkflow(workflow: Workflow): Workflow | DependencyError 
 // ============================================================================
 
 /** Callback for executing a single node's LLM call */
-export type NodeExecutor = (nodeId: NodeId, prompt: string, node: Node) => Promise<string>;
+export type NodeExecutor = (nodeId: NodeId, node: Node) => Promise<string>;
 
 /**
  * Execute a single node in the workflow
@@ -203,8 +203,7 @@ export async function executeNode(
 
   try {
     // Execute LLM call
-    const prompt = getNodePrompt(currentNode);
-    const output = await executor(currentNodeId, prompt, currentNode);
+    const output = await executor(currentNodeId, currentNode);
 
     // Update node with output
     nodes.set(currentNodeId, setNodeCompleted(currentNode, output));
@@ -289,9 +288,17 @@ export function removeNode(workflow: Workflow, nodeId: NodeId): Workflow {
 
   // Reset virtual blocks in other nodes that referenced this node
   for (const [id, node] of nodes) {
-    const updatedInput = resetNodeDependents(node.input, nodeId);
-    if (updatedInput !== node.input) {
-      nodes.set(id, { ...node, input: updatedInput });
+    const updatedSystemPrompt = resetNodeDependents(node.apiConfig.systemPrompt, nodeId);
+    const updatedUserPrompt = resetNodeDependents(node.apiConfig.userPrompt, nodeId);
+    if (updatedSystemPrompt !== node.apiConfig.systemPrompt || updatedUserPrompt !== node.apiConfig.userPrompt) {
+      nodes.set(id, {
+        ...node,
+        apiConfig: {
+          ...node.apiConfig,
+          systemPrompt: updatedSystemPrompt,
+          userPrompt: updatedUserPrompt
+        }
+      });
     }
   }
 

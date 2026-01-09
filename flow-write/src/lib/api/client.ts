@@ -1,72 +1,116 @@
 /**
- * Generic LLM Client Interface
- * Abstract interface for OpenAI-compatible API clients
+ * OpenAI-Compatible LLM Client
+ *
+ * A single client implementation that works with any OpenAI-compatible API endpoint.
+ * This includes OpenAI, DeepSeek, local LLM servers, and other compatible services.
  */
 
 import type {
   ChatCompletionRequest,
   ChatCompletionResponse,
-  FIMCompletionRequest,
-  FIMCompletionResponse,
   StreamChunk,
   ChatMessage,
   UsageInfo
 } from './types';
+import type {
+  ApiConfiguration
+} from '../core/apiconfig';
+import {
+  getSystemPromptContent,
+  getUserPromptContent
+} from '../core/apiconfig';
 
 // ============================================================================
-// Client Interface
+// Client Configuration
 // ============================================================================
 
-export interface LLMClient {
+export interface ClientConfig {
+  /** API endpoint URL (e.g., "https://api.openai.com/v1") */
+  endpoint: string;
+  /** API key for authentication */
+  apiKey: string;
+}
+
+// ============================================================================
+// OpenAI-Compatible Client
+// ============================================================================
+
+export class OpenAICompatibleClient {
+  private endpoint: string;
+  private apiKey: string;
+
+  constructor(config: ClientConfig) {
+    this.endpoint = config.endpoint.replace(/\/$/, ''); // Remove trailing slash
+    this.apiKey = config.apiKey;
+  }
+
+  private get headers(): HeadersInit {
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${this.apiKey}`
+    };
+  }
+
   /**
    * Create a non-streaming chat completion
    */
-  chatCompletion(request: ChatCompletionRequest): Promise<ChatCompletionResponse>;
+  async chatCompletion(request: ChatCompletionRequest): Promise<ChatCompletionResponse> {
+    const response = await fetch(`${this.endpoint}/chat/completions`, {
+      method: 'POST',
+      headers: this.headers,
+      body: JSON.stringify({ ...request, stream: false })
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: { message: response.statusText } }));
+      throw new Error(error.error?.message ?? `API error: ${response.status}`);
+    }
+
+    return response.json();
+  }
 
   /**
    * Create a streaming chat completion
    */
-  chatCompletionStream(request: ChatCompletionRequest): AsyncGenerator<StreamChunk, void, unknown>;
+  async *chatCompletionStream(request: ChatCompletionRequest): AsyncGenerator<StreamChunk, void, unknown> {
+    const response = await fetch(`${this.endpoint}/chat/completions`, {
+      method: 'POST',
+      headers: this.headers,
+      body: JSON.stringify({ ...request, stream: true })
+    });
 
-  /**
-   * Create a FIM completion (if supported)
-   */
-  fimCompletion?(request: FIMCompletionRequest): Promise<FIMCompletionResponse>;
-
-  /**
-   * Create a streaming FIM completion (if supported)
-   */
-  fimCompletionStream?(request: FIMCompletionRequest): AsyncGenerator<{ text: string }, void, unknown>;
-}
-
-export interface LLMClientConfig {
-  apiKey: string;
-  baseUrl?: string;
-}
-
-// ============================================================================
-// Streaming Helper
-// ============================================================================
-
-export interface StreamHandlerOptions {
-  onContent?: (content: string) => void;
-  onReasoning?: (reasoning: string) => void;
-  onUsage?: (usage: UsageInfo) => void;
-  onComplete?: () => void;
-  onError?: (error: Error) => void;
-}
-
-export async function* handleStream<T>(
-  stream: AsyncGenerator<T, void, unknown>,
-  options: StreamHandlerOptions
-): AsyncGenerator<T, void, unknown> {
-  try {
-    for await (const chunk of stream) {
-      yield chunk;
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: { message: response.statusText } }));
+      throw new Error(error.error?.message ?? `API error: ${response.status}`);
     }
-    options.onComplete?.();
-  } catch (err) {
-    options.onError?.(err instanceof Error ? err : new Error(String(err)));
+
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('No response body');
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed === 'data: [DONE]') continue;
+        if (trimmed.startsWith('data: ')) {
+          try {
+            const chunk = JSON.parse(trimmed.slice(6)) as StreamChunk;
+            yield chunk;
+          } catch {
+            // Skip invalid JSON
+          }
+        }
+      }
+    }
   }
 }
 
@@ -74,6 +118,40 @@ export async function* handleStream<T>(
 // Request Builder
 // ============================================================================
 
+/**
+ * Build a ChatCompletionRequest from ApiConfiguration
+ */
+export function buildRequestFromConfig(config: ApiConfiguration): ChatCompletionRequest {
+  const messages: ChatMessage[] = [];
+
+  const systemContent = getSystemPromptContent(config);
+  if (systemContent.trim()) {
+    messages.push({ role: 'system', content: systemContent });
+  }
+
+  const userContent = getUserPromptContent(config);
+  if (userContent.trim()) {
+    messages.push({ role: 'user', content: userContent });
+  }
+
+  return {
+    model: config.connection.model,
+    messages,
+    max_tokens: config.parameters.maxTokens,
+    temperature: config.parameters.temperature,
+    top_p: config.parameters.topP,
+    presence_penalty: config.parameters.presencePenalty,
+    frequency_penalty: config.parameters.frequencyPenalty,
+    stop: config.parameters.stopSequences.length > 0
+      ? config.parameters.stopSequences
+      : undefined,
+    stream: config.parameters.streaming
+  };
+}
+
+/**
+ * Build a ChatCompletionRequest from messages and options
+ */
 export function buildChatRequest(
   messages: ChatMessage[],
   model: string,
@@ -96,10 +174,6 @@ export function extractContent(response: ChatCompletionResponse): string {
   return response.choices[0]?.message.content ?? '';
 }
 
-export function extractReasoningContent(response: ChatCompletionResponse): string {
-  return response.choices[0]?.message.reasoning_content ?? '';
-}
-
 export function extractUsage(response: ChatCompletionResponse): UsageInfo {
   return response.usage;
 }
@@ -108,6 +182,36 @@ export function extractStreamContent(chunk: StreamChunk): string {
   return chunk.choices[0]?.delta.content ?? '';
 }
 
-export function extractStreamReasoning(chunk: StreamChunk): string {
-  return chunk.choices[0]?.delta.reasoning_content ?? '';
+// ============================================================================
+// Streaming Helper
+// ============================================================================
+
+export interface StreamHandlerOptions {
+  onContent?: (content: string) => void;
+  onUsage?: (usage: UsageInfo) => void;
+  onComplete?: () => void;
+  onError?: (error: Error) => void;
+}
+
+export async function handleStream(
+  stream: AsyncGenerator<StreamChunk, void, unknown>,
+  options: StreamHandlerOptions
+): Promise<string> {
+  let content = '';
+  try {
+    for await (const chunk of stream) {
+      const text = extractStreamContent(chunk);
+      if (text) {
+        content += text;
+        options.onContent?.(text);
+      }
+      if (chunk.usage) {
+        options.onUsage?.(chunk.usage);
+      }
+    }
+    options.onComplete?.();
+  } catch (err) {
+    options.onError?.(err instanceof Error ? err : new Error(String(err)));
+  }
+  return content;
 }

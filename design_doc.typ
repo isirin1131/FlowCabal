@@ -186,21 +186,75 @@ getListContent(final);
 \
 \
 
+=== API 配置系统 (ApiConfiguration)
+
+API 配置是 FlowWrite 的核心组件，它将连接设置、请求参数和提示词统一封装。这一设计使得每个节点都是一个完整的、自包含的 LLM API 调用单元。
+
+==== 连接设置 (ApiConnection)
+
+```typescript
+interface ApiConnection {
+  endpoint: string;  // OpenAI 兼容的 API 端点 URL
+  apiKey: string;    // API 密钥
+  model: string;     // 模型标识符
+}
+```
+
+FlowWrite 采用 OpenAI 兼容的 API 格式，这意味着任何支持 `/chat/completions` 端点的服务都可以接入，包括 OpenAI、DeepSeek、本地 LLM 服务器等。
+
+==== 请求参数 (ApiParameters)
+
+```typescript
+interface ApiParameters {
+  temperature: number;       // 采样温度 (0-2)
+  maxTokens: number;         // 最大生成 token 数
+  topP: number;              // 核采样参数 (0-1)
+  presencePenalty: number;   // 存在惩罚 (-2 到 2)
+  frequencyPenalty: number;  // 频率惩罚 (-2 到 2)
+  stopSequences: string[];   // 停止序列
+  streaming: boolean;        // 是否启用流式响应
+}
+```
+
+==== 完整配置结构
+
+```typescript
+interface ApiConfiguration {
+  connection: ApiConnection;      // 连接设置
+  parameters: ApiParameters;      // 请求参数
+  systemPrompt: TextBlockList;    // 系统提示词（支持虚拟文本块）
+  userPrompt: TextBlockList;      // 用户提示词（支持虚拟文本块）
+}
+```
+
+关键设计决策：*`systemPrompt` 和 `userPrompt` 都是 `TextBlockList` 类型*，这意味着它们都可以包含虚拟文本块，从而实现：
+- 系统提示词可以引用其他节点的输出
+- 用户提示词可以组合多个上游节点的结果
+- 依赖关系统一从两个提示词中解析
+
+==== 核心操作
+
+- `createApiConfiguration()`: 创建带默认值的配置
+- `getApiConfigDependencies(config)`: 获取系统和用户提示词中所有依赖的节点 ID
+- `isApiConfigReady(config)`: 检查所有虚拟块是否已解析
+- `getSystemPromptContent(config)`: 获取最终的系统提示词字符串
+- `getUserPromptContent(config)`: 获取最终的用户提示词字符串
+- `resolveApiConfigOutput(config, nodeId, content)`: 更新两个提示词中引用指定节点的虚拟块
+
 === 节点系统 (Node)
 
-节点是工作流的核心执行单元，代表一次 LLM API 调用。
+节点是工作流的核心执行单元，代表一次 LLM API 调用。每个节点包含完整的 API 配置。
 
 ==== 节点结构
 
 ```typescript
 interface Node {
   readonly id: NodeId;
-  name: string;                      // 显示名称
-  input: TextBlockList;              // 输入 prompt（文本块列表）
-  output: TextBlock | null;          // LLM 输出（执行完成后填充）
-  state: NodeState;                  // 执行状态
-  errorMessage?: string;             // 错误信息
-  llmConfig: LLMConfig;              // LLM 配置
+  name: string;                       // 显示名称
+  apiConfig: ApiConfiguration;        // API 配置（连接、参数、提示词）
+  output: TextBlock | null;           // LLM 输出（执行完成后填充）
+  state: NodeState;                   // 执行状态
+  errorMessage?: string;              // 错误信息
   position: { x: number; y: number }; // 画布位置
 }
 
@@ -226,24 +280,11 @@ type NodeState = 'idle' | 'pending' | 'running' | 'completed' | 'error';
 - `completed`: 执行成功，`output` 已填充
 - `error`: 执行失败，`errorMessage` 记录错误
 
-==== LLM 配置
-
-```typescript
-interface LLMConfig {
-  provider: string;      // API 提供商 ('openai', 'anthropic', 'custom')
-  model: string;         // 模型标识符
-  endpoint?: string;     // 自定义 API 端点
-  temperature?: number;  // 采样温度 (0-2)
-  maxTokens?: number;    // 最大生成 token 数
-  systemPrompt?: string; // 系统提示词
-}
-```
-
 ==== 核心操作
 
-- `getNodeDependencies(node)`: 获取节点依赖的上游节点 ID 列表
+- `getNodeDependencies(node)`: 获取节点依赖的上游节点 ID 列表（从 apiConfig 的两个提示词中解析）
 - `isNodeReady(node)`: 检查节点是否可执行（所有依赖已解析）
-- `getNodePrompt(node)`: 获取最终的 prompt 字符串
+- `getNodePrompt(node)`: 获取最终的 `{ system, user }` 提示词对象
 - `getNodeOutput(node)`: 获取输出内容（未完成时返回空字符串）
 
 === 工作流系统 (Workflow)
@@ -292,9 +333,14 @@ function topologicalSort(nodes: NodeMap): TopologicalSortResult {
 const prepared = prepareWorkflow(workflow);
 
 // 2. 定义节点执行器（实际的 LLM API 调用）
-const executor: NodeExecutor = async (nodeId, prompt, node) => {
-  const response = await callLLMAPI(node.llmConfig, prompt);
-  return response.content;
+const executor: NodeExecutor = async (nodeId, node) => {
+  const client = new OpenAICompatibleClient({
+    endpoint: node.apiConfig.connection.endpoint,
+    apiKey: node.apiConfig.connection.apiKey
+  });
+  const request = buildRequestFromConfig(node.apiConfig);
+  const response = await client.chatCompletion(request);
+  return response.choices[0]?.message.content ?? '';
 };
 
 // 3. 执行工作流
@@ -310,8 +356,9 @@ const result = await executeWorkflow(prepared, executor, (progress) => {
 ```typescript
 function propagateNodeOutput(nodes, completedNodeId, outputContent) {
   // 遍历所有节点
-  // 若节点的 input 中有虚拟块引用 completedNodeId
-  // 则调用 resolveNodeOutput 更新该虚拟块
+  // 若节点的 apiConfig.systemPrompt 或 apiConfig.userPrompt 中
+  // 有虚拟块引用 completedNodeId
+  // 则调用 resolveApiConfigOutput 更新这些虚拟块
 }
 ```
 
@@ -322,10 +369,12 @@ import {
   createWorkflow,
   createNode,
   addNode,
-  updateNodeInput,
   createTextBlockList,
   createTextBlock,
   createVirtualTextBlock,
+  createApiConfiguration,
+  updateSystemPrompt,
+  updateUserPrompt,
   executeWorkflow
 } from './lib/core';
 
@@ -334,32 +383,56 @@ let workflow = createWorkflow('文章润色工作流');
 
 // 创建节点 A: 生成大纲
 const nodeA = createNode('生成大纲', { x: 100, y: 100 });
-nodeA.input = createTextBlockList([
-  createTextBlock('请为以下主题生成一个文章大纲：\n\n人工智能的未来发展')
-]);
+nodeA.apiConfig = {
+  ...nodeA.apiConfig,
+  systemPrompt: createTextBlockList([
+    createTextBlock('你是一个专业的文章大纲生成助手。')
+  ]),
+  userPrompt: createTextBlockList([
+    createTextBlock('请为以下主题生成一个文章大纲：\n\n人工智能的未来发展')
+  ])
+};
 
 // 创建节点 B: 扩写第一部分
 const nodeB = createNode('扩写第一部分', { x: 100, y: 250 });
-nodeB.input = createTextBlockList([
-  createTextBlock('基于以下大纲，扩写第一部分：\n\n'),
-  createVirtualTextBlock(nodeA.id, '大纲')
-]);
+nodeB.apiConfig = {
+  ...nodeB.apiConfig,
+  systemPrompt: createTextBlockList([
+    createTextBlock('你是一个专业的技术文章写作助手。')
+  ]),
+  userPrompt: createTextBlockList([
+    createTextBlock('基于以下大纲，扩写第一部分：\n\n'),
+    createVirtualTextBlock(nodeA.id, '大纲')
+  ])
+};
 
 // 创建节点 C: 扩写第二部分
 const nodeC = createNode('扩写第二部分', { x: 300, y: 250 });
-nodeC.input = createTextBlockList([
-  createTextBlock('基于以下大纲，扩写第二部分：\n\n'),
-  createVirtualTextBlock(nodeA.id, '大纲')
-]);
+nodeC.apiConfig = {
+  ...nodeC.apiConfig,
+  systemPrompt: createTextBlockList([
+    createTextBlock('你是一个专业的技术文章写作助手。')
+  ]),
+  userPrompt: createTextBlockList([
+    createTextBlock('基于以下大纲，扩写第二部分：\n\n'),
+    createVirtualTextBlock(nodeA.id, '大纲')
+  ])
+};
 
 // 创建节点 D: 合并润色
 const nodeD = createNode('合并润色', { x: 200, y: 400 });
-nodeD.input = createTextBlockList([
-  createTextBlock('请将以下两部分内容合并并润色：\n\n第一部分：\n'),
-  createVirtualTextBlock(nodeB.id, '第一部分'),
-  createTextBlock('\n\n第二部分：\n'),
-  createVirtualTextBlock(nodeC.id, '第二部分')
-]);
+nodeD.apiConfig = {
+  ...nodeD.apiConfig,
+  systemPrompt: createTextBlockList([
+    createTextBlock('你是一个专业的文章编辑，擅长润色和整合文章内容。')
+  ]),
+  userPrompt: createTextBlockList([
+    createTextBlock('请将以下两部分内容合并并润色：\n\n第一部分：\n'),
+    createVirtualTextBlock(nodeB.id, '第一部分'),
+    createTextBlock('\n\n第二部分：\n'),
+    createVirtualTextBlock(nodeC.id, '第二部分')
+  ])
+};
 
 // 添加节点到工作流
 workflow = addNode(workflow, nodeA);

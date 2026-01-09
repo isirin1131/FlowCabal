@@ -2,22 +2,26 @@
  * Node System for FlowWrite
  *
  * A node represents a single LLM API call in the workflow.
- * - Input: TextBlockList (prompt composed of static and virtual text blocks)
+ * - Input: ApiConfiguration (connection, parameters, prompts as TextBlockLists)
  * - Output: TextBlock (LLM response)
  */
 
 import {
-  type TextBlockList,
   type TextBlock,
   type NodeId,
-  createTextBlockList,
   createTextBlock,
-  getDependencies,
-  isListReady,
-  getListContent,
-  resolveNodeOutput,
   generateId
 } from './textblock';
+
+import {
+  type ApiConfiguration,
+  createApiConfiguration,
+  getApiConfigDependencies,
+  isApiConfigReady,
+  getSystemPromptContent,
+  getUserPromptContent,
+  resolveApiConfigOutput
+} from './apiconfig';
 
 // ============================================================================
 // Node State
@@ -34,32 +38,6 @@ import {
 export type NodeState = 'idle' | 'pending' | 'running' | 'completed' | 'error';
 
 // ============================================================================
-// LLM Configuration
-// ============================================================================
-
-export interface LLMConfig {
-  /** API provider (e.g., 'openai', 'anthropic', 'custom') */
-  provider: string;
-  /** Model identifier (e.g., 'gpt-4', 'claude-3-opus') */
-  model: string;
-  /** API endpoint URL (for custom providers) */
-  endpoint?: string;
-  /** Temperature for sampling (0-2) */
-  temperature?: number;
-  /** Maximum tokens to generate */
-  maxTokens?: number;
-  /** System prompt */
-  systemPrompt?: string;
-}
-
-export const defaultLLMConfig: LLMConfig = {
-  provider: 'openai',
-  model: 'gpt-4',
-  temperature: 0.7,
-  maxTokens: 2048
-};
-
-// ============================================================================
 // Node
 // ============================================================================
 
@@ -67,16 +45,14 @@ export interface Node {
   readonly id: NodeId;
   /** Display name for the node */
   name: string;
-  /** Input prompt composed of text blocks */
-  input: TextBlockList;
+  /** API configuration (connection, parameters, prompts) */
+  apiConfig: ApiConfiguration;
   /** Output from LLM (null until execution completes) */
   output: TextBlock | null;
   /** Current execution state */
   state: NodeState;
   /** Error message if state is 'error' */
   errorMessage?: string;
-  /** LLM configuration for this node */
-  llmConfig: LLMConfig;
   /** Position in the canvas (for UI) */
   position: { x: number; y: number };
 }
@@ -84,15 +60,14 @@ export interface Node {
 export function createNode(
   name: string,
   position: { x: number; y: number } = { x: 0, y: 0 },
-  llmConfig: LLMConfig = defaultLLMConfig
+  apiConfig: ApiConfiguration = createApiConfiguration()
 ): Node {
   return {
     id: generateId(),
     name,
-    input: createTextBlockList(),
+    apiConfig,
     output: null,
     state: 'idle',
-    llmConfig,
     position
   };
 }
@@ -101,28 +76,31 @@ export function createNode(
  * Get the dependencies of a node (source nodes it depends on)
  */
 export function getNodeDependencies(node: Node): NodeId[] {
-  return getDependencies(node.input);
+  return getApiConfigDependencies(node.apiConfig);
 }
 
 /**
  * Check if a node is ready to execute (all dependencies resolved)
  */
 export function isNodeReady(node: Node): boolean {
-  return isListReady(node.input);
+  return isApiConfigReady(node.apiConfig);
 }
 
 /**
- * Get the final prompt string for a node
+ * Get the final prompt strings for a node
  */
-export function getNodePrompt(node: Node): string {
-  return getListContent(node.input);
+export function getNodePrompt(node: Node): { system: string; user: string } {
+  return {
+    system: getSystemPromptContent(node.apiConfig),
+    user: getUserPromptContent(node.apiConfig)
+  };
 }
 
 /**
- * Update node input
+ * Update node API configuration
  */
-export function updateNodeInput(node: Node, input: TextBlockList): Node {
-  return { ...node, input };
+export function updateNodeApiConfig(node: Node, apiConfig: ApiConfiguration): Node {
+  return { ...node, apiConfig };
 }
 
 /**
@@ -193,7 +171,7 @@ export function createNodeMap(nodes: Node[] = []): NodeMap {
 }
 
 /**
- * Update a node's input when an upstream node completes
+ * Update a node's apiConfig when an upstream node completes
  */
 export function propagateNodeOutput(
   nodes: NodeMap,
@@ -205,8 +183,12 @@ export function propagateNodeOutput(
   for (const [id, node] of nodes) {
     const deps = getNodeDependencies(node);
     if (deps.includes(completedNodeId)) {
-      const updatedInput = resolveNodeOutput(node.input, completedNodeId, outputContent);
-      newNodes.set(id, { ...node, input: updatedInput });
+      const updatedApiConfig = resolveApiConfigOutput(
+        node.apiConfig,
+        completedNodeId,
+        outputContent
+      );
+      newNodes.set(id, { ...node, apiConfig: updatedApiConfig });
     }
   }
 

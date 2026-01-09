@@ -46,23 +46,43 @@ export {
   resetNodeDependents
 } from './textblock';
 
+// API Configuration System
+export {
+  // Types
+  type ApiConnection,
+  type ApiParameters,
+  type ApiConfiguration,
+
+  // Constants
+  defaultApiConnection,
+  defaultApiParameters,
+
+  // Functions
+  createApiConfiguration,
+  getApiConfigDependencies,
+  isApiConfigReady,
+  getSystemPromptContent,
+  getUserPromptContent,
+  resolveApiConfigOutput,
+  updateApiConnection,
+  updateApiParameters,
+  updateSystemPrompt,
+  updateUserPrompt
+} from './apiconfig';
+
 // Node System
 export {
   // Types
   type NodeState,
-  type LLMConfig,
   type Node,
   type NodeMap,
-
-  // Constants
-  defaultLLMConfig,
 
   // Node functions
   createNode,
   getNodeDependencies,
   isNodeReady,
   getNodePrompt,
-  updateNodeInput,
+  updateNodeApiConfig,
   setNodePending,
   setNodeRunning,
   setNodeCompleted,
