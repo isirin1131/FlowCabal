@@ -124,6 +124,8 @@
     background: var(--flow-bg);
     border-bottom: 1px solid var(--flow-border);
     flex-wrap: wrap;
+    flex-shrink: 0;
+    overflow: hidden;
   }
 
   .toolbar-button {

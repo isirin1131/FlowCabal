@@ -89,13 +89,17 @@
 <style>
   .node-sidebar {
     width: 260px;
+    min-width: 260px;
     background: var(--flow-bg);
     border-right: 1px solid var(--flow-border);
     padding: 16px;
     overflow-y: auto;
+    overflow-x: hidden;
     display: flex;
     flex-direction: column;
     gap: 16px;
+    height: 100%;
+    box-sizing: border-box;
   }
 
   .sidebar-title {
@@ -171,6 +175,7 @@
     padding: 12px;
     background: rgba(14, 165, 233, 0.05);
     border-radius: 8px;
+    flex-shrink: 0;
   }
 
   .sidebar-tips h4 {

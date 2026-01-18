@@ -239,10 +239,11 @@
 <style>
   .flow-container {
     display: flex;
-    height: 100vh;
+    height: 100%;
     width: 100%;
     background: var(--flow-bg);
     transition: background-color 0.3s;
+    overflow: hidden;
   }
 
   .flow-container.darkMode {
