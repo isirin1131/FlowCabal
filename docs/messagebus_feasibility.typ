@@ -5,7 +5,7 @@
 
 *日期: 2026.01.19*
 
-本文档基于 `handwrite.typ` 中的思考，调研消息总线在 FlowWrite 中的可行性，分析现有架构痛点，并提出具体实现方案。
+本文档调研消息总线在 FlowWrite 中的可行性，并提出精简的实现方案。
 
 #outline()
 
@@ -15,7 +15,7 @@
 
 == 当前架构的通信模式
 
-通过代码分析，FlowWrite 当前使用以下通信模式：
+FlowWrite 当前使用以下通信模式：
 
 1. *Props/Binding 通信*：父子组件通过 `$props()` 和 `bind:` 传递数据
 2. *Event Dispatch*：子组件通过 `createEventDispatcher()` 向父组件发送事件
@@ -26,161 +26,212 @@
 
 === 痛点一：Core 层与 UI 层断裂
 
-`plan_doc.typ` 中已明确指出，UI 层的 `@xyflow/svelte` 节点模型与核心层的 `Node` 模型是分离的：
+UI 层的 `@xyflow/svelte` 节点模型与核心层的 `Node` 模型是分离的：
 
 ```
 UI 层: { id, type, position, data: { label, status, model } }
 Core 层: { id, name, apiConfig, output, state, position }
 ```
 
-两者之间缺乏桥接机制，导致：
-- 无法使用 VirtualTextBlock 的依赖追踪
-- 执行引擎无法作用于 UI 节点
-- 状态变化无法自动同步
-
 === 痛点二：跨组件通信困难
 
-当前架构下，兄弟组件（如 FloatingBall 与 FlowEditor）无法直接通信，必须通过：
-1. 状态提升到共同父组件（App.svelte）
-2. 或使用数据库作为间接通道
+兄弟组件（如 FloatingBall 与 FlowEditor）无法直接通信，必须通过状态提升或数据库间接通道。
 
 === 痛点三：未来 core-runner 的集成
 
-`handwrite.typ` 提到 core-runner 将与 UI 层有频繁通信，当前架构无法优雅支持：
-- 执行状态的实时同步
-- 流式输出的 UI 更新
-- 错误处理与恢复
+core-runner 将与 UI 层有频繁的沟通，当前架构无法优雅支持执行状态的实时同步。
 
 == 消息总线的设计目标
 
-基于 `handwrite.typ` 的分析，消息总线需要支持：
-
-1. *UI → Core → UI 三层通信*：这是最常见的模式，不会形成闭环
+1. *UI → Core → UI 三层通信*：最常见的模式，不会形成 UI→core→UI→core 的链式死循环
 2. *UI 层锁定机制*：防止状态机混乱
 3. *FloatingBall 扩展*：作为与本地存储沟通的桥梁
 4. *core-runner 集成*：支持工作流执行时的状态同步
 
 #line(length: 100%)
 
-= 方案对比
+= 关键设计决策
 
-== 方案一：Svelte Stores
+== 决策一：不需要状态共享层
 
-Svelte 5 兼容的 writable/readable stores，已内置于框架。
+=== 分析
 
-=== 实现示例
+状态共享层（如 Svelte Stores）在本项目中是多余的，原因如下：
 
-```typescript
-// stores/workflow.ts
-import { writable, derived } from 'svelte/store';
-import type { Workflow } from '$lib/core/workflow';
+1. *core-runner 的共享数据是易失的*：虚拟文本块的输出内容、冻结状态等都是运行时状态，不需要持久化共享
+2. *core-runner 只需与 db 交互*：底层组件只有数据库，不存在多个消费者需要同步状态的场景
+3. *IR 类比*：中间表示（IR）只在有多种架构和多种系统时才有必要；单一架构单一系统下，IR 是冗余的
 
-export const workflowStore = writable<Workflow | null>(null);
-export const executionState = writable<'idle' | 'running' | 'completed'>('idle');
+=== 结论
 
-// 派生状态
-export const isExecuting = derived(executionState, $state => $state === 'running');
+消息总线足够，不需要额外的状态共享层。
+
+== 决策二：分离 metadata 与 running-state
+
+=== 设计原则
+
+```
+core/          → 只包含 metadata（静态定义）
+core-runner/   → 包含 running-state（运行时状态）
 ```
 
-=== 优点
+=== 具体划分
 
-- 零依赖，Svelte 原生支持
-- 与 Svelte 5 Runes 兼容（通过 `$` 前缀访问）
-- 自动订阅/取消订阅
-- 简单的 pub/sub 模式
+#table(
+  columns: (auto, auto, auto),
+  inset: 8pt,
+  align: horizon,
+  [*数据*], [*归属*], [*说明*],
+  [Node.id, name, position], [core/], [元数据，持久化],
+  [ApiConfiguration], [core/], [元数据，持久化],
+  [TextBlock, VirtualTextBlock 定义], [core/], [元数据，持久化],
+  [running \| pending \| failure], [core-runner/], [运行时状态，易失],
+  [freeze: true \| false], [core-runner/], [运行时状态，易失],
+  [VirtualTextBlock.resolvedContent], [core-runner/], [运行时状态，易失],
+)
 
-=== 缺点
+=== 好处
 
-- 缺乏消息类型区分（只有值变化，没有消息语义）
-- 不支持消息队列或优先级
-- 难以实现复杂的消息路由
+- `core/` 层保持简洁，只描述"是什么"
+- `core-runner/` 层负责"怎么运行"
+- 保存工作流时只需序列化 `core/` 层的 metadata
+- 冻结的虚拟文本块可建议用户转换为普通文本块再保存
 
-=== 适用场景
+#line(length: 100%)
 
-适合简单的状态共享，不适合复杂的消息传递。
+= 精简架构
 
-== 方案二：自定义 EventBus
+== 架构图
 
-基于浏览器 CustomEvent 或简单的 pub/sub 实现。
-
-=== 实现示例
-
-```typescript
-// lib/bus/eventbus.ts
-type EventCallback<T = unknown> = (payload: T) => void;
-
-class EventBus {
-  private listeners = new Map<string, Set<EventCallback>>();
-
-  on<T>(event: string, callback: EventCallback<T>): () => void {
-    if (!this.listeners.has(event)) {
-      this.listeners.set(event, new Set());
-    }
-    this.listeners.get(event)!.add(callback as EventCallback);
-    return () => this.off(event, callback);
-  }
-
-  off<T>(event: string, callback: EventCallback<T>): void {
-    this.listeners.get(event)?.delete(callback as EventCallback);
-  }
-
-  emit<T>(event: string, payload: T): void {
-    this.listeners.get(event)?.forEach(cb => cb(payload));
-  }
-}
-
-export const bus = new EventBus();
+```
+┌──────────────────────────────────────────────────┐
+│                    UI Layer                      │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐ │
+│  │FloatingBall│  │ FlowEditor │  │  ApiTest   │ │
+│  └─────┬──────┘  └─────┬──────┘  └─────┬──────┘ │
+│        └───────────────┼───────────────┘        │
+│                        │                        │
+│                ┌───────▼───────┐                │
+│                │   EventBus    │  ← 唯一通信层   │
+│                └───────┬───────┘                │
+│                        │                        │
+├────────────────────────┼────────────────────────┤
+│                ┌───────▼───────┐                │
+│                │  core-runner  │  ← 运行时状态   │
+│                │ (running-state)│                │
+│                └───────┬───────┘                │
+│                        │                        │
+│         ┌──────────────┼──────────────┐         │
+│         ▼              ▼              ▼         │
+│   ┌──────────┐  ┌──────────┐  ┌──────────┐     │
+│   │   core   │  │          │  │          │     │
+│   │(metadata)│  │    db    │  │   api    │     │
+│   └──────────┘  └──────────┘  └──────────┘     │
+└──────────────────────────────────────────────────┘
 ```
 
-=== 类型安全版本
+== 数据流
+
+=== 典型执行流程
+
+```
+1. UI: 用户点击执行
+   FlowEditor → bus.emit('workflow:run', { workflowId })
+
+2. core-runner: 接收并准备执行
+   bus.on('workflow:run') → 从 db 加载 workflow metadata
+   → 初始化 running-state → bus.emit('ui:lock')
+
+3. UI: 收到锁定
+   bus.on('ui:lock') → 禁用编辑
+
+4. core-runner: 执行节点
+   对每个节点: bus.emit('node:state', { nodeId, state: 'running' })
+   调用 api → bus.emit('node:output', { nodeId, content })
+
+5. core-runner: 完成
+   bus.emit('workflow:done') → bus.emit('ui:unlock')
+
+6. UI: 解锁并更新显示
+```
+
+=== 消息方向
+
+```
+UI → core-runner:
+  workflow:run, workflow:stop, node:freeze, node:unfreeze
+
+core-runner → UI:
+  node:state, node:output, workflow:done, workflow:error
+  ui:lock, ui:unlock
+
+FloatingBall ↔ db:
+  storage:sync, storage:export, storage:import
+```
+
+#line(length: 100%)
+
+= EventBus 实现
+
+== 类型定义
 
 ```typescript
-// lib/bus/typed-eventbus.ts
-import type { NodeId, Node } from '$lib/core/node';
-import type { Workflow } from '$lib/core/workflow';
+// lib/bus/events.ts
+import type { NodeId } from '$lib/core/node';
 
-// 消息类型定义
-interface BusEvents {
-  // UI → Core
-  'node:execute': { nodeId: NodeId };
+export interface BusEvents {
+  // UI → core-runner
   'workflow:run': { workflowId: string };
   'workflow:stop': void;
+  'node:freeze': { nodeId: NodeId };
+  'node:unfreeze': { nodeId: NodeId };
 
-  // Core → UI
-  'node:state-changed': { nodeId: NodeId; state: Node['state'] };
-  'node:output-ready': { nodeId: NodeId; content: string };
-  'workflow:progress': { current: number; total: number };
-  'workflow:completed': { workflow: Workflow };
+  // core-runner → UI
+  'node:state': { nodeId: NodeId; state: 'pending' | 'running' | 'completed' | 'error' };
+  'node:output': { nodeId: NodeId; content: string; streaming?: boolean };
+  'workflow:done': { workflowId: string };
   'workflow:error': { error: string; nodeId?: NodeId };
-
-  // FloatingBall 相关
-  'storage:sync-request': void;
-  'storage:sync-complete': { success: boolean };
 
   // UI 锁定
   'ui:lock': { reason: string };
   'ui:unlock': void;
-}
 
-class TypedEventBus {
-  private listeners = new Map<string, Set<Function>>();
+  // FloatingBall 存储
+  'storage:sync': void;
+  'storage:export': { format: 'json' };
+  'storage:import': { data: string };
+}
+```
+
+== EventBus 实现
+
+```typescript
+// lib/bus/eventbus.ts
+import type { BusEvents } from './events';
+
+type Callback<T> = (payload: T) => void;
+
+class EventBus {
+  private listeners = new Map<string, Set<Callback<unknown>>>();
 
   on<K extends keyof BusEvents>(
     event: K,
-    callback: (payload: BusEvents[K]) => void
+    callback: Callback<BusEvents[K]>
   ): () => void {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
     }
-    this.listeners.get(event)!.add(callback);
+    this.listeners.get(event)!.add(callback as Callback<unknown>);
+
+    // 返回 unsubscribe 函数
     return () => this.off(event, callback);
   }
 
   off<K extends keyof BusEvents>(
     event: K,
-    callback: (payload: BusEvents[K]) => void
+    callback: Callback<BusEvents[K]>
   ): void {
-    this.listeners.get(event)?.delete(callback);
+    this.listeners.get(event)?.delete(callback as Callback<unknown>);
   }
 
   emit<K extends keyof BusEvents>(event: K, payload: BusEvents[K]): void {
@@ -188,332 +239,140 @@ class TypedEventBus {
   }
 }
 
-export const bus = new TypedEventBus();
+export const bus = new EventBus();
 ```
 
-=== 优点
-
-- 完全自定义，符合项目需求
-- 类型安全
-- 零依赖
-- 支持任意消息语义
-
-=== 缺点
-
-- 需要自行实现
-- 缺乏高级功能（消息队列、中间件、持久化）
-- 调试困难（没有 devtools）
-
-=== 适用场景
-
-适合 FlowWrite 的规模，能满足 UI↔Core 通信需求。
-
-== 方案三：使用第三方库
-
-=== 选项 A: mitt (~200B)
-
-极简的 EventEmitter，功能类似方案二。
+== 使用示例
 
 ```typescript
-import mitt from 'mitt';
-
-type Events = {
-  'node:execute': { nodeId: string };
-  'node:complete': { nodeId: string; output: string };
-};
-
-const emitter = mitt<Events>();
-emitter.on('node:execute', ({ nodeId }) => { /* ... */ });
-emitter.emit('node:execute', { nodeId: 'node-1' });
-```
-
-=== 选项 B: nanostores (~300B)
-
-轻量级状态管理，支持 computed 和 actions。
-
-```typescript
-import { atom, computed, action } from 'nanostores';
-
-const $workflow = atom<Workflow | null>(null);
-const $isRunning = computed($workflow, w => w?.state === 'running');
-
-const runWorkflow = action($workflow, 'run', (store) => {
-  const workflow = store.get();
-  // 执行逻辑
-});
-```
-
-=== 选项 C: RxJS (大型)
-
-功能强大但体积大，适合复杂的响应式需求。
-
-```typescript
-import { Subject, filter, map } from 'rxjs';
-
-interface Message { type: string; payload: unknown }
-const bus$ = new Subject<Message>();
-
-// 订阅特定消息
-bus$.pipe(
-  filter(m => m.type === 'node:execute'),
-  map(m => m.payload as { nodeId: string })
-).subscribe(({ nodeId }) => { /* ... */ });
-```
-
-=== 对比表格
-
-#table(
-  columns: (auto, auto, auto, auto, auto),
-  inset: 6pt,
-  align: horizon,
-  [*方案*], [*体积*], [*类型安全*], [*学习成本*], [*功能*],
-  [自定义 EventBus], [~50行], [✅ 完全控制], [低], [基础],
-  [mitt], [~200B], [✅ 泛型], [低], [基础],
-  [nanostores], [~300B], [✅ 良好], [中], [状态+计算],
-  [RxJS], [~30KB], [✅ 完整], [高], [强大],
-)
-
-#line(length: 100%)
-
-= 推荐方案：混合架构
-
-基于 FlowWrite 的实际需求，推荐采用 *自定义 TypedEventBus + Svelte Stores* 的混合方案。
-
-== 架构设计
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                           App.svelte                            │
-├─────────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐   ┌──────────────┐   ┌───────────────────┐    │
-│  │ FloatingBall│   │  FlowEditor  │   │     ApiTest       │    │
-│  └──────┬──────┘   └──────┬───────┘   └─────────┬─────────┘    │
-│         │                 │                     │               │
-│         └────────────┬────┴─────────────────────┘               │
-│                      │                                          │
-│              ┌───────▼───────┐                                  │
-│              │   EventBus    │  ← 消息传递层                     │
-│              └───────┬───────┘                                  │
-│                      │                                          │
-│              ┌───────▼───────┐                                  │
-│              │ Svelte Stores │  ← 状态共享层                     │
-│              │ (workflowStore│                                  │
-│              │  uiLockStore) │                                  │
-│              └───────┬───────┘                                  │
-│                      │                                          │
-├──────────────────────┼──────────────────────────────────────────┤
-│              ┌───────▼───────┐                                  │
-│              │  Core Runner  │  ← 执行引擎                       │
-│              └───────┬───────┘                                  │
-│                      │                                          │
-│         ┌────────────┼────────────┐                             │
-│         ▼            ▼            ▼                             │
-│   ┌──────────┐ ┌──────────┐ ┌──────────┐                       │
-│   │ workflow │ │   node   │ │ textblock│   ← Core 数据层        │
-│   └──────────┘ └──────────┘ └──────────┘                       │
-│                                                                 │
-├─────────────────────────────────────────────────────────────────┤
-│              ┌───────────────┐                                  │
-│              │   IndexedDB   │  ← 持久化层                       │
-│              └───────────────┘                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-== 消息流设计
-
-=== UI → Core → UI 典型流程
-
-```
-1. 用户点击 "执行工作流"
-   FlowEditor → bus.emit('workflow:run', { workflowId })
-
-2. Core Runner 接收并开始执行
-   bus.on('workflow:run') → prepareWorkflow() →
-   bus.emit('ui:lock', { reason: 'executing' })
-
-3. UI 收到锁定消息
-   bus.on('ui:lock') → 禁用编辑功能
-
-4. 节点依次执行
-   executeNode() → bus.emit('node:state-changed', { nodeId, state: 'running' })
-   LLM API 调用 → bus.emit('node:output-ready', { nodeId, content })
-
-5. 执行完成
-   bus.emit('workflow:completed', { workflow })
-   bus.emit('ui:unlock')
-
-6. UI 解锁，更新显示
-   bus.on('workflow:completed') → 更新节点状态显示
-   bus.on('ui:unlock') → 恢复编辑功能
-```
-
-=== UI 锁定机制
-
-```typescript
-// stores/uiLock.ts
-import { writable, derived } from 'svelte/store';
-
-interface LockState {
-  locked: boolean;
-  reason: string | null;
-  lockedAt: number | null;
-}
-
-export const uiLockStore = writable<LockState>({
-  locked: false,
-  reason: null,
-  lockedAt: null
-});
-
-export const isUILocked = derived(uiLockStore, $lock => $lock.locked);
-
-// 在 EventBus 监听器中更新
-bus.on('ui:lock', ({ reason }) => {
-  uiLockStore.set({ locked: true, reason, lockedAt: Date.now() });
-});
-
-bus.on('ui:unlock', () => {
-  uiLockStore.set({ locked: false, reason: null, lockedAt: null });
-});
-```
-
-=== FloatingBall 存储桥接
-
-```typescript
-// FloatingBall.svelte
+// FlowEditor.svelte
 import { bus } from '$lib/bus';
 import { onMount, onDestroy } from 'svelte';
 
-let unsubscribes: (() => void)[] = [];
+let isLocked = $state(false);
+let nodeStates = $state<Map<string, string>>(new Map());
+const unsubscribes: (() => void)[] = [];
 
 onMount(() => {
-  // 监听同步请求
   unsubscribes.push(
-    bus.on('storage:sync-request', async () => {
-      try {
-        await syncToIndexedDB();
-        bus.emit('storage:sync-complete', { success: true });
-      } catch (e) {
-        bus.emit('storage:sync-complete', { success: false });
-      }
+    bus.on('ui:lock', () => { isLocked = true; }),
+    bus.on('ui:unlock', () => { isLocked = false; }),
+    bus.on('node:state', ({ nodeId, state }) => {
+      nodeStates.set(nodeId, state);
+      nodeStates = new Map(nodeStates); // trigger reactivity
     })
   );
 });
 
-onDestroy(() => {
-  unsubscribes.forEach(unsub => unsub());
-});
+onDestroy(() => unsubscribes.forEach(fn => fn()));
+
+function handleRun() {
+  bus.emit('workflow:run', { workflowId: currentWorkflowId });
+}
 ```
 
 #line(length: 100%)
 
-= 实现计划
+= 实施计划
 
-== 阶段一：基础设施 (1-2天)
+== 阶段一：EventBus 基础设施
 
 === 任务
 
 1. 创建 `src/lib/bus/` 目录
-2. 实现 `TypedEventBus` 类
-3. 定义消息类型接口 `BusEvents`
-4. 创建 `src/lib/stores/` 目录
-5. 实现 `workflowStore` 和 `uiLockStore`
-6. 添加单元测试
+2. 实现 `events.ts`（类型定义）
+3. 实现 `eventbus.ts`（EventBus 类）
+4. 导出 `index.ts`
 
 === 文件结构
 
 ```
-src/lib/
-├── bus/
-│   ├── index.ts          # 导出 bus 实例
-│   ├── eventbus.ts       # TypedEventBus 实现
-│   └── events.ts         # BusEvents 类型定义
-├── stores/
-│   ├── index.ts          # 导出所有 stores
-│   ├── workflow.ts       # 工作流状态
-│   └── ui.ts             # UI 锁定状态
+src/lib/bus/
+├── index.ts      # export { bus } from './eventbus'
+├── eventbus.ts   # EventBus 实现
+└── events.ts     # BusEvents 类型
 ```
 
-== 阶段二：Core Runner 集成 (2-3天)
+== 阶段二：core 层重构
 
 === 任务
 
-1. 创建 `src/lib/runner/` 目录
-2. 实现 `WorkflowRunner` 类，使用 EventBus 发送状态
-3. 将 `workflow.ts` 中的 `executeWorkflow` 包装为 Runner
-4. 在 FlowEditor 中订阅执行事件
-5. 实现 UI 锁定逻辑
+1. 移除 `core/` 中的运行时状态字段
+2. `Node` 只保留 metadata：id, name, position, apiConfig
+3. `TextBlock` 只保留定义：id, content, sourceNodeId
+4. 确保 `core/` 的所有类型都是可序列化的
 
-== 阶段三：桥接层实现 (2-3天)
-
-=== 任务
-
-1. 实现 Core Node ↔ SvelteFlow Node 的双向转换
-2. 在 FlowEditor 中使用 workflowStore 作为数据源
-3. 实现节点编辑时的自动同步
-4. 实现 FloatingBall 的存储桥接功能
-
-== 阶段四：优化与测试 (1-2天)
+== 阶段三：core-runner 实现
 
 === 任务
 
-1. 添加消息日志（开发模式）
-2. 实现错误边界处理
-3. 性能测试与优化
-4. 集成测试
+1. 创建 `src/lib/core-runner/` 目录
+2. 实现 `WorkflowRunner` 类
+   - 持有 running-state（节点状态、输出内容）
+   - 监听 EventBus 命令
+   - 发送状态更新到 EventBus
+3. 集成 `api/client.ts` 进行 LLM 调用
+
+== 阶段四：UI 集成
+
+=== 任务
+
+1. FlowEditor 订阅 EventBus 事件
+2. 实现 UI 锁定逻辑
+3. FloatingBall 集成存储功能
+4. 节点状态可视化
 
 #line(length: 100%)
 
 = 风险与缓解
 
-== 风险一：状态同步复杂度
+== 风险一：内存泄漏
 
-*问题*：Core 层与 UI 层的双向同步可能导致状态不一致。
-
-*缓解*：
-- 明确单向数据流：UI 操作 → EventBus → Core 更新 → Store 更新 → UI 响应
-- 所有状态变更通过 EventBus，便于追踪和调试
-- 添加状态快照和回滚机制
-
-== 风险二：内存泄漏
-
-*问题*：订阅未正确清理可能导致内存泄漏。
+*问题*：订阅未清理导致内存泄漏。
 
 *缓解*：
-- `on()` 方法返回 `unsubscribe` 函数
-- 在组件 `onDestroy` 中清理所有订阅
-- 使用 Svelte 的自动订阅语法 `$store`
+- `on()` 返回 `unsubscribe` 函数
+- 组件 `onDestroy` 中统一清理
+- 开发模式下监控订阅数量
 
-== 风险三：性能瓶颈
+== 风险二：消息顺序
 
-*问题*：频繁的消息传递可能影响性能。
+*问题*：异步操作可能导致消息顺序混乱。
 
 *缓解*：
-- 合并相近的状态更新（debounce）
-- 流式输出使用 requestAnimationFrame 限流
-- 监控消息频率，必要时添加队列
+- core-runner 内部使用队列处理命令
+- 状态变更携带时间戳
+- UI 锁定期间忽略用户操作
+
+== 风险三：调试困难
+
+*问题*：消息传递难以追踪。
+
+*缓解*：
+- 开发模式下 `emit()` 输出日志
+- 可选的消息历史记录
+- 未来可添加 devtools 插件
 
 #line(length: 100%)
 
 = 结论
 
-消息总线在 FlowWrite 中是 *可行且推荐* 的。
+== 最终方案
+
+*单一 EventBus，无状态共享层*
+
+- EventBus 作为唯一的跨组件通信机制
+- core/ 只包含 metadata（可序列化）
+- core-runner/ 持有 running-state（易失）
+- 不引入 Svelte Stores 或第三方库
 
 == 核心收益
 
-1. *解耦 Core 与 UI*：通过 EventBus 实现松耦合通信
-2. *状态可追踪*：所有状态变更通过消息，便于调试
-3. *扩展性*：新功能（如 FloatingBall 扩展）可轻松接入
-4. *锁定机制*：防止执行期间的状态混乱
-
-== 技术选型
-
-- *消息传递*：自定义 TypedEventBus（~50行，类型安全）
-- *状态共享*：Svelte Stores（零依赖，框架原生）
-- *无需引入*：mitt、RxJS 等第三方库（项目规模不需要）
+1. *架构简洁*：单一通信机制，无冗余层
+2. *职责清晰*：metadata vs running-state 分离
+3. *类型安全*：BusEvents 接口约束所有消息
+4. *易于扩展*：新功能只需定义新消息类型
 
 == 下一步
 
-1. 确认方案后，创建 `src/lib/bus/` 模块
-2. 定义完整的 `BusEvents` 消息类型
-3. 实现 Core Runner 并集成到 FlowEditor
+确认方案后，按阶段实施：EventBus → core 重构 → core-runner → UI 集成
