@@ -1,55 +1,69 @@
 /**
- * Workflow System for FlowWrite
+ * Workflow System for FlowWrite (v2 - Metadata Only)
  *
- * Manages a collection of nodes and handles:
- * - Dependency resolution (topological sort)
- * - Workflow execution (sequential based on dependencies)
- * - State propagation between nodes
+ * A WorkflowDefinition represents the static metadata of a workflow.
+ * Runtime state (execution status, current node) is managed in core-runner.
+ *
+ * This file contains:
+ * - WorkflowDefinition type
+ * - Topological sort algorithm (pure function)
+ * - Workflow modification functions
  */
 
 import {
-  type Node,
+  type NodeId,
+  type NodeDefinition,
   type NodeMap,
-  type NodeState,
   createNodeMap,
   getNodeDependencies,
-  isNodeReady,
-  getNodeOutput,
-  setNodePending,
-  setNodeRunning,
-  setNodeCompleted,
-  setNodeError,
-  resetNode,
-  propagateNodeOutput
+  nodeMapToArray,
+  serializeNodeMap,
+  deserializeNodeMap
 } from './node';
-import { type NodeId, type TextBlockList, resetNodeDependents } from './textblock';
-import { resolveApiConfigOutput } from './apiconfig';
+import { removeNodeReferences } from './textblock';
 
 // ============================================================================
-// Workflow State
+// WorkflowDefinition - Static workflow metadata
 // ============================================================================
 
-export type WorkflowState = 'idle' | 'running' | 'completed' | 'error';
-
-export interface Workflow {
+/**
+ * Static definition of a workflow (metadata only).
+ *
+ * NOTE: Unlike v1 Workflow, this does NOT contain:
+ * - state (idle/running/completed/error)
+ * - executionOrder
+ * - currentIndex
+ *
+ * Those are runtime state, managed in core-runner/state.ts as WorkflowRuntimeState.
+ */
+export interface WorkflowDefinition {
   readonly id: string;
+  /** Display name for the workflow */
   name: string;
+  /** Collection of node definitions */
   nodes: NodeMap;
-  state: WorkflowState;
-  /** Execution order determined by topological sort */
-  executionOrder: NodeId[];
-  /** Currently executing node index in executionOrder */
-  currentIndex: number;
+  /** Optional description */
+  description?: string;
+  /** Creation timestamp */
+  createdAt?: number;
+  /** Last modified timestamp */
+  updatedAt?: number;
 }
 
-export function createWorkflow(name: string, nodes: Node[] = []): Workflow {
+/**
+ * Create a new workflow definition
+ */
+export function createWorkflowDef(
+  name: string,
+  nodes: NodeDefinition[] = []
+): WorkflowDefinition {
+  const now = Date.now();
   return {
     id: crypto.randomUUID(),
     name,
     nodes: createNodeMap(nodes),
-    state: 'idle',
-    executionOrder: [],
-    currentIndex: -1
+    createdAt: now,
+    updatedAt: now
   };
 }
 
@@ -57,19 +71,27 @@ export function createWorkflow(name: string, nodes: Node[] = []): Workflow {
 // Dependency Resolution (Topological Sort)
 // ============================================================================
 
+/**
+ * Error types for dependency resolution
+ */
 export interface DependencyError {
   type: 'cycle' | 'missing';
   nodeIds: NodeId[];
   message: string;
 }
 
+/**
+ * Result of topological sort
+ */
 export type TopologicalSortResult =
   | { success: true; order: NodeId[] }
   | { success: false; error: DependencyError };
 
 /**
- * Perform topological sort on nodes using Kahn's algorithm
- * Returns execution order or error if cycle/missing dependency detected
+ * Perform topological sort on nodes using Kahn's algorithm.
+ * Returns execution order or error if cycle/missing dependency detected.
+ *
+ * This is a pure function - it does not modify any state.
  */
 export function topologicalSort(nodes: NodeMap): TopologicalSortResult {
   // Build adjacency list and in-degree count
@@ -146,124 +168,10 @@ export function topologicalSort(nodes: NodeMap): TopologicalSortResult {
 }
 
 /**
- * Prepare workflow for execution
- * Performs topological sort and sets initial states
+ * Validate a workflow's dependency graph
  */
-export function prepareWorkflow(workflow: Workflow): Workflow | DependencyError {
-  const sortResult = topologicalSort(workflow.nodes);
-
-  if (!sortResult.success) {
-    return sortResult.error;
-  }
-
-  // Reset all nodes and set ready ones to pending
-  let nodes = new Map(workflow.nodes);
-  for (const [id, node] of nodes) {
-    const resetted = resetNode(node);
-    nodes.set(id, isNodeReady(resetted) ? setNodePending(resetted) : resetted);
-  }
-
-  return {
-    ...workflow,
-    nodes,
-    state: 'running',
-    executionOrder: sortResult.order,
-    currentIndex: 0
-  };
-}
-
-// ============================================================================
-// Workflow Execution
-// ============================================================================
-
-/** Callback for executing a single node's LLM call */
-export type NodeExecutor = (nodeId: NodeId, node: Node) => Promise<string>;
-
-/**
- * Execute a single node in the workflow
- */
-export async function executeNode(
-  workflow: Workflow,
-  executor: NodeExecutor
-): Promise<Workflow> {
-  if (workflow.state !== 'running' || workflow.currentIndex >= workflow.executionOrder.length) {
-    return workflow;
-  }
-
-  const currentNodeId = workflow.executionOrder[workflow.currentIndex];
-  const currentNode = workflow.nodes.get(currentNodeId);
-
-  if (!currentNode) {
-    return { ...workflow, state: 'error' };
-  }
-
-  // Set node to running
-  let nodes = new Map(workflow.nodes);
-  nodes.set(currentNodeId, setNodeRunning(currentNode));
-
-  try {
-    // Execute LLM call
-    const output = await executor(currentNodeId, currentNode);
-
-    // Update node with output
-    nodes.set(currentNodeId, setNodeCompleted(currentNode, output));
-
-    // Propagate output to dependent nodes
-    nodes = propagateNodeOutput(nodes, currentNodeId, output);
-
-    // Update dependent nodes' states (set to pending if now ready)
-    for (const [id, node] of nodes) {
-      if (node.state === 'idle' && isNodeReady(node)) {
-        nodes.set(id, setNodePending(node));
-      }
-    }
-
-    const nextIndex = workflow.currentIndex + 1;
-    const isCompleted = nextIndex >= workflow.executionOrder.length;
-
-    return {
-      ...workflow,
-      nodes,
-      currentIndex: nextIndex,
-      state: isCompleted ? 'completed' : 'running'
-    };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    nodes.set(currentNodeId, setNodeError(currentNode, errorMessage));
-
-    return {
-      ...workflow,
-      nodes,
-      state: 'error'
-    };
-  }
-}
-
-/**
- * Execute all nodes in the workflow sequentially
- */
-export async function executeWorkflow(
-  workflow: Workflow,
-  executor: NodeExecutor,
-  onProgress?: (workflow: Workflow) => void
-): Promise<Workflow> {
-  let current = workflow;
-
-  if (current.state !== 'running') {
-    const prepared = prepareWorkflow(current);
-    if ('type' in prepared) {
-      // It's an error
-      return { ...current, state: 'error' };
-    }
-    current = prepared;
-  }
-
-  while (current.state === 'running' && current.currentIndex < current.executionOrder.length) {
-    current = await executeNode(current, executor);
-    onProgress?.(current);
-  }
-
-  return current;
+export function validateWorkflow(workflow: WorkflowDefinition): TopologicalSortResult {
+  return topologicalSort(workflow.nodes);
 }
 
 // ============================================================================
@@ -273,84 +181,129 @@ export async function executeWorkflow(
 /**
  * Add a node to the workflow
  */
-export function addNode(workflow: Workflow, node: Node): Workflow {
+export function addNode(
+  workflow: WorkflowDefinition,
+  node: NodeDefinition
+): WorkflowDefinition {
   const nodes = new Map(workflow.nodes);
   nodes.set(node.id, node);
-  return { ...workflow, nodes, state: 'idle', executionOrder: [], currentIndex: -1 };
+  return {
+    ...workflow,
+    nodes,
+    updatedAt: Date.now()
+  };
 }
 
 /**
  * Remove a node from the workflow
  */
-export function removeNode(workflow: Workflow, nodeId: NodeId): Workflow {
+export function removeNode(
+  workflow: WorkflowDefinition,
+  nodeId: NodeId
+): WorkflowDefinition {
   const nodes = new Map(workflow.nodes);
   nodes.delete(nodeId);
 
-  // Reset virtual blocks in other nodes that referenced this node
+  // Clean up references to this node in other nodes' prompts
   for (const [id, node] of nodes) {
-    const updatedSystemPrompt = resetNodeDependents(node.apiConfig.systemPrompt, nodeId);
-    const updatedUserPrompt = resetNodeDependents(node.apiConfig.userPrompt, nodeId);
-    if (updatedSystemPrompt !== node.apiConfig.systemPrompt || updatedUserPrompt !== node.apiConfig.userPrompt) {
+    const cleanedSystemPrompt = removeNodeReferences(node.apiConfig.systemPrompt, nodeId);
+    const cleanedUserPrompt = removeNodeReferences(node.apiConfig.userPrompt, nodeId);
+
+    if (
+      cleanedSystemPrompt !== node.apiConfig.systemPrompt ||
+      cleanedUserPrompt !== node.apiConfig.userPrompt
+    ) {
       nodes.set(id, {
         ...node,
         apiConfig: {
           ...node.apiConfig,
-          systemPrompt: updatedSystemPrompt,
-          userPrompt: updatedUserPrompt
+          systemPrompt: cleanedSystemPrompt,
+          userPrompt: cleanedUserPrompt
         }
       });
     }
   }
 
-  return { ...workflow, nodes, state: 'idle', executionOrder: [], currentIndex: -1 };
+  return {
+    ...workflow,
+    nodes,
+    updatedAt: Date.now()
+  };
 }
 
 /**
  * Update a node in the workflow
  */
 export function updateNode(
-  workflow: Workflow,
+  workflow: WorkflowDefinition,
   nodeId: NodeId,
-  updater: (node: Node) => Node
-): Workflow {
+  updater: (node: NodeDefinition) => NodeDefinition
+): WorkflowDefinition {
   const node = workflow.nodes.get(nodeId);
   if (!node) return workflow;
 
   const nodes = new Map(workflow.nodes);
   nodes.set(nodeId, updater(node));
 
-  return { ...workflow, nodes, state: 'idle', executionOrder: [], currentIndex: -1 };
+  return {
+    ...workflow,
+    nodes,
+    updatedAt: Date.now()
+  };
 }
 
 /**
  * Get a node by ID
  */
-export function getNode(workflow: Workflow, nodeId: NodeId): Node | undefined {
+export function getNode(
+  workflow: WorkflowDefinition,
+  nodeId: NodeId
+): NodeDefinition | undefined {
   return workflow.nodes.get(nodeId);
 }
 
 /**
  * Get all nodes as an array
  */
-export function getNodes(workflow: Workflow): Node[] {
-  return Array.from(workflow.nodes.values());
+export function getNodes(workflow: WorkflowDefinition): NodeDefinition[] {
+  return nodeMapToArray(workflow.nodes);
 }
 
 /**
- * Reset the workflow to idle state
+ * Update workflow metadata
  */
-export function resetWorkflow(workflow: Workflow): Workflow {
-  const nodes = new Map(workflow.nodes);
-
-  for (const [id, node] of nodes) {
-    nodes.set(id, resetNode(node));
-  }
-
+export function updateWorkflowMeta(
+  workflow: WorkflowDefinition,
+  updates: { name?: string; description?: string }
+): WorkflowDefinition {
   return {
     ...workflow,
-    nodes,
-    state: 'idle',
-    executionOrder: [],
-    currentIndex: -1
+    ...updates,
+    updatedAt: Date.now()
+  };
+}
+
+// ============================================================================
+// Serialization Helpers
+// ============================================================================
+
+/**
+ * Serialize a workflow for persistence
+ */
+export function serializeWorkflow(workflow: WorkflowDefinition): string {
+  return JSON.stringify({
+    ...workflow,
+    nodes: serializeNodeMap(workflow.nodes)
+  });
+}
+
+/**
+ * Deserialize a workflow from persistence
+ */
+export function deserializeWorkflow(data: string): WorkflowDefinition {
+  const parsed = JSON.parse(data);
+  return {
+    ...parsed,
+    nodes: deserializeNodeMap(parsed.nodes)
   };
 }

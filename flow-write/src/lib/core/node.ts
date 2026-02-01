@@ -1,196 +1,149 @@
 /**
- * Node System for FlowWrite
+ * Node System for FlowWrite (v2 - Metadata Only)
  *
- * A node represents a single LLM API call in the workflow.
- * - Input: ApiConfiguration (connection, parameters, prompts as TextBlockLists)
- * - Output: TextBlock (LLM response)
+ * A NodeDefinition represents the static metadata of a node.
+ * Runtime state (execution status, output) is managed in core-runner.
+ *
+ * This separation ensures:
+ * - NodeDefinition is fully serializable for persistence
+ * - Clean boundary between "what a node is" and "how it's running"
  */
 
-import {
-  type TextBlock,
-  type NodeId,
-  createTextBlock,
-  generateId
-} from './textblock';
-
+import { type NodeId, generateId } from './textblock';
 import {
   type ApiConfiguration,
   createApiConfiguration,
-  getApiConfigDependencies,
-  isApiConfigReady,
-  getSystemPromptContent,
-  getUserPromptContent,
-  resolveApiConfigOutput
+  getApiConfigDependencies
 } from './apiconfig';
 
 // ============================================================================
-// Node State
+// Re-export commonly used types
+// ============================================================================
+
+export type { NodeId } from './textblock';
+
+// ============================================================================
+// NodeDefinition - Static node metadata
 // ============================================================================
 
 /**
- * Execution state of a node
- * - idle: Not yet executed, waiting for dependencies or user trigger
- * - pending: Dependencies satisfied, queued for execution
- * - running: Currently executing LLM API call
- * - completed: Execution finished successfully
- * - error: Execution failed
+ * Static definition of a node (metadata only).
+ *
+ * NOTE: Unlike v1 Node, this does NOT contain:
+ * - state (idle/pending/running/completed/error)
+ * - output (TextBlock)
+ * - errorMessage
+ *
+ * Those are runtime state, managed in core-runner/state.ts as NodeRuntimeState.
  */
-export type NodeState = 'idle' | 'pending' | 'running' | 'completed' | 'error';
-
-// ============================================================================
-// Node
-// ============================================================================
-
-export interface Node {
+export interface NodeDefinition {
   readonly id: NodeId;
   /** Display name for the node */
   name: string;
+  /** Position in the canvas (for UI persistence) */
+  position: { x: number; y: number };
   /** API configuration (connection, parameters, prompts) */
   apiConfig: ApiConfiguration;
-  /** Output from LLM (null until execution completes) */
-  output: TextBlock | null;
-  /** Current execution state */
-  state: NodeState;
-  /** Error message if state is 'error' */
-  errorMessage?: string;
-  /** Position in the canvas (for UI) */
-  position: { x: number; y: number };
 }
 
-export function createNode(
+/**
+ * Create a new node definition
+ */
+export function createNodeDef(
   name: string,
   position: { x: number; y: number } = { x: 0, y: 0 },
   apiConfig: ApiConfiguration = createApiConfiguration()
-): Node {
+): NodeDefinition {
   return {
     id: generateId(),
     name,
-    apiConfig,
-    output: null,
-    state: 'idle',
-    position
+    position,
+    apiConfig
   };
 }
 
 /**
  * Get the dependencies of a node (source nodes it depends on)
  */
-export function getNodeDependencies(node: Node): NodeId[] {
+export function getNodeDependencies(node: NodeDefinition): NodeId[] {
   return getApiConfigDependencies(node.apiConfig);
 }
 
 /**
- * Check if a node is ready to execute (all dependencies resolved)
+ * Update node position
  */
-export function isNodeReady(node: Node): boolean {
-  return isApiConfigReady(node.apiConfig);
+export function updateNodePosition(
+  node: NodeDefinition,
+  position: { x: number; y: number }
+): NodeDefinition {
+  return { ...node, position };
 }
 
 /**
- * Get the final prompt strings for a node
+ * Update node name
  */
-export function getNodePrompt(node: Node): { system: string; user: string } {
-  return {
-    system: getSystemPromptContent(node.apiConfig),
-    user: getUserPromptContent(node.apiConfig)
-  };
+export function updateNodeName(node: NodeDefinition, name: string): NodeDefinition {
+  return { ...node, name };
 }
 
 /**
  * Update node API configuration
  */
-export function updateNodeApiConfig(node: Node, apiConfig: ApiConfiguration): Node {
+export function updateNodeApiConfig(
+  node: NodeDefinition,
+  apiConfig: ApiConfiguration
+): NodeDefinition {
   return { ...node, apiConfig };
 }
 
 /**
- * Set node to pending state (ready to execute)
+ * Update node API configuration with a partial update
  */
-export function setNodePending(node: Node): Node {
-  return { ...node, state: 'pending', errorMessage: undefined };
-}
-
-/**
- * Set node to running state
- */
-export function setNodeRunning(node: Node): Node {
-  return { ...node, state: 'running' };
-}
-
-/**
- * Set node to completed state with output
- */
-export function setNodeCompleted(node: Node, outputContent: string): Node {
+export function updateNodeApiConfigPartial(
+  node: NodeDefinition,
+  updates: Partial<ApiConfiguration>
+): NodeDefinition {
   return {
     ...node,
-    state: 'completed',
-    output: createTextBlock(outputContent),
-    errorMessage: undefined
+    apiConfig: { ...node.apiConfig, ...updates }
   };
-}
-
-/**
- * Set node to error state
- */
-export function setNodeError(node: Node, errorMessage: string): Node {
-  return {
-    ...node,
-    state: 'error',
-    errorMessage,
-    output: null
-  };
-}
-
-/**
- * Reset node to idle state (clear output)
- */
-export function resetNode(node: Node): Node {
-  return {
-    ...node,
-    state: 'idle',
-    output: null,
-    errorMessage: undefined
-  };
-}
-
-/**
- * Get the output content of a node (empty string if not completed)
- */
-export function getNodeOutput(node: Node): string {
-  return node.output?.content ?? '';
 }
 
 // ============================================================================
-// Node Collection Helpers
+// NodeMap - Collection type
 // ============================================================================
 
-export type NodeMap = Map<NodeId, Node>;
+export type NodeMap = Map<NodeId, NodeDefinition>;
 
-export function createNodeMap(nodes: Node[] = []): NodeMap {
+/**
+ * Create a NodeMap from an array of nodes
+ */
+export function createNodeMap(nodes: NodeDefinition[] = []): NodeMap {
   return new Map(nodes.map(n => [n.id, n]));
 }
 
 /**
- * Update a node's apiConfig when an upstream node completes
+ * Convert a NodeMap to an array
  */
-export function propagateNodeOutput(
-  nodes: NodeMap,
-  completedNodeId: NodeId,
-  outputContent: string
-): NodeMap {
-  const newNodes = new Map(nodes);
+export function nodeMapToArray(nodes: NodeMap): NodeDefinition[] {
+  return Array.from(nodes.values());
+}
 
-  for (const [id, node] of nodes) {
-    const deps = getNodeDependencies(node);
-    if (deps.includes(completedNodeId)) {
-      const updatedApiConfig = resolveApiConfigOutput(
-        node.apiConfig,
-        completedNodeId,
-        outputContent
-      );
-      newNodes.set(id, { ...node, apiConfig: updatedApiConfig });
-    }
-  }
+// ============================================================================
+// Serialization Helpers
+// ============================================================================
 
-  return newNodes;
+/**
+ * Serialize a NodeMap for persistence
+ */
+export function serializeNodeMap(nodes: NodeMap): unknown {
+  return Array.from(nodes.entries());
+}
+
+/**
+ * Deserialize a NodeMap from persistence
+ */
+export function deserializeNodeMap(data: unknown): NodeMap {
+  const entries = data as [NodeId, NodeDefinition][];
+  return new Map(entries);
 }

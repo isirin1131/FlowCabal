@@ -1,20 +1,18 @@
 /**
- * API Configuration System for FlowWrite
+ * API Configuration System for FlowWrite (v2)
  *
  * ApiConfiguration is the core component that encapsulates all settings
  * for an LLM API call, including connection, parameters, and prompts.
- * Prompts are TextBlockLists, allowing virtual blocks that reference
- * other nodes' outputs.
+ *
+ * Prompts are TextBlockLists containing metadata only.
+ * Runtime resolution of virtual blocks is handled in core-runner.
  */
 
 import {
   type TextBlockList,
   type NodeId,
   createTextBlockList,
-  getDependencies,
-  isListReady,
-  getListContent,
-  resolveNodeOutput
+  getDependencies
 } from './textblock';
 
 // ============================================================================
@@ -115,42 +113,6 @@ export function getApiConfigDependencies(config: ApiConfiguration): NodeId[] {
   const systemDeps = getDependencies(config.systemPrompt);
   const userDeps = getDependencies(config.userPrompt);
   return [...new Set([...systemDeps, ...userDeps])];
-}
-
-/**
- * Check if ApiConfiguration is ready (all virtual blocks resolved)
- */
-export function isApiConfigReady(config: ApiConfiguration): boolean {
-  return isListReady(config.systemPrompt) && isListReady(config.userPrompt);
-}
-
-/**
- * Get the final system prompt string
- */
-export function getSystemPromptContent(config: ApiConfiguration): string {
-  return getListContent(config.systemPrompt);
-}
-
-/**
- * Get the final user prompt string
- */
-export function getUserPromptContent(config: ApiConfiguration): string {
-  return getListContent(config.userPrompt);
-}
-
-/**
- * Resolve a node output in both prompts
- */
-export function resolveApiConfigOutput(
-  config: ApiConfiguration,
-  nodeId: NodeId,
-  content: string
-): ApiConfiguration {
-  return {
-    ...config,
-    systemPrompt: resolveNodeOutput(config.systemPrompt, nodeId, content),
-    userPrompt: resolveNodeOutput(config.userPrompt, nodeId, content)
-  };
 }
 
 /**

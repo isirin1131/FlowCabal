@@ -1,11 +1,18 @@
 /**
- * TextBlock System for FlowWrite
+ * TextBlock System for FlowWrite (v2 - Metadata Only)
  *
- * Implements the core text block abstractions for the workflow editor:
+ * This file contains ONLY metadata definitions (static, serializable).
+ * Runtime state (resolved content, freeze status) is managed in core-runner.
+ *
+ * Types:
  * - TextBlock: Static text content
- * - VirtualTextBlock: Dynamic text that references node outputs with freeze capability
+ * - VirtualTextBlockDef: Definition of a reference to another node's output
  * - TextBlockList: Container managing a sequence of text blocks
  */
+
+// ============================================================================
+// ID Types
+// ============================================================================
 
 /** Unique identifier for text blocks */
 export type TextBlockId = string;
@@ -19,15 +26,23 @@ export function generateId(): string {
 }
 
 // ============================================================================
-// TextBlock - Basic static text block
+// TextBlock - Basic static text block (metadata)
 // ============================================================================
 
+/**
+ * Static text block containing user-defined content.
+ * Always ready for use, no runtime resolution needed.
+ */
 export interface TextBlock {
   readonly type: 'text';
   readonly id: TextBlockId;
+  /** User-defined content */
   content: string;
 }
 
+/**
+ * Create a new text block
+ */
 export function createTextBlock(content: string = ''): TextBlock {
   return {
     type: 'text',
@@ -37,171 +52,78 @@ export function createTextBlock(content: string = ''): TextBlock {
 }
 
 // ============================================================================
-// VirtualTextBlock - Dynamic text referencing node outputs
+// VirtualTextBlockDef - Virtual text block definition (metadata only)
 // ============================================================================
 
 /**
- * Represents the resolution state of a virtual text block
- * - pending: Source node has not been executed yet
- * - resolved: Source node has produced output
- * - error: Source node execution failed
+ * Definition of a virtual text block that references another node's output.
+ *
+ * NOTE: Unlike v1, this does NOT contain runtime state (resolvedContent, frozen, state).
+ * Those are managed in core-runner/state.ts as VirtualBlockState.
+ *
+ * This ensures VirtualTextBlockDef is fully serializable for persistence.
  */
-export type VirtualTextBlockState = 'pending' | 'resolved' | 'error';
-
-export interface VirtualTextBlock {
+export interface VirtualTextBlockDef {
   readonly type: 'virtual';
   readonly id: TextBlockId;
   /** The node whose output this block references */
   readonly sourceNodeId: NodeId;
-  /** Current resolution state */
-  state: VirtualTextBlockState;
-  /** Resolved content (available when state is 'resolved' or frozen) */
-  resolvedContent: string | null;
-  /** When true, behaves as static text using resolvedContent */
-  frozen: boolean;
-  /** Optional display name for the placeholder */
+  /** Optional display name for the placeholder (shown when pending) */
   displayName?: string;
 }
 
-export function createVirtualTextBlock(
+/**
+ * Create a new virtual text block definition
+ */
+export function createVirtualTextBlockDef(
   sourceNodeId: NodeId,
   displayName?: string
-): VirtualTextBlock {
+): VirtualTextBlockDef {
   return {
     type: 'virtual',
     id: generateId(),
     sourceNodeId,
-    state: 'pending',
-    resolvedContent: null,
-    frozen: false,
     displayName
   };
 }
 
+// ============================================================================
+// AnyTextBlockDef - Union type for all text block definitions
+// ============================================================================
+
+export type AnyTextBlockDef = TextBlock | VirtualTextBlockDef;
+
 /**
- * Resolve a virtual text block with content from its source node
+ * Check if a block is a virtual text block definition
  */
-export function resolveVirtualTextBlock(
-  block: VirtualTextBlock,
-  content: string
-): VirtualTextBlock {
-  if (block.frozen) {
-    return block; // Frozen blocks cannot be updated
-  }
-  return {
-    ...block,
-    state: 'resolved',
-    resolvedContent: content
-  };
+export function isVirtualBlock(block: AnyTextBlockDef): block is VirtualTextBlockDef {
+  return block.type === 'virtual';
 }
 
 /**
- * Mark a virtual text block as having an error
+ * Check if a block is a static text block
  */
-export function errorVirtualTextBlock(
-  block: VirtualTextBlock,
-  _error?: string
-): VirtualTextBlock {
-  if (block.frozen) {
-    return block;
-  }
-  return {
-    ...block,
-    state: 'error',
-    resolvedContent: null
-  };
-}
-
-/**
- * Freeze a virtual text block - locks current content as static
- */
-export function freezeVirtualTextBlock(block: VirtualTextBlock): VirtualTextBlock {
-  if (block.state !== 'resolved' || block.resolvedContent === null) {
-    throw new Error('Cannot freeze a virtual text block that has not been resolved');
-  }
-  return {
-    ...block,
-    frozen: true
-  };
-}
-
-/**
- * Unfreeze a virtual text block - allows it to update again
- */
-export function unfreezeVirtualTextBlock(block: VirtualTextBlock): VirtualTextBlock {
-  return {
-    ...block,
-    frozen: false
-  };
-}
-
-/**
- * Reset a virtual text block to pending state (if not frozen)
- */
-export function resetVirtualTextBlock(block: VirtualTextBlock): VirtualTextBlock {
-  if (block.frozen) {
-    return block;
-  }
-  return {
-    ...block,
-    state: 'pending',
-    resolvedContent: null
-  };
+export function isStaticBlock(block: AnyTextBlockDef): block is TextBlock {
+  return block.type === 'text';
 }
 
 // ============================================================================
-// AnyTextBlock - Union type for all text blocks
+// TextBlockList - Container for managing text block sequences (metadata)
 // ============================================================================
-
-export type AnyTextBlock = TextBlock | VirtualTextBlock;
 
 /**
- * Get the display content of any text block
- * - TextBlock: returns content directly
- * - VirtualTextBlock (frozen/resolved): returns resolvedContent
- * - VirtualTextBlock (pending): returns placeholder string
- * - VirtualTextBlock (error): returns error placeholder
+ * Container for a sequence of text blocks.
+ * Used in prompts (system prompt, user prompt).
  */
-export function getBlockContent(block: AnyTextBlock): string {
-  if (block.type === 'text') {
-    return block.content;
-  }
-
-  // Virtual text block
-  if (block.frozen && block.resolvedContent !== null) {
-    return block.resolvedContent;
-  }
-
-  switch (block.state) {
-    case 'resolved':
-      return block.resolvedContent ?? '';
-    case 'pending':
-      return `[${block.displayName ?? block.sourceNodeId}]`;
-    case 'error':
-      return `[Error: ${block.displayName ?? block.sourceNodeId}]`;
-  }
-}
-
-/**
- * Check if a text block is ready (has actual content)
- */
-export function isBlockReady(block: AnyTextBlock): boolean {
-  if (block.type === 'text') {
-    return true;
-  }
-  return block.frozen || block.state === 'resolved';
-}
-
-// ============================================================================
-// TextBlockList - Container for managing text block sequences
-// ============================================================================
-
 export interface TextBlockList {
   readonly id: string;
-  blocks: AnyTextBlock[];
+  blocks: AnyTextBlockDef[];
 }
 
-export function createTextBlockList(initialBlocks?: AnyTextBlock[]): TextBlockList {
+/**
+ * Create a new text block list
+ */
+export function createTextBlockList(initialBlocks?: AnyTextBlockDef[]): TextBlockList {
   return {
     id: generateId(),
     blocks: initialBlocks ?? []
@@ -211,7 +133,7 @@ export function createTextBlockList(initialBlocks?: AnyTextBlock[]): TextBlockLi
 /**
  * Append a text block to the list
  */
-export function appendBlock(list: TextBlockList, block: AnyTextBlock): TextBlockList {
+export function appendBlock(list: TextBlockList, block: AnyTextBlockDef): TextBlockList {
   return {
     ...list,
     blocks: [...list.blocks, block]
@@ -224,7 +146,7 @@ export function appendBlock(list: TextBlockList, block: AnyTextBlock): TextBlock
 export function insertBlock(
   list: TextBlockList,
   index: number,
-  block: AnyTextBlock
+  block: AnyTextBlockDef
 ): TextBlockList {
   const newBlocks = [...list.blocks];
   newBlocks.splice(index, 0, block);
@@ -250,7 +172,7 @@ export function removeBlock(list: TextBlockList, blockId: TextBlockId): TextBloc
 export function updateBlock(
   list: TextBlockList,
   blockId: TextBlockId,
-  updater: (block: AnyTextBlock) => AnyTextBlock
+  updater: (block: AnyTextBlockDef) => AnyTextBlockDef
 ): TextBlockList {
   return {
     ...list,
@@ -261,40 +183,17 @@ export function updateBlock(
 /**
  * Find a text block by ID
  */
-export function findBlock(list: TextBlockList, blockId: TextBlockId): AnyTextBlock | undefined {
+export function findBlock(list: TextBlockList, blockId: TextBlockId): AnyTextBlockDef | undefined {
   return list.blocks.find(b => b.id === blockId);
 }
 
 /**
- * Get the combined content of all blocks in the list
- */
-export function getListContent(list: TextBlockList): string {
-  return list.blocks.map(getBlockContent).join('');
-}
-
-/**
- * Check if all blocks in the list are ready
- */
-export function isListReady(list: TextBlockList): boolean {
-  return list.blocks.every(isBlockReady);
-}
-
-/**
- * Get all virtual text blocks that are pending
- */
-export function getPendingVirtualBlocks(list: TextBlockList): VirtualTextBlock[] {
-  return list.blocks.filter(
-    (b): b is VirtualTextBlock => b.type === 'virtual' && !b.frozen && b.state === 'pending'
-  );
-}
-
-/**
- * Get all source node IDs that this list depends on
+ * Get all source node IDs that this list depends on (unfrozen virtual blocks)
  */
 export function getDependencies(list: TextBlockList): NodeId[] {
   const deps = new Set<NodeId>();
   for (const block of list.blocks) {
-    if (block.type === 'virtual' && !block.frozen) {
+    if (block.type === 'virtual') {
       deps.add(block.sourceNodeId);
     }
   }
@@ -302,35 +201,43 @@ export function getDependencies(list: TextBlockList): NodeId[] {
 }
 
 /**
- * Resolve all virtual text blocks that reference a specific node
+ * Get all virtual text block definitions in the list
  */
-export function resolveNodeOutput(
-  list: TextBlockList,
-  nodeId: NodeId,
-  content: string
-): TextBlockList {
+export function getVirtualBlocks(list: TextBlockList): VirtualTextBlockDef[] {
+  return list.blocks.filter(isVirtualBlock);
+}
+
+/**
+ * Remove all virtual blocks that reference a specific node
+ */
+export function removeNodeReferences(list: TextBlockList, nodeId: NodeId): TextBlockList {
   return {
     ...list,
-    blocks: list.blocks.map(block => {
-      if (block.type === 'virtual' && block.sourceNodeId === nodeId) {
-        return resolveVirtualTextBlock(block, content);
-      }
-      return block;
-    })
+    blocks: list.blocks.filter(b => !(b.type === 'virtual' && b.sourceNodeId === nodeId))
+  };
+}
+
+// ============================================================================
+// Serialization Helpers
+// ============================================================================
+
+/**
+ * Serialize a text block list to JSON-safe object
+ */
+export function serializeTextBlockList(list: TextBlockList): unknown {
+  return {
+    id: list.id,
+    blocks: list.blocks.map(block => ({ ...block }))
   };
 }
 
 /**
- * Reset all virtual text blocks that reference a specific node
+ * Deserialize a text block list from JSON
  */
-export function resetNodeDependents(list: TextBlockList, nodeId: NodeId): TextBlockList {
+export function deserializeTextBlockList(data: unknown): TextBlockList {
+  const obj = data as { id: string; blocks: AnyTextBlockDef[] };
   return {
-    ...list,
-    blocks: list.blocks.map(block => {
-      if (block.type === 'virtual' && block.sourceNodeId === nodeId) {
-        return resetVirtualTextBlock(block);
-      }
-      return block;
-    })
+    id: obj.id,
+    blocks: obj.blocks
   };
 }
