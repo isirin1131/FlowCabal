@@ -4,13 +4,9 @@
   const dispatch = createEventDispatcher();
 
   let {
-    selectedNodesCount = 0,
-    selectedEdgesCount = 0,
     darkMode = false,
     layoutDirection = 'TB'
   }: {
-    selectedNodesCount: number;
-    selectedEdgesCount: number;
     darkMode: boolean;
     layoutDirection: 'TB' | 'LR';
   } = $props();
@@ -72,47 +68,12 @@
 
   <button
     class="toolbar-button"
-    onclick={() => handleAction('zoom-in')}
-    title="Zoom In"
-  >
-    <span>🔍+</span>
-  </button>
-
-  <button
-    class="toolbar-button"
-    onclick={() => handleAction('zoom-out')}
-    title="Zoom Out"
-  >
-    <span>🔍-</span>
-  </button>
-
-  <button
-    class="toolbar-button"
-    onclick={() => handleAction('fit-view')}
-    title="Fit View"
-  >
-    <span>🎯</span>
-  </button>
-
-  <div class="toolbar-divider"></div>
-
-  <button
-    class="toolbar-button"
     onclick={() => handleAction('dark-mode')}
     class:active={darkMode}
     title="Toggle Dark Mode"
   >
     <span>{darkMode ? '☀️' : '🌙'}</span>
   </button>
-
-  {#if selectedNodesCount > 0 || selectedEdgesCount > 0}
-    <div class="toolbar-divider"></div>
-    <div class="selection-info">
-      <span>{selectedNodesCount} node{selectedNodesCount !== 1 ? 's' : ''}</span>
-      <span>, </span>
-      <span>{selectedEdgesCount} edge{selectedEdgesCount !== 1 ? 's' : ''}</span>
-    </div>
-  {/if}
 </div>
 
 <style>
@@ -158,12 +119,5 @@
     height: 24px;
     background: var(--flow-border);
     margin: 0 4px;
-  }
-
-  .selection-info {
-    font-size: 12px;
-    color: #64748b;
-    display: flex;
-    gap: 2px;
   }
 </style>

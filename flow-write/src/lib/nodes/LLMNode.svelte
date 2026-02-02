@@ -6,14 +6,6 @@
   export let data: $$Props['data'];
   export let selected: $$Props['selected'] = false;
 
-  const statusColors = {
-    idle: 'idle',
-    pending: 'pending',
-    running: 'running',
-    completed: 'completed',
-    error: 'error'
-  };
-
   $: status = data.status || 'idle';
   $: label = data.label || 'LLM Node';
   $: provider = data.provider || 'OpenAI';

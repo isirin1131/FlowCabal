@@ -1,10 +1,8 @@
 <script lang="ts">
   import { SvelteFlowProvider, type Node, type Edge } from '@xyflow/svelte';
   import { LLMNode, TextNode, InputNode, OutputNode } from './nodes';
-  import { LabeledEdge, CustomEdge } from './edges';
   import { ContextMenu, NodeSidebar, Toolbar, FlowCanvas } from './components';
   import {
-    validateConnection,
     validateWorkflow,
     topologicalSort,
     layoutGraph,
@@ -16,11 +14,6 @@
     text: TextNode,
     input: InputNode,
     output: OutputNode
-  };
-
-  const edgeTypes = {
-    labeled: LabeledEdge,
-    custom: CustomEdge
   };
 
   let nodes = $state.raw<Node[]>([
@@ -56,8 +49,6 @@
     { id: 'e3-4', source: 'text-1', target: 'output-1', type: 'smoothstep', data: { label: 'formatted' } }
   ]);
 
-  let selectedNodes = $state<string[]>([]);
-  let selectedEdges = $state<string[]>([]);
   let darkMode = $state(false);
   let layoutDirection = $state<'TB' | 'LR'>('TB');
 
@@ -206,8 +197,6 @@
 
   <div class="flow-main">
     <Toolbar
-      selectedNodesCount={selectedNodes.length}
-      selectedEdgesCount={selectedEdges.length}
       {darkMode}
       {layoutDirection}
       onaction={(e: CustomEvent<string>) => handleToolbarAction(e.detail)}
@@ -219,7 +208,6 @@
           bind:nodes={nodes}
           bind:edges={edges}
           {nodeTypes}
-          {edgeTypes}
           {handleContextMenu}
         />
       </SvelteFlowProvider>

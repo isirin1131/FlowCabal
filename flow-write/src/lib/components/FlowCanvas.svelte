@@ -5,7 +5,6 @@
     Controls,
     MiniMap,
     Panel,
-    useSvelteFlow,
     BackgroundVariant,
     type Node,
     type Edge
@@ -16,17 +15,13 @@
     nodes = $bindable(),
     edges = $bindable(),
     nodeTypes,
-    edgeTypes,
     handleContextMenu
   }: {
     nodes: Node[];
     edges: Edge[];
     nodeTypes: Record<string, any>;
-    edgeTypes: Record<string, any>;
     handleContextMenu: (event: MouseEvent, item: { type: 'node' | 'edge'; id: string }) => void;
   } = $props();
-
-  const { fitView } = useSvelteFlow();
 
   function onconnect(connection: any) {
     const newEdge: Edge = {
@@ -38,8 +33,6 @@
     };
     edges = [...edges, newEdge];
   }
-
-  function onnodedragstop() {}
 
   function handleNodeContextMenu(event: any) {
     handleContextMenu(event.originalEvent, { type: 'node', id: event.detail.id });
@@ -57,9 +50,7 @@
   bind:nodes={nodes}
   bind:edges={edges}
   {nodeTypes}
-  {edgeTypes}
   {onconnect}
-  {onnodedragstop}
   {onnodecontextmenu}
   {onedgecontextmenu}
   fitView

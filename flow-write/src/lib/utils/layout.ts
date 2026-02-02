@@ -1,7 +1,6 @@
 import dagre from 'dagre';
 import ELK from 'elkjs/lib/elk.bundled';
 import type { Node, Edge } from '@xyflow/svelte';
-import type { Position } from '@xyflow/svelte';
 
 export type LayoutAlgorithm = 'dagre' | 'elk';
 
@@ -135,18 +134,4 @@ async function layoutWithElk(
       position: pos || node.position,
     };
   });
-}
-
-export function getLayoutDirection(positions: Node[]): 'TB' | 'LR' {
-  if (positions.length < 2) return 'TB';
-
-  let totalWidth = 0;
-  let totalHeight = 0;
-
-  for (let i = 1; i < positions.length; i++) {
-    totalWidth += Math.abs(positions[i].position.x - positions[i - 1].position.x);
-    totalHeight += Math.abs(positions[i].position.y - positions[i - 1].position.y);
-  }
-
-  return totalWidth > totalHeight ? 'LR' : 'TB';
 }
