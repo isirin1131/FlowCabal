@@ -1,31 +1,21 @@
 <script>
-  import { onMount } from 'svelte';
   import NavBar from './lib/NavBar.svelte';
   import FlowEditor from './lib/FlowEditor.svelte';
   import ApiTest from './lib/ApiTest.svelte';
   import FloatingBall from './lib/FloatingBall.svelte';
-  import { saveSetting, loadSetting, SETTINGS_KEYS } from './lib/db/settings';
+  import { createDexieDbSession, setDbSession, SETTINGS_KEYS, persisted } from './lib/db';
 
-  let activePage = $state('flow');
-  let isLoaded = $state(false);
+  setDbSession(createDexieDbSession());
 
-  onMount(async () => {
-    activePage = await loadSetting(SETTINGS_KEYS.PREFERENCES_ACTIVE_PAGE, 'flow');
-    isLoaded = true;
-  });
-
-  $effect(() => {
-    if (!isLoaded) return;
-    saveSetting(SETTINGS_KEYS.PREFERENCES_ACTIVE_PAGE, activePage);
-  });
+  const activePage = persisted({ key: SETTINGS_KEYS.PREFERENCES_ACTIVE_PAGE, defaultValue: 'flow' });
 </script>
 
 <div class="app">
   <div class="navbar">
-    <NavBar bind:activePage />
+    <NavBar bind:activePage={activePage.value} />
   </div>
   <div class="content">
-    {#if activePage === 'flow'}
+    {#if activePage.value === 'flow'}
       <FlowEditor />
     {:else}
       <ApiTest />

@@ -1,12 +1,11 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { OpenAICompatibleClient } from './api/client';
   import type {
     ChatMessage,
     ChatCompletionRequest,
     UsageInfo
   } from './api/types';
-  import { saveSetting, loadSetting, SETTINGS_KEYS } from './db/settings';
+  import { SETTINGS_KEYS, persisted } from './db';
 
   // ============================================================================
   // State Types
@@ -28,24 +27,28 @@
   }
 
   // ============================================================================
-  // State
+  // Persisted State
   // ============================================================================
 
-  let endpoint = $state('https://api.openai.com/v1');
-  let apiKey = $state('');
-  let model = $state('gpt-4o');
+  const endpoint = persisted({ key: SETTINGS_KEYS.API_TEST_ENDPOINT, defaultValue: 'https://api.openai.com/v1' });
+  const apiKey = persisted({ key: SETTINGS_KEYS.API_TEST_API_KEY, defaultValue: '' });
+  const model = persisted({ key: SETTINGS_KEYS.API_TEST_MODEL, defaultValue: 'gpt-4o' });
 
-  let temperature = $state(0.7);
-  let maxTokens = $state(4096);
-  let topP = $state(1);
-  let streaming = $state(true);
-  let stopSequences = $state<string[]>([]);
+  const temperature = persisted({ key: SETTINGS_KEYS.API_TEST_TEMPERATURE, defaultValue: 0.7 });
+  const maxTokens = persisted({ key: SETTINGS_KEYS.API_TEST_MAX_TOKENS, defaultValue: 4096 });
+  const topP = persisted({ key: SETTINGS_KEYS.API_TEST_TOP_P, defaultValue: 1 });
+  const streaming = persisted({ key: SETTINGS_KEYS.API_TEST_STREAMING, defaultValue: true });
+  const stopSequences = persisted<string[]>({ key: SETTINGS_KEYS.API_TEST_STOP_SEQUENCES, defaultValue: [] });
 
-  let systemPrompt = $state('');
-  let messages = $state<TestMessage[]>([]);
+  const systemPrompt = persisted({ key: SETTINGS_KEYS.API_TEST_SYSTEM_PROMPT, defaultValue: '' });
+  const messages = persisted<TestMessage[]>({ key: SETTINGS_KEYS.API_TEST_MESSAGES, defaultValue: [] });
+  const showSettings = persisted({ key: SETTINGS_KEYS.PREFERENCES_SHOW_SETTINGS, defaultValue: true });
+
+  // ============================================================================
+  // Local State
+  // ============================================================================
+
   let userInput = $state('');
-  let showSettings = $state(true);
-
   let response = $state<ResponseState>({
     status: 'idle',
     content: '',
@@ -55,83 +58,6 @@
   });
 
   let abortController: AbortController | null = null;
-  let isLoaded = $state(false);
-
-  // ============================================================================
-  // Persistence
-  // ============================================================================
-
-  onMount(async () => {
-    // Load saved settings
-    endpoint = await loadSetting(SETTINGS_KEYS.API_TEST_ENDPOINT, 'https://api.openai.com/v1');
-    apiKey = await loadSetting(SETTINGS_KEYS.API_TEST_API_KEY, '');
-    model = await loadSetting(SETTINGS_KEYS.API_TEST_MODEL, 'gpt-4o');
-    temperature = await loadSetting(SETTINGS_KEYS.API_TEST_TEMPERATURE, 0.7);
-    maxTokens = await loadSetting(SETTINGS_KEYS.API_TEST_MAX_TOKENS, 4096);
-    topP = await loadSetting(SETTINGS_KEYS.API_TEST_TOP_P, 1);
-    streaming = await loadSetting(SETTINGS_KEYS.API_TEST_STREAMING, true);
-    stopSequences = await loadSetting(SETTINGS_KEYS.API_TEST_STOP_SEQUENCES, []);
-    systemPrompt = await loadSetting(SETTINGS_KEYS.API_TEST_SYSTEM_PROMPT, '');
-    messages = await loadSetting(SETTINGS_KEYS.API_TEST_MESSAGES, []);
-    showSettings = await loadSetting(SETTINGS_KEYS.PREFERENCES_SHOW_SETTINGS, true);
-    isLoaded = true;
-  });
-
-  // Save settings when they change (debounced via $effect)
-  $effect(() => {
-    if (!isLoaded) return;
-    saveSetting(SETTINGS_KEYS.API_TEST_ENDPOINT, endpoint);
-  });
-
-  $effect(() => {
-    if (!isLoaded) return;
-    saveSetting(SETTINGS_KEYS.API_TEST_API_KEY, apiKey);
-  });
-
-  $effect(() => {
-    if (!isLoaded) return;
-    saveSetting(SETTINGS_KEYS.API_TEST_MODEL, model);
-  });
-
-  $effect(() => {
-    if (!isLoaded) return;
-    saveSetting(SETTINGS_KEYS.API_TEST_TEMPERATURE, temperature);
-  });
-
-  $effect(() => {
-    if (!isLoaded) return;
-    saveSetting(SETTINGS_KEYS.API_TEST_MAX_TOKENS, maxTokens);
-  });
-
-  $effect(() => {
-    if (!isLoaded) return;
-    saveSetting(SETTINGS_KEYS.API_TEST_TOP_P, topP);
-  });
-
-  $effect(() => {
-    if (!isLoaded) return;
-    saveSetting(SETTINGS_KEYS.API_TEST_STREAMING, streaming);
-  });
-
-  $effect(() => {
-    if (!isLoaded) return;
-    saveSetting(SETTINGS_KEYS.API_TEST_STOP_SEQUENCES, stopSequences);
-  });
-
-  $effect(() => {
-    if (!isLoaded) return;
-    saveSetting(SETTINGS_KEYS.API_TEST_SYSTEM_PROMPT, systemPrompt);
-  });
-
-  $effect(() => {
-    if (!isLoaded) return;
-    saveSetting(SETTINGS_KEYS.API_TEST_MESSAGES, messages);
-  });
-
-  $effect(() => {
-    if (!isLoaded) return;
-    saveSetting(SETTINGS_KEYS.PREFERENCES_SHOW_SETTINGS, showSettings);
-  });
 
   // ============================================================================
   // Helpers
@@ -151,19 +77,19 @@
 
   function getClient(): OpenAICompatibleClient {
     return new OpenAICompatibleClient({
-      endpoint,
-      apiKey
+      endpoint: endpoint.value,
+      apiKey: apiKey.value
     });
   }
 
   function buildRequest(): ChatCompletionRequest {
     const req_messages: ChatMessage[] = [];
 
-    if (systemPrompt.trim()) {
-      req_messages.push({ role: 'system', content: systemPrompt });
+    if (systemPrompt.value.trim()) {
+      req_messages.push({ role: 'system', content: systemPrompt.value });
     }
 
-    for (const msg of messages) {
+    for (const msg of messages.value) {
       req_messages.push({ role: msg.role, content: msg.content });
     }
 
@@ -172,23 +98,23 @@
     }
 
     const request: ChatCompletionRequest = {
-      model,
+      model: model.value,
       messages: req_messages,
-      max_tokens: maxTokens,
-      temperature,
-      top_p: topP,
-      stream: streaming
+      max_tokens: maxTokens.value,
+      temperature: temperature.value,
+      top_p: topP.value,
+      stream: streaming.value
     };
 
-    if (stopSequences.length > 0) {
-      request.stop = stopSequences;
+    if (stopSequences.value.length > 0) {
+      request.stop = stopSequences.value;
     }
 
     return request;
   }
 
   async function sendRequest() {
-    if (!apiKey) {
+    if (!apiKey.value) {
       response = {
         status: 'error',
         content: '',
@@ -199,7 +125,7 @@
       return;
     }
 
-    if (!endpoint) {
+    if (!endpoint.value) {
       response = {
         status: 'error',
         content: '',
@@ -215,12 +141,12 @@
     const startTime = Date.now();
 
     if (userInput.trim()) {
-      messages = [...messages, createTestMessage('user', userInput)];
+      messages.value = [...messages.value, createTestMessage('user', userInput)];
       userInput = '';
     }
 
     response = {
-      status: streaming ? 'streaming' : 'loading',
+      status: streaming.value ? 'streaming' : 'loading',
       content: '',
       error: null,
       usage: null,
@@ -230,7 +156,7 @@
     abortController = new AbortController();
 
     try {
-      if (streaming) {
+      if (streaming.value) {
         let content = '';
 
         for await (const chunk of client.chatCompletionStream(request)) {
@@ -251,7 +177,7 @@
         response = { ...response, status: 'success' };
 
         if (content) {
-          messages = [...messages, createTestMessage('assistant', content)];
+          messages.value = [...messages.value, createTestMessage('assistant', content)];
         }
       } else {
         const chatResponse = await client.chatCompletion(request);
@@ -266,7 +192,7 @@
         };
 
         if (choice?.message.content) {
-          messages = [...messages, createTestMessage('assistant', choice.message.content)];
+          messages.value = [...messages.value, createTestMessage('assistant', choice.message.content)];
         }
       }
     } catch (err) {
@@ -288,7 +214,7 @@
   }
 
   function clearHistory() {
-    messages = [];
+    messages.value = [];
     response = {
       status: 'idle',
       content: '',
@@ -299,18 +225,18 @@
   }
 
   function deleteMessage(id: string) {
-    messages = messages.filter(m => m.id !== id);
+    messages.value = messages.value.filter(m => m.id !== id);
   }
 
   function addStopSequence() {
     const seq = prompt('Enter stop sequence:');
     if (seq) {
-      stopSequences = [...stopSequences, seq];
+      stopSequences.value = [...stopSequences.value, seq];
     }
   }
 
   function removeStopSequence(index: number) {
-    stopSequences = stopSequences.filter((_, i) => i !== index);
+    stopSequences.value = stopSequences.value.filter((_, i) => i !== index);
   }
 </script>
 
@@ -318,14 +244,14 @@
   <div class="header">
     <h2>LLM API Test</h2>
     <div class="header-actions">
-      <button class="btn-icon" onclick={() => showSettings = !showSettings}>
-        {showSettings ? '◀' : '▶'} Settings
+      <button class="btn-icon" onclick={() => showSettings.value = !showSettings.value}>
+        {showSettings.value ? '◀' : '▶'} Settings
       </button>
     </div>
   </div>
 
-  <div class="main-layout" class:collapsed={!showSettings}>
-    {#if showSettings}
+  <div class="main-layout" class:collapsed={!showSettings.value}>
+    {#if showSettings.value}
       <div class="settings-panel">
         <section class="settings-section">
           <h3>Connection</h3>
@@ -334,7 +260,7 @@
             <input
               id="endpoint"
               type="text"
-              bind:value={endpoint}
+              bind:value={endpoint.value}
               placeholder="https://api.openai.com/v1"
             />
             <span class="hint">OpenAI-compatible API endpoint</span>
@@ -344,7 +270,7 @@
             <input
               id="api-key"
               type="password"
-              bind:value={apiKey}
+              bind:value={apiKey.value}
               placeholder="sk-..."
             />
           </div>
@@ -353,7 +279,7 @@
             <input
               id="model"
               type="text"
-              bind:value={model}
+              bind:value={model.value}
               placeholder="gpt-4o"
             />
           </div>
@@ -362,12 +288,12 @@
         <section class="settings-section">
           <h3>Parameters</h3>
           <label class="toggle">
-            <input type="checkbox" bind:checked={streaming} />
+            <input type="checkbox" bind:checked={streaming.value} />
             <span>Streaming</span>
           </label>
           <div class="form-group">
             <label for="temperature">
-              Temperature: {temperature.toFixed(1)}
+              Temperature: {temperature.value.toFixed(1)}
             </label>
             <input
               id="temperature"
@@ -375,35 +301,35 @@
               min="0"
               max="2"
               step="0.1"
-              bind:value={temperature}
+              bind:value={temperature.value}
             />
           </div>
           <div class="form-group">
-            <label for="max-tokens">Max Tokens: {maxTokens}</label>
+            <label for="max-tokens">Max Tokens: {maxTokens.value}</label>
             <input
               id="max-tokens"
               type="range"
               min="256"
               max="8192"
               step="256"
-              bind:value={maxTokens}
+              bind:value={maxTokens.value}
             />
           </div>
           <div class="form-group">
-            <label for="top-p">Top P: {topP.toFixed(2)}</label>
+            <label for="top-p">Top P: {topP.value.toFixed(2)}</label>
             <input
               id="top-p"
               type="range"
               min="0"
               max="1"
               step="0.05"
-              bind:value={topP}
+              bind:value={topP.value}
             />
           </div>
           <div class="form-group">
             <label for="stop-sequences">Stop Sequences</label>
             <div class="stop-sequences">
-              {#each stopSequences as seq, i}
+              {#each stopSequences.value as seq, i}
                 <span class="tag">
                   {seq}
                   <button onclick={() => removeStopSequence(i)}>×</button>
@@ -421,14 +347,14 @@
         <label for="system-prompt">System Prompt</label>
         <textarea
           id="system-prompt"
-          bind:value={systemPrompt}
+          bind:value={systemPrompt.value}
           placeholder="You are a helpful assistant..."
           rows="3"
         ></textarea>
       </div>
 
       <div class="messages">
-        {#each messages as msg (msg.id)}
+        {#each messages.value as msg (msg.id)}
           <div class="message {msg.role}">
             <div class="message-header">
               <span class="role">{msg.role}</span>
@@ -471,7 +397,7 @@
             <button
               class="btn-primary"
               onclick={sendRequest}
-              disabled={!apiKey || !endpoint}
+              disabled={!apiKey.value || !endpoint.value}
             >
               Send (Ctrl+Enter)
             </button>
