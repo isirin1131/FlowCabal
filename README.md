@@ -1,6 +1,7 @@
 # dev board
 
-- [ ] agent support
+- [ ] [openviking support](https://www.openviking.ai/)
+- [ ] agent support(skill, and original agent)
 - [ ] advanced features
 - [ ] impl(coming soon)
 - [x] base design
