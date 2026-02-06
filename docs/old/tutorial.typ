@@ -1,4 +1,4 @@
-#set document(title: "Learning Svelte 5 with FlowWrite", author: "FlowWrite Tutorial")
+#set document(title: "Learning Svelte 5 with FlowCabal", author: "FlowCabal Tutorial")
 #set page(margin: 2cm)
 #set text(font: "New Computer Modern", size: 11pt)
 #set heading(numbering: "1.1")
@@ -19,7 +19,7 @@
 )
 
 #align(center)[
-  #text(size: 24pt, weight: "bold")[Learning Svelte 5 with FlowWrite]
+  #text(size: 24pt, weight: "bold")[Learning Svelte 5 with FlowCabal]
 
   #v(0.5em)
   #text(size: 14pt, fill: gray)[A practical tutorial using a real-world codebase]
@@ -33,7 +33,7 @@
 
 = Introduction
 
-This tutorial teaches Svelte 5 using FlowWrite as our learning material. FlowWrite is a visual workflow editor for AI-assisted text processing — think "ComfyUI for text." By studying real production code, you'll learn patterns that actually work in practice.
+This tutorial teaches Svelte 5 using FlowCabal as our learning material. FlowCabal is a visual workflow editor for AI-assisted text processing — think "ComfyUI for text." By studying real production code, you'll learn patterns that actually work in practice.
 
 == What You'll Learn
 
@@ -47,7 +47,7 @@ This tutorial teaches Svelte 5 using FlowWrite as our learning material. FlowWri
 
 == Project Structure
 
-FlowWrite follows a clean architecture:
+FlowCabal follows a clean architecture:
 
 ```
 flow-write/src/
@@ -68,7 +68,7 @@ flow-write/src/
 
 = Svelte 5 Runes: The New Reactivity System
 
-Svelte 5 introduces "Runes" — special compiler instructions prefixed with `$`. Let's explore each one using FlowWrite examples.
+Svelte 5 introduces "Runes" — special compiler instructions prefixed with `$`. Let's explore each one using FlowCabal examples.
 
 == `$state` — Reactive State
 
@@ -649,7 +649,7 @@ Styles in `<style>` blocks are automatically scoped to the component.
 
 ```svelte
 <nav class="nav-bar">
-  <div class="nav-brand">FlowWrite</div>
+  <div class="nav-brand">FlowCabal</div>
   <div class="nav-links">
     <button class:active={activePage === 'flow'}>Flow Editor</button>
   </div>
@@ -797,7 +797,7 @@ Use `:global()` to escape scoping when needed.
 
 = Working with External Libraries
 
-FlowWrite uses \@xyflow/svelte for the node-based editor. Here's how to integrate external libraries.
+FlowCabal uses \@xyflow/svelte for the node-based editor. Here's how to integrate external libraries.
 
 == Importing and Using Library Components
 
@@ -1061,11 +1061,11 @@ FlowWrite uses \@xyflow/svelte for the node-based editor. Here's how to integrat
 
 #pagebreak()
 
-= Patterns from FlowWrite
+= Patterns from FlowCabal
 
 == Immutable State Updates
 
-FlowWrite uses immutable patterns for predictable state management.
+FlowCabal uses immutable patterns for predictable state management.
 
 *From `FlowEditor.svelte`:*
 
@@ -1106,7 +1106,7 @@ FlowWrite uses immutable patterns for predictable state management.
 
 == Separation of Concerns
 
-FlowWrite separates pure logic from UI components.
+FlowCabal separates pure logic from UI components.
 
 *Core logic in `lib/core/textblock.ts`:*
 
@@ -1237,7 +1237,7 @@ export async function loadSetting<T>(key: string, defaultValue: T): Promise<T> {
 
 == Next Steps
 
-1. Explore the FlowWrite codebase to see these patterns in action
+1. Explore the FlowCabal codebase to see these patterns in action
 2. Try modifying components to understand reactivity
 3. Add new node types following the `LLMNode.svelte` pattern
 4. Experiment with the `$effect` cleanup function for subscriptions

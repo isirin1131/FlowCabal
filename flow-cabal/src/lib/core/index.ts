@@ -1,5 +1,5 @@
 /**
- * FlowWrite Core Module (metadata only)
+ * FlowCabal Core Module (metadata only)
  *
  * Exports type definitions and pure functions for workflow metadata.
  * Runtime state and execution logic belong in core-runner.

@@ -58,12 +58,12 @@ function deserializeWorkflow(data: string): WorkflowDefinition {
 // Database Definition
 // ============================================================================
 
-class FlowWriteDB extends Dexie {
+class FlowCabalDB extends Dexie {
   workflows!: Table<WorkflowRecord>;
   settings!: Table<SettingsRecord>;
 
   constructor() {
-    super('FlowWriteDB');
+    super('FlowCabalDB');
 
     this.version(1).stores({
       workflows: 'id, name, updatedAt',
@@ -72,7 +72,7 @@ class FlowWriteDB extends Dexie {
   }
 }
 
-const db = new FlowWriteDB();
+const db = new FlowCabalDB();
 
 // ============================================================================
 // Settings Repository Implementation

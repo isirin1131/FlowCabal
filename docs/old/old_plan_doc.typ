@@ -1,5 +1,5 @@
 #import "@preview/basic-document-props:0.1.0": simple-page
-#show: simple-page.with("折彩", "", middle-text: "FlowWrite 实现计划文档", date: true, numbering: true, supress-mail-link: false)
+#show: simple-page.with("折彩", "", middle-text: "FlowCabal 实现计划文档", date: true, numbering: true, supress-mail-link: false)
 
 #set text(font: ("Sarasa Fixed Slab SC"), lang:("zh"))
 #show math.equation: set text(font: "Neo Euler")

@@ -1,5 +1,5 @@
 /**
- * Workflow System for FlowWrite (metadata only)
+ * Workflow System for FlowCabal (metadata only)
  *
  * WorkflowDefinition describes the structure of a workflow.
  * Runtime state (execution state, order) belongs in core-runner.

@@ -1,5 +1,5 @@
 /**
- * Node System for FlowWrite (metadata only)
+ * Node System for FlowCabal (metadata only)
  *
  * A NodeDefinition describes a node in the workflow graph.
  * Runtime state (execution state, output) belongs in core-runner.

@@ -1,6 +1,6 @@
 #set document(
-  title: "FlowWrite 前端重构计划",
-  author: "FlowWrite Team",
+  title: "FlowCabal 前端重构计划",
+  author: "FlowCabal Team",
 )
 
 #set page(margin: (left: 2cm, right: 2cm, top: 2.5cm, bottom: 2.5cm))
@@ -9,7 +9,7 @@
 
 = 执行摘要
 
-本文档概述了 FlowWrite 前端设计系统的全面重构计划，旨在提升可维护性、一致性和用户体验。
+本文档概述了 FlowCabal 前端设计系统的全面重构计划，旨在提升可维护性、一致性和用户体验。
 
 ---
 
@@ -114,7 +114,7 @@ CSS 变量（`--flow-bg`、`--flow-text`、`--flow-border` 等）被使用但未
 *操作步骤：*
 
 1. 将 Tailwind 配置与 CSS 变量同步
-2. 为 FlowWrite 添加自定义工具类
+2. 为 FlowCabal 添加自定义工具类
 3. 启用 class 和 data-attribute 深色模式支持
 
 == 阶段 2：主题系统实现（优先级：高）

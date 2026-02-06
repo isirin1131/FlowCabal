@@ -1,5 +1,5 @@
 /**
- * TextBlock System for FlowWrite (metadata only)
+ * TextBlock System for FlowCabal (metadata only)
  *
  * Core text block definitions - pure metadata, no runtime state.
  * Runtime state (resolved content, frozen state) belongs in core-runner.

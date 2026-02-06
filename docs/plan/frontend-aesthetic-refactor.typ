@@ -1,6 +1,6 @@
 #set document(
-  title: "FlowWrite 前端美学重构计划",
-  author: "FlowWrite Design Team",
+  title: "FlowCabal 前端美学重构计划",
+  author: "FlowCabal Design Team",
 )
 
 #set page(margin: (left: 2cm, right: 2cm, top: 2.5cm, bottom: 2.5cm))
@@ -13,7 +13,7 @@
 
 == 产品语境
 
-FlowWrite 是一个"AI 文本处理的 ComfyUI"——一个可视化的 AI 工作流编辑器。用户通过节点式界面构建复杂的文本处理流程，调用 LLM API，实时看到数据流动。
+FlowCabal 是一个"AI 文本处理的 ComfyUI"——一个可视化的 AI 工作流编辑器。用户通过节点式界面构建复杂的文本处理流程，调用 LLM API，实时看到数据流动。
 
 == 目标用户
 
@@ -29,7 +29,7 @@ FlowWrite 是一个"AI 文本处理的 ComfyUI"——一个可视化的 AI 工�
 - **赛博朋克科技感**：数据流、节点连接、电路板般的网格
 - **有机流动**：液体般的运动、柔和曲线、自然呼吸感
 
-这种选择不是"通用 AI 美学"，而是为 FlowWrite 特定的"文本数据流动"语境量身定制。
+这种选择不是"通用 AI 美学"，而是为 FlowCabal 特定的"文本数据流动"语境量身定制。
 
 *为什么令人难忘：*
 
@@ -58,7 +58,7 @@ FlowWrite 是一个"AI 文本处理的 ComfyUI"——一个可视化的 AI 工�
 *违反 skill 原则：*
 + 计划推荐 Lucide/Heroicons/Phosphor——这些都是"通用 AI 选择的图标库"
 + Emoji 图标虽然有问题，但替换为 Lucide 可能只是"一种通用替换另一种通用"
-+ 没有为 FlowWrite 设计专属图标系统
++ 没有为 FlowCabal 设计专属图标系统
 
 === 字体缺失
 
@@ -167,7 +167,7 @@ FlowWrite 是一个"AI 文本处理的 ComfyUI"——一个可视化的 AI 工�
 
 *问题：* Lucide/Heroicons 太通用
 
-*解决方案：* 为 FlowWrite 设计专属图标系统
+*解决方案：* 为 FlowCabal 设计专属图标系统
 
 *设计原则：*
 - 线条粗细：2px（比普通图标稍粗，更有存在感）
@@ -573,7 +573,7 @@ class Particle {
 
 *创建自定义图标：*
 
-不使用 Lucide，而是为 FlowWrite 设计专属图标。
+不使用 Lucide，而是为 FlowCabal 设计专属图标。
 
 *示例：LLM 机器人图标*
 
@@ -709,7 +709,7 @@ class Particle {
 
 = 美学成功指标
 
-+ 用户能在 3 秒内识别出"这是 FlowWrite"（不是其他工具）
++ 用户能在 3 秒内识别出"这是 FlowCabal"（不是其他工具）
 + 独特的"神经脉冲"色和"数据流"动画令人难忘
 + 字体系统（Space Grotesk + Crimson Pro）创造视觉层次
 - 不使用 Inter/Roboto/Lucide
@@ -728,7 +728,7 @@ class Particle {
 - [ ] 字体是否独特，不是 Inter/Roboto/Arial？
 - [ ] 背景是否有深度/纹理，不是纯色？
 - [ ] 是否有至少一个"不对称"或"打破网格"的设计元素？
-- [ ] 图标是否是为 FlowWrite 专属设计的？
+- [ ] 图标是否是为 FlowCabal 专属设计的？
 - [ ] 动画是否使用了 `transform` 和 `opacity`（而非 width/height）？
 - [ ] 是否测试了颜色对比度（WCAG AA）？
 

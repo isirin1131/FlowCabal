@@ -1,5 +1,5 @@
 /**
- * FlowWrite Database
+ * FlowCabal Database
  *
  * Public API for database operations.
  */

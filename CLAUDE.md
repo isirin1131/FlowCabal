@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-FlowWrite is a browser-based visual workflow editor for AI-assisted text processing, following the "ComfyUI for text" paradigm. Users build custom AI workflows through a node-based interface using Svelte 5 and @xyflow/svelte.
+FlowCabal is a browser-based visual workflow editor for AI-assisted text processing, following the "ComfyUI for text" paradigm. Users build custom AI workflows through a node-based interface using Svelte 5 and @xyflow/svelte.
 
 ## Development Commands
 

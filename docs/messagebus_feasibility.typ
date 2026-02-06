@@ -1,11 +1,11 @@
 #set text(font: ("Sarasa Fixed Slab SC"), lang:("zh"))
 #show math.equation: set text(font: "Neo Euler")
 
-= FlowWrite 消息总线可行性分析
+= FlowCabal 消息总线可行性分析
 
 *日期: 2026.01.19*
 
-本文档调研消息总线在 FlowWrite 中的可行性，并提出精简的实现方案。
+本文档调研消息总线在 FlowCabal 中的可行性，并提出精简的实现方案。
 
 #outline()
 
@@ -15,7 +15,7 @@
 
 == 当前架构的通信模式
 
-FlowWrite 当前使用以下通信模式：
+FlowCabal 当前使用以下通信模式：
 
 1. *Props/Binding 通信*：父子组件通过 `$props()` 和 `bind:` 传递数据
 2. *Event Dispatch*：子组件通过 `createEventDispatcher()` 向父组件发送事件

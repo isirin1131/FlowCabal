@@ -1,5 +1,5 @@
 /**
- * API Configuration System for FlowWrite (metadata only)
+ * API Configuration System for FlowCabal (metadata only)
  *
  * ApiConfiguration defines the settings for an LLM API call.
  * Prompts are TextBlockLists, allowing virtual blocks that reference

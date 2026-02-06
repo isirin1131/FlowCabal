@@ -3,7 +3,7 @@
 </script>
 
 <nav class="nav-bar">
-  <div class="nav-brand">FlowWrite</div>
+  <div class="nav-brand">FlowCabal</div>
   <div class="nav-links">
     <button 
       class:active={activePage === 'flow'} 

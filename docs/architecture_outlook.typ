@@ -1,11 +1,11 @@
 #set text(font: ("Sarasa Fixed Slab SC"), lang:("zh"))
 #show math.equation: set text(font: "Neo Euler")
 
-= FlowWrite 架构前瞻与建议
+= FlowCabal 架构前瞻与建议
 
 *日期: 2026.01.19*
 
-本文档基于对现有代码的分析，独立思考 FlowWrite 未来可能面临的架构挑战，并提出具体建议。
+本文档基于对现有代码的分析，独立思考 FlowCabal 未来可能面临的架构挑战，并提出具体建议。
 
 #outline()
 
@@ -39,7 +39,7 @@
 而 `core/node.ts` 定义的 Node：
 
 ```typescript
-// FlowWrite 的 Node
+// FlowCabal 的 Node
 {
   id: NodeId;
   name: string;
@@ -407,7 +407,7 @@ type ApiConnection =
 
 == 警示一：过度设计
 
-FlowWrite 仍处于早期阶段。不要为了"可能需要"而提前实现：
+FlowCabal 仍处于早期阶段。不要为了"可能需要"而提前实现：
 - 条件执行
 - 循环节点
 - 插件系统

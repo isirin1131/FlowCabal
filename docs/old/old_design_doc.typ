@@ -1,10 +1,10 @@
 #import "@preview/basic-document-props:0.1.0": simple-page
-#show: simple-page.with("折彩", "", middle-text: "FlowWrite 产品设计文档", date: true, numbering: true, supress-mail-link: false)
+#show: simple-page.with("折彩", "", middle-text: "FlowCabal 产品设计文档", date: true, numbering: true, supress-mail-link: false)
 
 #set text(font: ("Sarasa Fixed Slab SC"), lang:("zh"))
 #show math.equation: set text(font: "Neo Euler")
 
-FlowWrite 是一款专为 AI 辅助文字创作而生的可视化工作流编辑器。本文档聚焦于产品核心功能设计，探索文本处理与创意写作的全新交互范式。
+FlowCabal 是一款专为 AI 辅助文字创作而生的可视化工作流编辑器。本文档聚焦于产品核心功能设计，探索文本处理与创意写作的全新交互范式。
 
 #outline()
 
@@ -12,11 +12,11 @@ FlowWrite 是一款专为 AI 辅助文字创作而生的可视化工作流编辑
 #line(length: 100%)
 = 产品愿景
 
-FlowWrite 致力于成为 AI 时代文字创作者的得力助手，通过直观的可视化工作流，让复杂的 AI 赋能文本处理变得简单而优雅。
+FlowCabal 致力于成为 AI 时代文字创作者的得力助手，通过直观的可视化工作流，让复杂的 AI 赋能文本处理变得简单而优雅。
 
 == 缘起
 
-在 AI 写作实践中，创作者往往需要在多个工具间频繁切换，prompt 的调试、文本的迭代、创意的碰撞都充满了重复性的复制粘贴操作。FlowWrite 诞生于这样的痛点：我们渴望一个场景覆盖足够大的创作范式，让文字工作者能够专注于内容本身。
+在 AI 写作实践中，创作者往往需要在多个工具间频繁切换，prompt 的调试、文本的迭代、创意的碰撞都充满了重复性的复制粘贴操作。FlowCabal 诞生于这样的痛点：我们渴望一个场景覆盖足够大的创作范式，让文字工作者能够专注于内容本身。
 
 == 理念
 
@@ -71,7 +71,7 @@ AI 可以大幅提高写作的效率，但真正的创作往往需要反复打�
 
 === 文本块系统
 
-文本块是 FlowWrite 中最基础的数据单元，用于构建节点的输入内容。系统设计了三种核心抽象：
+文本块是 FlowCabal 中最基础的数据单元，用于构建节点的输入内容。系统设计了三种核心抽象：
 
 ==== 基础文本块 (TextBlock)
 
@@ -183,7 +183,7 @@ getListContent(final);
 
 === API 配置系统 (ApiConfiguration)
 
-API 配置是 FlowWrite 的核心组件，它将连接设置、请求参数和提示词统一封装。这一设计使得每个节点都是一个完整的、自包含的 LLM API 调用单元。
+API 配置是 FlowCabal 的核心组件，它将连接设置、请求参数和提示词统一封装。这一设计使得每个节点都是一个完整的、自包含的 LLM API 调用单元。
 
 ==== 连接设置 (ApiConnection)
 
@@ -195,7 +195,7 @@ interface ApiConnection {
 }
 ```
 
-FlowWrite 采用 OpenAI 兼容的 API 格式，这意味着任何支持 `/chat/completions` 端点的服务都可以接入，包括 OpenAI、DeepSeek、本地 LLM 服务器等。
+FlowCabal 采用 OpenAI 兼容的 API 格式，这意味着任何支持 `/chat/completions` 端点的服务都可以接入，包括 OpenAI、DeepSeek、本地 LLM 服务器等。
 
 ==== 请求参数 (ApiParameters)
 
@@ -465,7 +465,7 @@ const result = await executeWorkflow(workflow, executor);
 
 = 数据持久化
 
-FlowWrite 使用 IndexedDB 实现本地数据持久化，通过 Dexie.js 库提供简洁的 API。采用文档导向的存储模式，将复杂对象以 JSON 形式存储。
+FlowCabal 使用 IndexedDB 实现本地数据持久化，通过 Dexie.js 库提供简洁的 API。采用文档导向的存储模式，将复杂对象以 JSON 形式存储。
 
 == 存储架构
 
@@ -473,12 +473,12 @@ FlowWrite 使用 IndexedDB 实现本地数据持久化，通过 Dexie.js 库提�
 
 ```typescript
 // 两张表，简洁高效
-class FlowWriteDB extends Dexie {
+class FlowCabalDB extends Dexie {
   workflows!: Table<WorkflowRecord>;  // 工作流存储
   settings!: Table<SettingsRecord>;   // 设置存储
 
   constructor() {
-    super('FlowWriteDB');
+    super('FlowCabalDB');
     this.version(1).stores({
       workflows: 'id, name, updatedAt',
       settings: 'key'

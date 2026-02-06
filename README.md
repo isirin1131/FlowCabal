@@ -6,7 +6,7 @@
 - [ ] impl(coming soon)
 - [x] base design
 
-# FlowWrite
+# FlowCabal
 
 A browser-based visual workflow editor designed for writers working with AI.
 Focused on the AI-Enhanced Text Work Experience
@@ -16,7 +16,7 @@ Focused on the AI-Enhanced Text Work Experience
 
 ## Vision
 
-FlowWrite is a local-first web application that lets writers create custom text processing workflows through a visual node-based interface. Think ComfyUI, but for text operations and AI-assisted writing.
+FlowCabal is a local-first web application that lets writers create custom text processing workflows through a visual node-based interface. Think ComfyUI, but for text operations and AI-assisted writing.
 
 ## Tech Stack
 

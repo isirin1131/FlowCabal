@@ -1,11 +1,11 @@
 #set text(font: ("Sarasa Fixed Slab SC"), lang:("zh"))
 #show math.equation: set text(font: "Neo Euler")
 
-= FlowWrite 产品设计文档 v2
+= FlowCabal 产品设计文档 v2
 
 *日期: 2026.01.19*
 
-FlowWrite 是一款专为 AI 辅助文字创作而生的可视化工作流编辑器。本文档是基于 v1 设计文档的重构版本，核心变化是 *分离 metadata 与 running-state*，并引入 *EventBus 通信机制*。
+FlowCabal 是一款专为 AI 辅助文字创作而生的可视化工作流编辑器。本文档是基于 v1 设计文档的重构版本，核心变化是 *分离 metadata 与 running-state*，并引入 *EventBus 通信机制*。
 
 #outline()
 
@@ -13,7 +13,7 @@ FlowWrite 是一款专为 AI 辅助文字创作而生的可视化工作流编辑
 
 = 产品愿景
 
-FlowWrite 致力于成为 AI 时代文字创作者的得力助手，通过直观的可视化工作流，让复杂的 AI 赋能文本处理变得简单而优雅。
+FlowCabal 致力于成为 AI 时代文字创作者的得力助手，通过直观的可视化工作流，让复杂的 AI 赋能文本处理变得简单而优雅。
 
 == 核心功能
 
