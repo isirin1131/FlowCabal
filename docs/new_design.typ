@@ -1,81 +1,68 @@
 #set text(font: ("Sarasa Fixed Slab SC"), lang:("zh"))
 #show math.equation: set text(font: "Neo Euler")
 
-= FlowCabal 架构设计文档 v3 — Agent 架构
+= FlowCabal 架构设计文档 v3
 
-*日期: 2026.02.13*
+*日期: 2026.02.14*
 
-本文档基于 v2 设计文档（EventBus + core-runner）的进一步演进。核心变化：*引入 Python 后端*，*Agent 系统*，*OpenViking 上下文管理*。FlowCabal 从浏览器单体应用升级为客户端-服务端架构。
+浏览器 UI + 本地 Python 后端。浏览器负责工作流编辑和结果展示，本地 Python 负责执行、Agent、存储。
 
 #outline()
 
 #line(length: 100%)
 
-= 架构决策背景
+= 设计背景
 
 == 为什么需要 Agent
 
 paper.typ 提出了三层能力需求：
 
-1. *DAG 工作流 + 执行引擎*：design_doc.typ 已覆盖，机械性工作
-2. *高级查询函数 + 节点历史/冻结*：扩展 DAG 的控制流原语，机械性工作
+1. *DAG 工作流 + 执行引擎*：机械性工作
+2. *高级查询函数 + 节点历史/冻结*：机械性工作
 3. *Agent + 上下文管理*：自主代理监控和介入工作流运行
 
 前两层是机械性实现。第三层是架构性决策。
 
-== AI 辅助创作的定义
+== AI 辅助创作
 
-> 人类定义 *what*（意图、约束、美学标准）并 *评判质量*。AI 负责 *how*（执行、上下文组装、战术决策）。两者之间的结构/策略层——分解、编排、上下文选择——是 *共享领域*，人类与 AI 都不能独立胜任。
+> 人类定义 *what*（意图、约束、美学标准）并 *评判质量*。AI 负责 *how*（执行、上下文组装、战术决策）。两者之间的结构/策略层——分解、编排、上下文选择——是 *共享领域*。
 
 Agent 的角色：填充这个共享领域。不是纯执行器，不是自主创作者，而是 *结构层的协作者*。
 
-== 为什么必须使用 OpenViking
+_未来考虑：Agent 系统可设计为可替换的（pluggable），允许用户选择不同的 Agent 实现或完全禁用 Agent。当前版本先硬编码三角色架构，降低实现复杂度。_
 
-长篇小说涉及极重的设定管理：角色状态、情节线索、世界观规则、文风约束。一部 8 万字以上的小说，每个节点生成时需要的上下文是 *动态的*、*层次化的*、*可追溯的*。
+== 为什么需要 OpenViking
 
-浏览器端的简易上下文方案（IndexedDB + Embeddings API）无法满足：
-- 缺乏虚拟文件系统语义，无法追踪上下文来源
-- 缺乏多级摘要能力
-- 缺乏递归式上下文检索
+长篇小说涉及极重的设定管理：角色状态、情节线索、世界观规则、文风约束。8 万字以上的小说，每个节点生成时需要的上下文是 *动态的*、*层次化的*、*可追溯的*。
 
-OpenViking 是 Python 项目，因此 FlowCabal 必须引入 Python 后端。
+OpenViking 提供：虚拟文件系统语义、多级摘要、递归式上下文检索。
 
 #line(length: 100%)
 
 = 整体架构
 
-== 客户端-服务端分离
+== 本地架构
+
+Python 后端运行在用户本地机器上。所有数据（API key、输出、项目知识）留在本机。
 
 ```
-┌─────────────────────────────────┐     ┌──────────────────────────────────┐
-│       Browser (Svelte)          │     │       Python Backend             │
-│                                 │     │                                  │
-│  ┌───────────┐  ┌───────────┐  │     │  ┌────────────────────────────┐  │
-│  │ UI Layer  │  │ NavBar    │  │     │  │         Agent              │  │
-│  │FlowEditor │  │ ApiTest   │  │     │  │  ┌────────┐ ┌──────────┐  │  │
-│  │FloatingBall  │           │  │     │  │  │Context │ │ Builder  │  │  │
-│  └─────┬─────┘  └───────────┘  │     │  │  │ (A)    │ │  (B)     │  │  │
-│        │                       │     │  │  └────────┘ └──────────┘  │  │
-│  ┌─────▼─────┐                 │     │  │  ┌────────┐              │  │
-│  │ EventBus  │                 │     │  │  │Monitor │              │  │
-│  └─────┬─────┘                 │     │  │  │ (C)    │              │  │
-│        │                       │     │  │  └────────┘              │  │
-│  ┌─────▼─────┐                 │     │  └──────────┬───────────────┘  │
-│  │core-runner│                 │     │             │                  │
-│  └─────┬─────┘                 │     │  ┌──────────▼───────────────┐  │
-│        │                       │     │  │      OpenViking          │  │
-│  ┌─────┼─────────────┐        │     │  │  ┌──────────────────┐    │  │
-│  ▼     ▼             ▼        │     │  │  │ Virtual FS       │    │  │
-│ core  api            db       │     │  │  │ Multi-level Sum. │    │  │
-│(meta) (LLM calls)  (IndexedDB)│     │  │  │ Recursive Retr.  │    │  │
-│                                │     │  │  └──────────────────┘    │  │
-└────────────┬───────────────────┘     │  └──────────────────────────┘  │
-             │                         │             │                  │
-             │      WebSocket          │  ┌──────────▼───────────────┐  │
-             └─────────────────────────┤  │    Agent LLM Client     │  │
-                                       │  │  (meta-reasoning calls) │  │
-                                       │  └─────────────────────────┘  │
-                                       └──────────────────────────────────┘
+┌──────────────────────┐         ┌────────────────────────────────┐
+│  Browser (Svelte)    │         │  Python Backend (本地)          │
+│                      │         │                                │
+│  ┌────────────────┐  │         │  ┌────────────────────┐        │
+│  │ FlowEditor     │  │         │  │ core-runner         │        │
+│  │ FloatingBall   │  │   WS    │  │ 执行 + LLM 调用     │        │
+│  │ NavBar         │  │◄──────►│  └─────────┬──────────┘        │
+│  └───────┬────────┘  │         │            │                   │
+│          │           │         │  ┌─────────▼──────────┐        │
+│  ┌───────▼────────┐  │         │  │ Agent (A / B / C)  │        │
+│  │ core/ (编辑态)  │  │         │  └─────────┬──────────┘        │
+│  └────────────────┘  │         │            │                   │
+│                      │         │  ┌─────────▼──────────┐        │
+│                      │         │  │ SQLite (统一存储)    │        │
+│                      │         │  │ + OpenViking        │        │
+│                      │         │  └────────────────────┘        │
+└──────────────────────┘         └────────────────────────────────┘
 ```
 
 == 职责划分
@@ -86,174 +73,205 @@ OpenViking 是 Python 项目，因此 FlowCabal 必须引入 Python 后端。
   align: horizon,
   [*职责*], [*Browser*], [*Python*],
   [UI 渲染与交互], [Yes], [],
-  [工作流 metadata 编辑], [Yes], [],
-  [工作流持久化 (IndexedDB)], [Yes], [],
-  [LLM API 调用 (用户的 key)], [Yes], [],
-  [工作流执行引擎 (core-runner)], [Yes], [],
-  [Agent 推理 (meta-reasoning)], [], [Yes],
-  [上下文管理 (OpenViking)], [], [Yes],
-  [输出质量评估], [], [Yes],
-  [工作流构建建议], [], [Yes],
-  [实体追踪/摘要], [], [Yes],
+  [工作流编辑（内存中）], [Yes], [],
+  [工作流持久化], [], [SQLite],
+  [工作流执行 (core-runner)], [], [Yes],
+  [LLM API 调用], [], [Yes（key 留在本机）],
+  [策展输出存储], [], [SQLite],
+  [Agent 推理], [], [Yes],
+  [上下文管理 (OpenViking)], [], [SQLite 直接读写],
+  [实体追踪 / 摘要], [], [Yes],
 )
 
-== 两套 LLM 配置
+== 两套 LLM
 
 #table(
-  columns: (auto, auto, auto, auto),
+  columns: (auto, auto, auto),
   inset: 8pt,
   align: horizon,
-  [*配置*], [*用途*], [*位置*], [*典型模型*],
-  [用户 LLM 配置], [工作流节点的创作生成], [Browser (API key 不离开客户端)], [Claude Opus / GPT-4],
-  [Agent LLM 配置], [元推理：评估、摘要、检索、建议], [Python Backend], [Claude Haiku / GPT-4o-mini],
+  [*配置*], [*用途*], [*典型模型*],
+  [用户 LLM], [工作流节点的创作生成], [Claude Opus / GPT-4],
+  [Agent LLM], [元推理：评估、摘要、检索、建议], [Claude Haiku / GPT-4o-mini],
 )
 
-用户的 API key 始终留在浏览器端，不传输给后端。Agent 使用独立的（通常更廉价的）模型进行元推理。
+均在本地 Python 进程中管理。
 
 #line(length: 100%)
 
-= Agent 系统设计
+= Agent 系统
 
-== 统一 Agent 循环
-
-三个角色（A/B/C）共享同一个 observe → reason → act 循环，由不同事件触发：
+== 三角色
 
 #table(
   columns: (auto, auto, auto, auto, auto),
   inset: 8pt,
   align: horizon,
-  [*角色*], [*触发时机*], [*观察*], [*推理*], [*行动*],
+  [*角色*], [*触发*], [*观察*], [*推理*], [*行动*],
   [B: Builder], [执行前], [用户意图 + 项目上下文], [需要什么结构？], [创建/修改节点和 prompt],
-  [A: Context], [执行中 (每节点前)], [当前节点 + 项目知识], [此节点需要什么上下文？], [注入上下文到 prompt],
-  [C: Monitor], [执行中 (每节点后)], [节点输出 + 质量标准], [质量是否达标？], [批准 / 重试 / 交由人类],
+  [A: Context], [每节点前], [当前节点 + 项目知识], [需要什么上下文？], [注入上下文到 prompt],
+  [C: Monitor], [每节点后], [节点输出 + 质量标准], [质量达标？], [批准 / 重试 / 交人类],
 )
 
-== Prompt 组装管线
+三个角色共享 observe → reason → act 循环。因为 core-runner 和 Agent 在同一 Python 进程中，角色调用是函数调用，不经过网络。
 
-Agent 不修改用户的 `TextBlockList`（那是持久化的 metadata）。上下文注入是 *临时的*，仅存在于执行期间：
+== Prompt 组装
+
+Agent 不修改用户的 `TextBlockList`（持久化 metadata）。上下文注入仅存在于执行期间。
 
 ```
-Layer 1: 静态 prompt（用户的 TextBlockList — 持久化 metadata）
+Layer 1: 用户的 TextBlockList（持久化 metadata）
     ↓
-Layer 2: Agent 上下文注入（临时，仅本次执行）
+Layer 2: Agent 上下文注入（同进程调用 Role A）
     ↓
-Layer 3: VirtualTextBlock 解析（替换为上游节点输出）
+Layer 3: VirtualTextBlock 解析（从内存缓存读取上游输出）
     ↓
-最终 prompt 字符串 → LLM API
+最终 prompt → LLM API
 ```
 
-```typescript
-// core-runner 中的 prompt 组装
-function buildPrompt(
-  node: NodeDefinition,
-  runtimeState: WorkflowRuntimeState,
-  agentContext?: AgentContext  // 来自 Python Agent 的注入
-): { system: string; user: string } {
-  let system = resolveTextBlockList(node.apiConfig.systemPrompt, runtimeState);
-  let user = resolveTextBlockList(node.apiConfig.userPrompt, runtimeState);
-
-  if (agentContext) {
-    system = agentContext.systemPrefix + '\n' + system;
-    user = user + '\n' + agentContext.userSuffix;
-  }
-
-  return { system, user };
-}
+```python
+def build_prompt(node, cache, agent_ctx=None):
+    system = resolve_text_blocks(node.system_prompt, cache)
+    user = resolve_text_blocks(node.user_prompt, cache)
+    if agent_ctx:
+        system = agent_ctx.system_prefix + '\n' + system
+        user = user + '\n' + agent_ctx.user_suffix
+    return system, user
 ```
 
-== 执行流程（三角色协作）
+== 执行流程
 
 ```
 用户: "写第三章"
     │
     ▼
-[Role B] Agent 分析项目上下文
-    → 从 OpenViking 检索: 第1-2章摘要、角色状态、大纲
-    → 推理: "第三章需要4个节点: 场景铺设、对话、冲突、收束"
-    → 生成 NodeDefinition + 连接建议
-    → 通过 WebSocket 发送到浏览器展示
-    → 用户审批（可能修改）
+[Role B] 分析项目上下文，生成节点 + 连接建议 → 推送浏览器 → 用户审批
     │
     ▼
-用户批准 → workflow:run
+Browser → workflow:run → Python
     │
     ▼
-[core-runner] 按 Kahn 序执行
+[core-runner] 按 Kahn 序执行（Python 进程内）
     │
-    ├─ 节点 K 执行前:
-    │   core-runner → ws → Python Agent
-    │   [Role A] Agent 查询 OpenViking
-    │       → "节点 K 正在写第三章的对话场景"
-    │       → 检索: 角色语音样本、进行中的情节线索、第2章结尾
-    │       → 返回 AgentContext
-    │   core-runner ← ws ← Python Agent
-    │   core-runner 注入上下文，调用用户的 LLM
+    ├─ 节点 K:
+    │   [Role A] 查询 SQLite/OpenViking → 返回上下文
+    │   组装 prompt → 调用用户 LLM → 流式推送到浏览器
+    │   [Role C] 评估质量 → approve / retry / flag
+    │   如果 flag → 推送 node:needs-human → 等待 human:decision
     │
-    ├─ 节点 K 执行后:
-    │   core-runner → ws → Python Agent
-    │   [Role C] Agent 评估输出质量
-    │       → 检查: 连续性、风格一致性、prompt 遵循度
-    │       → 决策: approve / retry(附修改建议) / flag(交由人类)
-    │   [Role A] Agent 更新 OpenViking
-    │       → 索引节点 K 输出、更新实体状态、生成摘要
-    │   core-runner ← ws ← Python Agent
+    └─ 下一节点...
     │
-    └─ 下一个节点...
+    ▼
+workflow:completed → 浏览器展示所有输出
+    │
+    ▼
+用户选择保留 → output:persist → SQLite → OpenViking 索引 + 摘要
 ```
+
+#line(length: 100%)
+
+= 策展输出存储
+
+== 原则
+
+并非所有节点输出都值得长期保存。*只有用户明确选择保留的输出*才进入 SQLite，也只有这些内容才触发 OpenViking 摘要和索引。
+
+== 两级模型
+
+```
+┌──────────────────┐     用户选择保留     ┌──────────────────┐
+│  运行时缓存       │  ──────────────→   │  SQLite 策展存储   │
+│  (Python 内存)    │                    │  (本地文件)        │
+│                  │                    │                   │
+│  所有节点输出      │                    │  用户批准的输出     │
+│  执行期间存在      │                    │  跨会话持久化       │
+│  工作流结束即丢弃  │                    │  OpenViking 直接   │
+│                  │                    │  读写同一数据库     │
+└──────────────────┘                    └──────────────────┘
+```
+
+- *运行时缓存*：Python 内存中，供下游 VirtualTextBlock 解析。执行结束后推送到浏览器供用户审阅。
+- *SQLite 策展存储*：单一数据库文件。工作流、策展输出、OpenViking 知识数据共存。OpenViking 直接读写同一实例。
+
+#line(length: 100%)
+
+= OpenViking
+
+== 虚拟文件系统结构
+
+```
+/project
+├── /meta
+│   ├── outline.md
+│   ├── style-guide.md
+│   └── world-rules.md
+├── /entities
+│   ├── characters/
+│   ├── locations/
+│   └── plot-threads/
+├── /manuscript
+│   ├── chapter-01/
+│   │   ├── content.md
+│   │   ├── summary-paragraph.md
+│   │   ├── summary-sentence.md
+│   │   └── entity-changes.json
+│   └── ...
+└── /summaries
+    ├── arc-1.md
+    ├── arc-2.md
+    └── full-work.md
+```
+
+以 SQLite 为存储后端。虚拟路径是逻辑概念，物理存储在 SQLite 表中。
+
+== 检索示例
+
+```python
+retrieved = viking.retrieve(
+    query="第12章对话场景所需上下文",
+    node_context={"chapter": 12, "scene_type": "dialogue",
+                  "characters": ["protagonist", "antagonist"]}
+)
+# /summaries/full-work.md, /summaries/arc-3.md,
+# /manuscript/chapter-11/summary-paragraph.md,
+# /entities/characters/protagonist.md, ...
+```
+
+检索来源路径通过 `node:completed.contextSources` 推送到浏览器，确保可追溯性。
 
 #line(length: 100%)
 
 = WebSocket 协议
 
-EventBus 通过 WebSocket 桥接浏览器和 Python 后端。以下是完整的消息类型定义。
+以*单向推送*为主。Python 内部完成执行 + Agent 调用，浏览器只接收结果和发送用户决策。
 
 == Browser → Python
 
 ```typescript
-interface AgentProtocol_BrowserToPython {
-  // 连接管理
-  'agent:connect': {
+interface BrowserToServer {
+  'connect': { projectId: string };
+  'disconnect': void;
+
+  'workflow:save': { workflow: WorkflowDefinition };
+  'workflow:load': { workflowId: string };
+  'workflow:list': void;
+  'workflow:run': {
     workflowId: string;
-    projectId: string;  // OpenViking 项目标识
+    apiConfig: { endpoint: string; apiKey: string;
+                 model: string; parameters: ApiParameters };
   };
-  'agent:disconnect': void;
+  'workflow:cancel': void;
 
-  // Role B: 工作流构建请求
-  'agent:build-request': {
-    intent: string;           // 用户的自然语言意图
-    currentWorkflow?: string; // 当前工作流 JSON（可选）
-  };
-  'agent:build-accept': {
-    suggestionId: string;     // 接受某个建议
-    modifications?: string;   // 用户的修改说明
-  };
-  'agent:build-reject': {
-    suggestionId: string;
-    reason?: string;
-  };
+  'build:request': { intent: string; currentWorkflow?: string };
+  'build:accept': { suggestionId: string; modifications?: string };
+  'build:reject': { suggestionId: string; reason?: string };
 
-  // Role A+C: 执行期间
-  'agent:node-before': {
-    nodeId: NodeId;
-    nodeName: string;
-    promptPreview: {          // 静态 prompt（未注入上下文）
-      system: string;
-      user: string;
-    };
-    dependencies: NodeId[];   // 此节点的上游依赖
-  };
-  'agent:node-output': {
-    nodeId: NodeId;
-    nodeName: string;
-    output: string;           // 节点 LLM 输出
-    usage?: UsageInfo;
-  };
+  'output:persist': { nodeId: NodeId; tags?: string[] };
+  'output:delete': { outputId: string };
 
-  // 人类介入响应
-  'agent:human-decision': {
+  'human:decision': {
     nodeId: NodeId;
     decision: 'approve' | 'retry' | 'edit';
-    editedOutput?: string;    // 如果 decision = 'edit'
+    editedOutput?: string;
   };
 }
 ```
@@ -261,168 +279,111 @@ interface AgentProtocol_BrowserToPython {
 == Python → Browser
 
 ```typescript
-interface AgentProtocol_PythonToBrowser {
-  // Role B: 工作流建议
-  'agent:build-suggestion': {
-    suggestionId: string;
-    nodes: NodeDefinition[];
+interface ServerToBrowser {
+  'workflow:data': { workflow: WorkflowDefinition };
+  'workflow:list': { workflows: WorkflowSummary[] };
+
+  'node:started': { nodeId: NodeId; nodeName: string };
+  'node:streaming': { nodeId: NodeId; chunk: string };
+  'node:completed': {
+    nodeId: NodeId; output: string;
+    evaluation: { decision: 'approve'|'retry'|'flag-human';
+                  confidence: number; reason: string };
+    contextSources: string[];
+  };
+  'node:needs-human': {
+    nodeId: NodeId; reason: string; outputPreview: string;
+    options: ('approve'|'retry'|'edit')[];
+  };
+
+  'workflow:completed': { outputs: { nodeId: NodeId; output: string }[] };
+  'workflow:error': { error: string; nodeId?: NodeId };
+
+  'build:suggestion': {
+    suggestionId: string; nodes: NodeDefinition[];
     edges: { source: NodeId; target: NodeId }[];
-    explanation: string;      // Agent 的解释
+    explanation: string;
   };
 
-  // Role A: 上下文注入
-  'agent:context-ready': {
-    nodeId: NodeId;
-    context: {
-      systemPrefix: string;   // 注入到 system prompt 前
-      userSuffix: string;     // 注入到 user prompt 后
-    };
-    sources: string[];        // OpenViking 中的来源路径（可追溯性）
-  };
-
-  // Role C: 质量评估
-  'agent:evaluation': {
-    nodeId: NodeId;
-    decision: 'approve' | 'retry' | 'flag-human';
-    confidence: number;       // 0-1
-    reason: string;
-    retrySuggestion?: string; // 如果 retry，建议修改什么
-  };
-
-  // 上下文更新确认
-  'agent:context-updated': {
-    nodeId: NodeId;
-    updatedPaths: string[];   // OpenViking 中更新的文件路径
-    newSummaries: string[];   // 新生成的摘要路径
-  };
-
-  // 人类介入请求
-  'agent:needs-human': {
-    nodeId: NodeId;
-    reason: string;
-    outputPreview: string;
-    options: ('approve' | 'retry' | 'edit')[];
-  };
-
-  // 状态与错误
-  'agent:status': {
-    status: 'connected' | 'busy' | 'error';
-    message?: string;
-  };
-  'agent:error': {
-    error: string;
-    nodeId?: NodeId;
-  };
+  'output:persisted': { outputId: string; nodeId: NodeId; updatedPaths: string[] };
+  'status': { status: 'connected'|'busy'|'error'; message?: string };
 }
 ```
 
-== 消息流时序
-
-=== 完整执行流程
+== 消息流
 
 ```
-Browser                          Python
+Browser                          Python (本地)
    │                                │
-   ├─ agent:connect ───────────────►│
-   │                                ├─ 加载 OpenViking 项目
-   │◄──────────── agent:status ─────┤
+   ├─ connect ─────────────────────►│ 加载 SQLite + OpenViking
+   │◄────────────────── status ─────┤
    │                                │
-   │  [用户点击执行]                  │
+   ├─ workflow:save ───────────────►│ SQLite
+   ├─ workflow:run ────────────────►│
    │                                │
-   │  for each node in Kahn order:  │
-   │    ├─ agent:node-before ──────►│
-   │    │                           ├─ [Role A] 查询 OpenViking
-   │    │                           ├─ 组装上下文
-   │    │◄── agent:context-ready ───┤
+   │  for each node (内部执行):      │
+   │    │◄──── node:started ────────┤
+   │    │◄──── node:streaming ──────┤ (多次)
+   │    │◄──── node:completed ──────┤
    │    │                           │
-   │    ├─ [注入上下文到 prompt]      │
-   │    ├─ [调用用户 LLM]            │
-   │    ├─ [得到输出]                │
-   │    │                           │
-   │    ├─ agent:node-output ──────►│
-   │    │                           ├─ [Role C] 评估质量
-   │    │                           ├─ [Role A] 更新 OpenViking
-   │    │                           │
-   │    │  case: approve            │
-   │    │◄── agent:evaluation ──────┤ (decision: 'approve')
-   │    │◄── agent:context-updated ─┤
-   │    │  → 继续下一节点             │
-   │    │                           │
-   │    │  case: retry              │
-   │    │◄── agent:evaluation ──────┤ (decision: 'retry')
-   │    │  → 重新请求上下文+执行       │
-   │    │                           │
-   │    │  case: flag-human         │
-   │    │◄── agent:needs-human ─────┤
-   │    │  → UI 展示给用户            │
-   │    ├─ agent:human-decision ───►│
-   │    │  → 根据决策继续              │
+   │    │  如果 flag-human:          │
+   │    │◄──── node:needs-human ────┤
+   │    ├─ human:decision ─────────►│
    │                                │
-   │  [执行完毕]                     │
+   │◄──── workflow:completed ───────┤
    │                                │
-   ├─ agent:disconnect ────────────►│
-   │                                │
+   ├─ output:persist ──────────────►│ SQLite + OpenViking
+   │◄──── output:persisted ─────────┤
 ```
 
 #line(length: 100%)
 
-= OpenViking 项目模型
+= 架构决策记录
 
-== 长篇小说的虚拟文件系统结构
+== 为什么本地 Python 后端
 
-```
-/project
-├── /meta
-│   ├── outline.md              # 全篇大纲
-│   ├── style-guide.md          # 文风、语气、视角规则
-│   └── world-rules.md          # 世界观设定与约束
-├── /entities
-│   ├── characters/
-│   │   ├── protagonist.md      # 状态、关系、弧光
-│   │   ├── antagonist.md
-│   │   └── ...
-│   ├── locations/
-│   │   └── ...
-│   └── plot-threads/
-│       ├── main-thread.md
-│       └── subplot-1.md
-├── /manuscript
-│   ├── chapter-01/
-│   │   ├── content.md          # 全文
-│   │   ├── summary-paragraph.md
-│   │   ├── summary-sentence.md
-│   │   └── entity-changes.json # 本章实体状态变更
-│   ├── chapter-02/
-│   └── ...
-└── /summaries
-    ├── arc-1.md                # 多章摘要
-    ├── arc-2.md
-    └── full-work.md            # 全书一页摘要
-```
+- API key 留在本机，无第三方信任问题
+- 浏览器与 Python 同机通信，延迟可忽略
+- 用户启动应用时 Python 进程随之启动
 
-== Agent 如何使用 OpenViking
+== 为什么 SQLite 而非 IndexedDB
 
-当 Agent 为 "第12章对话场景" 节点准备上下文时，典型检索结果：
+所有需要持久化的数据（工作流、策展输出、OpenViking 知识）都在 Python 进程中产生和消费。
+
+#table(
+  columns: (auto, auto, auto),
+  inset: 8pt,
+  align: horizon,
+  [*维度*], [*IndexedDB*], [*SQLite*],
+  [与 core-runner], [跨进程], [同进程],
+  [与 OpenViking], [跨进程], [同进程],
+  [查询能力], [键值/索引], [SQL + FTS5],
+  [存储层数量], [2 层], [1 层],
+  [浏览器复杂度], [Dexie + persisted rune], [无],
+  [备份], [需专门实现], [复制文件],
+)
+
+== 为什么 core-runner 在 Python
+
+#table(
+  columns: (auto, auto, auto),
+  inset: 8pt,
+  align: horizon,
+  [*维度*], [*浏览器端*], [*Python 端*],
+  [Agent 集成], [WebSocket 往返], [函数调用],
+  [输出持久化], [Browser→WS→Python→SQLite], [直接写入],
+  [WS 消息/节点], [\~4 次往返], [\~1 次推送],
+  [复杂度], [分布式协调], [单进程管线],
+)
 
 ```python
-retrieved = viking.retrieve(
-    query="第12章对话场景所需上下文",
-    node_context={
-        "chapter": 12,
-        "scene_type": "dialogue",
-        "characters": ["protagonist", "antagonist"]
-    }
-)
-# 可能返回:
-# - /summaries/full-work.md          (全局概览)
-# - /summaries/arc-3.md              (当前叙事弧)
-# - /manuscript/chapter-11/summary-paragraph.md  (前章)
-# - /entities/characters/protagonist.md
-# - /entities/characters/antagonist.md
-# - /meta/style-guide.md
+for node_id in kahn_order:
+    context = role_a.get_context(node_id)       # 函数调用
+    prompt = build_prompt(node, context)          # 函数调用
+    output = llm.generate(prompt)                 # 本地 HTTP
+    evaluation = role_c.evaluate(output)          # 函数调用
+    ws.push(node_id, output, evaluation)          # 推送 UI
 ```
-
-每次检索的来源路径通过 `agent:context-ready.sources` 传回浏览器，确保可追溯性。
 
 #line(length: 100%)
 
@@ -432,74 +393,71 @@ retrieved = viking.retrieve(
 
 ```
 flow-cabal/src/lib/
-├── core/              # metadata 层（不变）
+├── core/              # 工作流编辑状态（通过 WS 同步到后端）
 │   ├── textblock.ts
 │   ├── node.ts
 │   ├── workflow.ts
 │   ├── apiconfig.ts
 │   └── index.ts
-├── core-runner/       # 执行引擎（新增）
-│   ├── runner.ts      # WorkflowRunner
-│   ├── prompt.ts      # Prompt 组装管线（含 Agent 注入）
-│   ├── types.ts       # RuntimeState 类型
+├── ws/                # WebSocket 客户端
+│   ├── client.ts
+│   ├── protocol.ts
 │   └── index.ts
-├── bus/               # EventBus（新增）
-│   ├── eventbus.ts
-│   ├── events.ts      # 本地 + Agent 事件类型
-│   └── ws-bridge.ts   # EventBus ↔ WebSocket 桥接
-├── agent-client/      # Agent 客户端（新增）
-│   ├── client.ts      # WebSocket 连接管理、重连、心跳
-│   ├── types.ts       # AgentProtocol 类型
-│   └── index.ts
-├── api/               # LLM 客户端（不变）
-├── db/                # 持久化（不变）
 ├── components/        # UI 组件
 ├── nodes/             # @xyflow 节点组件
 └── utils/             # 布局、验证
 ```
+
+不包含 core-runner、EventBus、db（IndexedDB）。
 
 == Python 后端
 
 ```
 backend/
 ├── server.py              # WebSocket 服务器
-├── config.py              # Agent LLM 配置
-├── protocol.py            # 消息类型定义（与 TS 类型镜像）
+├── config.py              # LLM 配置
+├── protocol.py            # 消息类型（镜像 TS）
+├── db.py                  # SQLite
+├── runner/
+│   ├── engine.py          # core-runner
+│   ├── prompt.py          # Prompt 组装
+│   └── cache.py           # 运行时输出缓存
 ├── agent/
-│   ├── core.py            # Agent 主循环（observe → reason → act）
-│   ├── context.py         # Role A: OpenViking 查询 + 上下文组装
-│   ├── builder.py         # Role B: 工作流构建建议
-│   ├── monitor.py         # Role C: 输出质量评估
+│   ├── core.py            # Agent 循环
+│   ├── context.py         # Role A
+│   ├── builder.py         # Role B
+│   ├── monitor.py         # Role C
 │   └── skills/
-│       ├── summarize.py   # 多级摘要生成
-│       ├── retrieve.py    # 上下文检索
-│       ├── evaluate.py    # 质量评估
-│       └── entity.py      # 实体追踪与状态管理
+│       ├── summarize.py
+│       ├── retrieve.py
+│       ├── evaluate.py
+│       └── entity.py
 ├── viking/
-│   ├── adapter.py         # OpenViking 集成适配器
-│   └── project.py         # 小说项目结构管理
+│   ├── adapter.py         # OpenViking（读写 SQLite）
+│   └── project.py         # 项目结构管理
 └── requirements.txt
 ```
 
 #line(length: 100%)
 
-= 与之前设计的关系
+= 与 v2 设计的关系
 
 #table(
   columns: (auto, auto, auto),
   inset: 8pt,
   align: horizon,
-  [*模块*], [*design_doc.typ (v2)*], [*本文档 (v3)*],
-  [core/], [不变], [不变],
-  [core-runner/], [独立执行引擎], [增加 Agent 上下文注入管线],
-  [EventBus], [浏览器内 pub/sub], [扩展 WebSocket 桥接到 Python],
-  [Agent], [未涉及], [三角色统一架构 (A/B/C)],
-  [上下文管理], [未涉及], [OpenViking 后端],
-  [LLM 调用], [浏览器端单一配置], [双配置：用户 LLM + Agent LLM],
-  [部署模型], [纯浏览器], [客户端-服务端 (WebSocket)],
+  [*模块*], [*v2 (design\_doc.typ)*], [*v3 (本文档)*],
+  [core/], [浏览器端 metadata], [保留，通过 WS 同步到后端],
+  [core-runner/], [浏览器端], [迁移至 Python],
+  [EventBus], [浏览器内 pub/sub], [移除],
+  [db/], [IndexedDB], [移除，改为 SQLite],
+  [Agent], [无], [三角色 (A/B/C)，同进程],
+  [上下文管理], [无], [OpenViking + SQLite],
+  [LLM 调用], [浏览器端], [Python 端（双配置）],
+  [部署], [纯浏览器], [浏览器 + 本地 Python],
 )
 
-design_doc.typ 中的 EventBus 类型定义、core-runner 的 RuntimeState 类型、WorkflowRunner 类结构均保持有效，本文档在此基础上扩展。
+core/ 类型定义（NodeDefinition、WorkflowDefinition、TextBlockList）保持有效。
 
 #line(length: 100%)
 
@@ -507,28 +465,29 @@ design_doc.typ 中的 EventBus 类型定义、core-runner 的 RuntimeState 类�
 
 == 阶段一：基础设施
 
-1. EventBus + WebSocket 桥接
-2. core-runner（不含 Agent 注入，先跑通基础执行）
-3. UI 层与 core 类型桥接（消除 \@xyflow 直用问题）
-4. Python WebSocket 服务器骨架
+1. Python WebSocket 服务器 + SQLite 初始化
+2. core-runner（Python，不含 Agent，先跑通基础执行）
+3. 浏览器 WebSocket 客户端
+4. 工作流同步：浏览器 → WS → Python → SQLite
+5. 移除浏览器端 `db/` 层
 
 == 阶段二：Agent 核心
 
-1. Agent 主循环 (observe → reason → act)
-2. Role A: OpenViking 集成 + 上下文检索 + 注入管线
-3. Role C: 输出质量评估 + 重试逻辑
-4. Prompt 组装管线增加 Agent 层
+1. Agent 循环 (observe → reason → act)
+2. Role A: OpenViking + SQLite + 上下文注入
+3. Role C: 质量评估 + 重试
+4. 策展存储：用户保留 → SQLite → OpenViking 索引
 
-== 阶段三：Agent 高级能力
+== 阶段三：高级能力
 
 1. Role B: 工作流构建建议
-2. 高级查询函数（递归/迭代 LLM 模式）
+2. 高级查询函数（递归/迭代 LLM）
 3. 节点输出历史 + 冻结
 4. 子工作流
 
 == 阶段四：打磨
 
-1. Agent 对话界面（FloatingBall 扩展）
+1. Agent 对话界面（FloatingBall）
 2. OpenViking 项目管理 UI
-3. 上下文来源可视化（哪些 OpenViking 路径被注入）
+3. 上下文来源可视化
 4. 性能优化与错误恢复

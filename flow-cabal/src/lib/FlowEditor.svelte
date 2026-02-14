@@ -4,7 +4,6 @@
   import { ContextMenu, NodeSidebar, Toolbar, FlowCanvas } from './components';
   import {
     validateWorkflow,
-    topologicalSort,
     layoutGraph,
     type LayoutOptions
   } from './utils';
@@ -55,7 +54,6 @@
   let contextMenu = $state({ x: 0, y: 0, visible: false, type: 'node' as 'node' | 'edge', id: '' });
 
   let validationResult = $state<{ valid: boolean; errors: string[]; warnings: string[] } | null>(null);
-  let executionOrder = $state<string[]>([]);
 
   function handleContextMenu(event: MouseEvent, item: { type: 'node' | 'edge'; id: string }) {
     event.preventDefault();
@@ -149,7 +147,7 @@
         layoutDirection = 'LR';
         break;
       case 'execute':
-        executeWorkflow();
+        // TODO: will be handled via WebSocket to Python backend
         break;
       case 'validate':
         validateAndAnalyze();
@@ -162,23 +160,8 @@
     nodes = await layoutGraph(nodes, edges, options);
   }
 
-  function executeWorkflow() {
-    const result = topologicalSort(nodes, edges);
-    if (result.error) {
-      alert(`Cannot execute: ${result.error}`);
-      return;
-    }
-    executionOrder = result.executionOrder;
-    alert(`Execution order: ${executionOrder.join(' → ')}`);
-  }
-
   function validateAndAnalyze() {
     validationResult = validateWorkflow(nodes, edges);
-
-    const sortResult = topologicalSort(nodes, edges);
-    if (!sortResult.error) {
-      executionOrder = sortResult.executionOrder;
-    }
   }
 
   $effect(() => {

@@ -1,182 +1,160 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance for Claude Code working in this repository.
 
-## Project Overview
+## Project
 
-FlowCabal is a client-server visual workflow editor for AI-assisted long-form writing. Users build custom AI workflows through a node-based interface ("ComfyUI for text"). The browser frontend handles UI and workflow execution; a Python backend provides an Agent system with OpenViking context management for heavy novel-writing scenarios.
+FlowCabal — visual workflow editor for AI-assisted long-form writing ("ComfyUI for text"). Browser UI + local Python backend.
 
-Core paradigms: **prompt engineering** (node-level prompt design) and **context engineering** (agent-mediated context assembly from project knowledge).
-
-## Architecture: Client-Server
+## Architecture
 
 ```
-Browser (Svelte)              ←── WebSocket ──→     Python Backend
-├── UI Layer                                        ├── Agent (3 roles)
-├── EventBus + WS Bridge                            │   ├── Context (A)
-├── core/ (metadata)                                │   ├── Builder (B)
-├── core-runner/ (execution)                        │   └── Monitor (C)
-├── api/ (user's LLM calls)                         ├── OpenViking
-└── db/ (IndexedDB)                                 └── Agent LLM Client
+Browser (Svelte)        ←── WS ──→     Python (local)
+├── FlowEditor                         ├── core-runner
+├── core/ (edit state)                  ├── Agent (A/B/C)
+└── ws/ (client)                        ├── SQLite
+                                        ├── OpenViking
+                                        └── LLM Client
 ```
 
-**Two LLM configurations:**
-- **User LLM** (browser): Creative generation in workflow nodes. User's API key never leaves client.
-- **Agent LLM** (Python): Meta-reasoning (evaluation, summarization, retrieval). Typically a cheaper/faster model.
+Everything runs locally. API keys never leave the user's machine.
 
-## Development Commands
+**Two LLMs**: User LLM (creative generation, e.g. Opus/GPT-4) and Agent LLM (meta-reasoning, e.g. Haiku/GPT-4o-mini). Both called from local Python.
 
-Frontend — run from `flow-cabal/`:
+## Commands
+
+Frontend (`flow-cabal/`):
 
 ```bash
-pnpm install      # Install dependencies
-pnpm dev          # Start dev server (http://localhost:5173)
-pnpm build        # Production build to dist/
-pnpm preview      # Preview production build
-pnpm check        # Type checking (svelte-check + tsc) - run before commits
-pnpm lint         # ESLint
-pnpm format       # Prettier formatting
+pnpm install    pnpm dev      pnpm build
+pnpm check      pnpm lint     pnpm format
 ```
 
-Backend — run from `backend/` (not yet implemented):
+Backend (`backend/`, not yet implemented):
 
 ```bash
 pip install -r requirements.txt
-python server.py  # Start WebSocket server
+python server.py
 ```
 
-## Browser-Side Architecture
+## Browser (Svelte, UI only)
 
-### Design Principle: metadata vs running-state separation
+Thin client. Edits workflows, displays results. No execution, no persistence.
 
-`core/` = metadata (static, serializable, persisted). `core-runner/` = runtime state (ephemeral, execution-only).
+### `src/lib/core/` — Edit State
 
-### Core Systems (`src/lib/core/`) — Metadata Only
+Workflow metadata types, synced to Python via WebSocket.
 
-1. **TextBlock System** (`textblock.ts`): `TextBlock` (static text) and `VirtualTextBlockDef` (reference to upstream node output, metadata only). `TextBlockList` manages sequences with dependency tracking.
+- `textblock.ts` — `TextBlock`, `VirtualTextBlockDef`, `TextBlockList`
+- `node.ts` — `NodeDefinition` (id, name, position, apiConfig)
+- `workflow.ts` — `WorkflowDefinition` (id, name, `Map<NodeId, NodeDefinition>`), Kahn's topological sort
+- `apiconfig.ts` — `ApiConfiguration` (connection, parameters, prompts as `TextBlockList`)
 
-2. **Node System** (`node.ts`): `NodeDefinition` — id, name, position, apiConfig. No runtime state.
+### Other browser modules
 
-3. **Workflow System** (`workflow.ts`): `WorkflowDefinition` — id, name, `Map<NodeId, NodeDefinition>`. Topological sort via Kahn's algorithm.
-
-4. **API Configuration** (`apiconfig.ts`): `ApiConfiguration` with connection, parameters, and system/user prompts as `TextBlockList`.
-
-### Prompt Assembly Pipeline (core-runner)
-
-Three layers, assembled per-node during execution:
-
-```
-Layer 1: Static prompt (user's TextBlockList — persisted metadata)
-Layer 2: Agent context injection (ephemeral, from Python via WebSocket)
-Layer 3: VirtualTextBlock resolution (upstream node outputs)
-    → Final prompt string → LLM API
-```
-
-The agent does NOT modify user's metadata. Context injection is ephemeral.
-
-### EventBus + WebSocket Bridge (`src/lib/bus/`)
-
-- `eventbus.ts` — Local typed pub/sub (unchanged from design_doc.typ)
-- `events.ts` — Event types (local + agent protocol)
-- `ws-bridge.ts` — Transparently bridges agent events to/from Python backend
-
-### Other Browser Layers
-
-- `api/` — `OpenAICompatibleClient` for user's LLM calls (regular + streaming)
-- `db/` — IndexedDB via Dexie.js, repository pattern, `persisted()` rune
-- `agent-client/` — WebSocket connection management, reconnection, health check
-- `nodes/` — @xyflow node components: LLMNode, InputNode, OutputNode, TextNode
+- `ws/` — WebSocket client
+- `nodes/` — @xyflow components (LLMNode, InputNode, OutputNode, TextNode)
 - `components/` — FlowCanvas, ContextMenu, NodeSidebar, Toolbar
-- `utils/` — Layout (dagre/elk), validation, topological sort
+- `utils/` — Layout (dagre/elk), validation
 
-### Key Architectural Gaps (Current Code)
+### Current gaps
 
-1. FlowEditor uses @xyflow `Node[]`/`Edge[]` directly — not bridged to core types
+1. FlowEditor uses @xyflow types directly, not bridged to `core/`
 2. Duplicate topological sort: `utils/computing.ts` vs `core/workflow.ts`
-3. No workflow save/load in UI (DB layer exists but unused by FlowEditor)
-4. No execution engine — `executeWorkflow()` just shows alert
-5. No EventBus, core-runner, agent-client, or WebSocket bridge implemented yet
+3. `db/` layer (IndexedDB/Dexie) still exists — to be removed
+4. `executeWorkflow()` is a stub (shows alert)
+5. No WS client, Python backend, or Agent yet
 
-## Python Backend Architecture
+## Python Backend (local)
 
-### Agent System — Three Roles, One Loop
+### SQLite — unified storage
 
-All roles share observe → reason → act, triggered by different events:
+One `.sqlite` file: workflows, curated outputs, OpenViking data. No IndexedDB, no separate filesystem.
 
-- **Role A (Context)**: Before each node, queries OpenViking for relevant context, injects into prompt. After each node, indexes output and updates summaries/entities.
-- **Role B (Builder)**: Before execution, helps construct workflow topology and prompts from user intent + project context.
-- **Role C (Monitor)**: After each node, evaluates output quality. Decides: approve / retry / flag to human.
+### core-runner
 
-### OpenViking Context Store
-
-Virtual filesystem model for novel projects:
-
-```
-/project
-├── /meta           — outline, style-guide, world-rules
-├── /entities       — characters/, locations/, plot-threads/
-├── /manuscript     — chapter-NN/ (content, summaries, entity-changes)
-└── /summaries      — arc-level and full-work summaries
+```python
+for node_id in kahn_order:
+    context = role_a.get_context(node_id)   # function call
+    prompt = build_prompt(node, context)      # function call
+    output = llm.generate(prompt)             # local HTTP
+    evaluation = role_c.evaluate(output)      # function call
+    ws.push(node_id, output, evaluation)      # push to UI
 ```
 
-Provides: traceable retrieval, multi-level summarization, recursive context search.
+### Prompt assembly
 
-### Backend Directory Structure
+```
+TextBlockList → Agent context injection (Role A) → VirtualTextBlock resolution → LLM
+```
+
+Agent does NOT modify persisted metadata. Context injection is ephemeral.
+
+### Agent — three roles
+
+- **A (Context)**: queries SQLite/OpenViking for relevant context, injects into prompt. Indexes curated outputs.
+- **B (Builder)**: constructs workflow topology and prompts from user intent.
+- **C (Monitor)**: evaluates output quality. Approve / retry / flag to human.
+
+### Curated output store
+
+Only user-approved outputs enter SQLite. Runtime cache (Python memory) holds all outputs during execution; user selects which to persist. Only curated outputs trigger OpenViking indexing.
+
+### OpenViking
+
+Virtual filesystem backed by SQLite: `/meta`, `/entities`, `/manuscript`, `/summaries`. Traceable retrieval, multi-level summarization, recursive context search.
+
+### Directory structure
 
 ```
 backend/
-├── server.py          # WebSocket server
-├── config.py          # Agent LLM configuration
-├── protocol.py        # Message types (mirrors TS types)
+├── server.py          # WebSocket
+├── config.py          # LLM config
+├── protocol.py        # Message types
+├── db.py              # SQLite
+├── runner/
+│   ├── engine.py      # core-runner
+│   ├── prompt.py      # Prompt assembly
+│   └── cache.py       # Output cache
 ├── agent/
-│   ├── core.py        # Agent main loop
+│   ├── core.py        # Agent loop
 │   ├── context.py     # Role A
 │   ├── builder.py     # Role B
 │   ├── monitor.py     # Role C
-│   └── skills/        # summarize, retrieve, evaluate, entity-track
+│   └── skills/        # summarize, retrieve, evaluate, entity
 └── viking/
-    ├── adapter.py     # OpenViking integration
-    └── project.py     # Novel project structure management
+    ├── adapter.py     # OpenViking ↔ SQLite
+    └── project.py     # Project structure
 ```
 
 ## WebSocket Protocol
 
-Browser → Python: `agent:connect`, `agent:node-before`, `agent:node-output`, `agent:build-request`, `agent:human-decision`
+Push-oriented. Python executes internally, browser receives results.
 
-Python → Browser: `agent:context-ready`, `agent:evaluation`, `agent:build-suggestion`, `agent:needs-human`, `agent:context-updated`, `agent:status`, `agent:error`
+Browser → Python: `connect`, `workflow:save/load/list/run/cancel`, `build:request/accept/reject`, `output:persist/delete`, `human:decision`
 
-Full protocol definition in `docs/new_design.typ`.
+Python → Browser: `node:started/streaming/completed/needs-human`, `workflow:completed/error`, `build:suggestion`, `output:persisted`, `status`
+
+Full protocol in `docs/new_design.typ`.
 
 ## Tech Stack
 
-### Frontend
-- **Svelte 5** with Runes API (`$state`, `$derived`, `$effect`, `$props`, `$bindable`)
-- **@xyflow/svelte** for node-based visual editing
-- **Vite 7** + TypeScript 5.9
-- **Tailwind CSS 3** (installed, used alongside scoped CSS)
-- **Dexie.js** for IndexedDB persistence
-- **dagre/elkjs** for automatic graph layout
-
-### Backend
-- **Python** with WebSocket server
-- **OpenViking** for context management (virtual filesystem, multi-level summaries)
-- **OpenAI-compatible API** for agent meta-reasoning
+- **Frontend**: Svelte 5 (Runes), @xyflow/svelte, Vite 7, TypeScript 5.9, Tailwind 3, dagre/elkjs
+- **Backend**: Python, SQLite, OpenViking, OpenAI-compatible API
 
 ## Design Decisions
 
-- **Metadata/running-state separation** — core/ is pure and serializable
-- **Agent as context mediator** — not a peripheral observer, but the bridge between workflow and project knowledge
-- **Three-layer prompt assembly** — static prompt + agent context + virtual block resolution
-- **User API key stays in browser** — agent uses separate, cheaper model on backend
-- **EventBus + WebSocket bridge** — same pub/sub pattern locally and across the wire
-- **OpenViking for heavy context** — long novels require traceable, hierarchical, recursive context management
-- **Immutable functional updates** in core/ — enables future undo/redo
-- **Repository pattern** in db/ — abstract interfaces for testing
+- **Local backend** — all data on user's machine, no trust issues
+- **SQLite unified storage** — one file replaces IndexedDB + OpenViking filesystem
+- **core-runner in Python** — agent integration via function calls, not WS round-trips
+- **Curated outputs** — only user-approved content feeds OpenViking
+- **Browser as thin UI** — no execution, no persistence, no EventBus
+- **Three-layer prompt** — static + agent context + virtual block resolution
+- **Immutable core/** — functional updates, future undo/redo
 
-## Documentation
+## Docs
 
-- `docs/new_design.typ` — **v3 architecture: Agent + OpenViking + client-server** (current)
-- `docs/paper.typ` — Technical report (product vision, key features)
-- `docs/design_doc.typ` — v2 architecture (EventBus + core-runner, still valid as foundation)
-- `docs/messagebus_feasibility.typ` — EventBus feasibility analysis
-- `docs/old/` — Superseded documents (do not reference)
+- `docs/new_design.typ` — **v3 architecture** (current)
+- `docs/paper.typ` — Product vision
+- `docs/design_doc.typ` — v2 (superseded)
+- `docs/old/` — Do not reference
