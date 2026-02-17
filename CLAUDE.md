@@ -4,7 +4,7 @@ Guidance for Claude Code working in this repository.
 
 ## Project
 
-FlowCabal — visual workflow editor for AI-assisted long-form writing ("ComfyUI for text"). Browser UI + local Python backend.
+FlowCabal — visual workflow editor for AI-assisted long-form writing ("ComfyUI for text"). Target: high-quality ultra-long novels (potentially millions of words). Browser UI + local Python backend.
 
 ## Architecture
 
@@ -12,14 +12,16 @@ FlowCabal — visual workflow editor for AI-assisted long-form writing ("ComfyUI
 Browser (Svelte)        ←── WS ──→     Python (local)
 ├── FlowEditor                         ├── core-runner
 ├── core/ (edit state)                  ├── Agent (A/B/C)
-└── ws/ (client)                        ├── SQLite
-                                        ├── OpenViking
+└── ws/ (client)                        ├── SQLite (workflows)
+                                        ├── OpenViking (knowledge)
                                         └── LLM Client
 ```
 
 Everything runs locally. API keys never leave the user's machine.
 
-**Two LLMs**: User LLM (creative generation, e.g. Opus/GPT-4) and Agent LLM (meta-reasoning, e.g. Haiku/GPT-4o-mini). Both called from local Python.
+**Dual storage**: SQLite for workflow definitions/metadata. OpenViking (`pip install openviking`, embedded mode) for manuscript content, profiles, entities, retrieval indexes.
+
+**Three model configs**: User LLM (creative generation, e.g. Opus/GPT-4), Agent LLM (meta-reasoning + OpenViking VLM, e.g. Haiku/GPT-4o-mini), Embedding model (OpenViking vector search).
 
 ## Commands
 
@@ -67,20 +69,23 @@ Workflow metadata types, synced to Python via WebSocket.
 
 ## Python Backend (local)
 
-### SQLite — unified storage
+### Dual storage
 
-One `.sqlite` file: workflows, curated outputs, OpenViking data. No IndexedDB, no separate filesystem.
+- **SQLite**: workflow definitions, execution state, curation metadata, configuration
+- **OpenViking** (embedded mode, AGFS subprocess): manuscript content, multi-angle profiles, entities, summaries, L0/L1/L2, vector indexes, entity relations
 
 ### core-runner
 
 ```python
 for node_id in kahn_order:
-    context = role_a.get_context(node_id)   # function call
+    context = role_a.get_context(node_id)   # function call + OpenViking retrieval
     prompt = build_prompt(node, context)      # function call
     output = llm.generate(prompt)             # local HTTP
-    evaluation = role_c.evaluate(output)      # function call
+    evaluation = role_c.evaluate(output)      # function call (multi-angle cross-check)
     ws.push(node_id, output, evaluation)      # push to UI
 ```
+
+Supports advanced patterns: recursive invocation (iterative refinement) and evolutionary iteration (generate N → evaluate → select → iterate).
 
 ### Prompt assembly
 
@@ -88,43 +93,61 @@ for node_id in kahn_order:
 TextBlockList → Agent context injection (Role A) → VirtualTextBlock resolution → LLM
 ```
 
-Agent does NOT modify persisted metadata. Context injection is ephemeral.
+Agent does NOT modify persisted metadata. Context injection is ephemeral — a pure function of (node_config, project_state). Deterministic given same inputs.
 
 ### Agent — three roles
 
-- **A (Context)**: queries SQLite/OpenViking for relevant context, injects into prompt. Indexes curated outputs.
+- **A (Context)**: queries OpenViking for relevant context via hierarchical retrieval + intent analysis. Uses multi-angle profiles as primary navigation. Operates within bounded token budget (~25-30K).
 - **B (Builder)**: constructs workflow topology and prompts from user intent.
-- **C (Monitor)**: evaluates output quality. Approve / retry / flag to human.
+- **C (Monitor)**: low-level factual checking only — continuity errors, entity state contradictions, timeline inconsistencies. Multi-agent cross-checking for "zero errors" in verifiable dimensions. NO creative judgment — humans do final creative review.
+
+### Multi-angle profiling system
+
+Generalized L0/L1/L2: not just chapter summaries, but arbitrary projections of the entire work — character profiles, plot thread status, world state, themes, style fingerprints. Each profile is an OpenViking resource with auto-generated L0/L1/L2. Profiles regenerated async when curated outputs change.
 
 ### Curated output store
 
-Only user-approved outputs enter SQLite. Runtime cache (Python memory) holds all outputs during execution; user selects which to persist. Only curated outputs trigger OpenViking indexing.
+Only user-approved outputs enter OpenViking. Runtime cache (Python memory) holds all outputs during execution; user selects which to persist. Curation triggers: consistency checks, OpenViking ingestion, async profile regeneration.
 
 ### OpenViking
 
-Virtual filesystem backed by SQLite: `/meta`, `/entities`, `/manuscript`, `/summaries`. Traceable retrieval, multi-level summarization, recursive context search.
+Used as a direct dependency (`pip install openviking`), embedded mode. Virtual filesystem with `viking://` URIs:
+
+```
+viking://resources/project/
+├── /meta          — outline, style guide, world rules
+├── /entities      — characters, locations, plot threads
+├── /manuscript    — chapter content (L2, with auto L0/L1)
+├── /summaries     — arc summaries, full-work summary
+└── /profiles      — multi-angle profiles (characters, plot-threads, world-state, themes, style)
+```
+
+Provides: L0/L1/L2 three-level info model, hierarchical retrieval, intent analysis, entity relations, async semantic processing, vector search.
 
 ### Directory structure
 
 ```
 backend/
 ├── server.py          # WebSocket
-├── config.py          # LLM config
+├── config.py          # LLM + OpenViking config
 ├── protocol.py        # Message types
-├── db.py              # SQLite
+├── db.py              # SQLite (workflows + metadata)
 ├── runner/
-│   ├── engine.py      # core-runner
+│   ├── engine.py      # core-runner (basic linear)
 │   ├── prompt.py      # Prompt assembly
-│   └── cache.py       # Output cache
+│   ├── cache.py       # Output cache
+│   ├── recursive.py   # Recursive invocation
+│   └── evolution.py   # Evolutionary iteration
 ├── agent/
 │   ├── core.py        # Agent loop
-│   ├── context.py     # Role A
+│   ├── context.py     # Role A (OpenViking retrieval)
 │   ├── builder.py     # Role B
-│   ├── monitor.py     # Role C
+│   ├── monitor.py     # Role C (multi-angle cross-check)
 │   └── skills/        # summarize, retrieve, evaluate, entity
 └── viking/
-    ├── adapter.py     # OpenViking ↔ SQLite
-    └── project.py     # Project structure
+    ├── client.py      # OpenViking client init
+    ├── project.py     # Project structure management
+    └── profiles.py    # Multi-angle profile generation
 ```
 
 ## WebSocket Protocol
@@ -133,9 +156,9 @@ Push-oriented. Python executes internally, browser receives results.
 
 Browser → Python: `connect`, `workflow:save/load/list/run/cancel`, `build:request/accept/reject`, `output:persist/delete`, `human:decision`
 
-Python → Browser: `node:started/streaming/completed/needs-human`, `workflow:completed/error`, `build:suggestion`, `output:persisted`, `status`
+Python → Browser: `node:started/streaming/completed/needs-human`, `node:iteration`, `workflow:completed/error`, `build:suggestion`, `output:persisted`, `profile:updated`, `status`
 
-Full protocol in `docs/new_design.typ`.
+Full protocol in `docs/new_design_v4.typ`.
 
 ## Tech Stack
 
@@ -145,16 +168,20 @@ Full protocol in `docs/new_design.typ`.
 ## Design Decisions
 
 - **Local backend** — all data on user's machine, no trust issues
-- **SQLite unified storage** — one file replaces IndexedDB + OpenViking filesystem
+- **Dual storage (SQLite + OpenViking)** — SQLite for structured workflow data, OpenViking for knowledge/content (avoids reimplementing L0/L1/L2, retrieval, relations on SQLite)
 - **core-runner in Python** — agent integration via function calls, not WS round-trips
 - **Curated outputs** — only user-approved content feeds OpenViking
 - **Browser as thin UI** — no execution, no persistence, no EventBus
-- **Three-layer prompt** — static + agent context + virtual block resolution
+- **Three-layer prompt** — static + agent context + virtual block resolution; injection is ephemeral and deterministic
+- **Multi-angle profiling over entity state machines** — flexible projections, not rigid records
+- **Role C low-level only** — factual cross-checking, not creative judgment; humans judge quality
 - **Immutable core/** — functional updates, future undo/redo
 
 ## Docs
 
-- `docs/new_design.typ` — **v3 architecture** (current)
+- `docs/new_design_v4.typ` — **v4 architecture** (current)
+- `docs/new_design.typ` — v3 architecture (superseded by v4)
+- `docs/reference_design_analysis_zh.typ` — Reference design analysis (OpenViking/OpenClaw/Trellis)
 - `docs/paper.typ` — Product vision
 - `docs/design_doc.typ` — v2 (superseded)
 - `docs/old/` — Do not reference
