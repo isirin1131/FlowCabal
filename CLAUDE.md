@@ -19,7 +19,7 @@ Browser (Svelte)        ←── WS ──→     Python (local)
 
 Everything runs locally. API keys never leave the user's machine.
 
-**Dual storage**: SQLite for workflow definitions/metadata. OpenViking (`pip install openviking`, embedded mode) for manuscript content, profiles, entities, retrieval indexes.
+**Dual storage**: SQLite for workflow definitions/metadata. OpenViking (`uv add openviking`, embedded mode) for manuscript content, profiles, entities, retrieval indexes.
 
 **Three model configs**: User LLM (creative generation, e.g. Opus/GPT-4), Agent LLM (meta-reasoning + OpenViking VLM, e.g. Haiku/GPT-4o-mini), Embedding model (OpenViking vector search).
 
@@ -32,11 +32,14 @@ pnpm install    pnpm dev      pnpm build
 pnpm check      pnpm lint     pnpm format
 ```
 
-Backend (`backend/`, not yet implemented):
+Backend (`backend/`):
 
 ```bash
-pip install -r requirements.txt
-python server.py
+uv venv --python 3.13
+uv sync
+uv run flowcabal --help
+uv run flowcabal init           # create config
+uv run flowcabal run <file.json> --stream --agents
 ```
 
 ## Browser (Svelte, UI only)
@@ -65,9 +68,18 @@ Workflow metadata types, synced to Python via WebSocket.
 2. Duplicate topological sort: `utils/computing.ts` vs `core/workflow.ts`
 3. `db/` layer (IndexedDB/Dexie) still exists — to be removed
 4. `executeWorkflow()` is a stub (shows alert)
-5. No WS client, Python backend, or Agent yet
+5. No WS client yet — backend uses CLI interface
 
-## Python Backend (local)
+## Python Backend (local) — IMPLEMENTED
+
+Headless CLI-first backend. No WebSocket server yet (future thin layer).
+
+### Status
+
+- **Phase 1** (Foundation): Core types, config, LLM client, runner, CLI — DONE
+- **Phase 2** (Persistence): SQLite CRUD, OpenViking integration, curation pipeline — DONE
+- **Phase 3** (Agents): Role A context, Role C monitor, profile generation — DONE
+- **Phase 4** (Advanced): Recursive/evolutionary execution, Role B builder, WS server — DEFERRED
 
 ### Dual storage
 
@@ -111,7 +123,7 @@ Only user-approved outputs enter OpenViking. Runtime cache (Python memory) holds
 
 ### OpenViking
 
-Used as a direct dependency (`pip install openviking`), embedded mode. Virtual filesystem with `viking://` URIs:
+Used as a direct dependency (`uv add openviking`), embedded mode. Virtual filesystem with `viking://` URIs:
 
 ```
 viking://resources/project/
@@ -128,26 +140,48 @@ Provides: L0/L1/L2 three-level info model, hierarchical retrieval, intent analys
 
 ```
 backend/
-├── server.py          # WebSocket
-├── config.py          # LLM + OpenViking config
-├── protocol.py        # Message types
-├── db.py              # SQLite (workflows + metadata)
-├── runner/
-│   ├── engine.py      # core-runner (basic linear)
-│   ├── prompt.py      # Prompt assembly
-│   ├── cache.py       # Output cache
-│   ├── recursive.py   # Recursive invocation
-│   └── evolution.py   # Evolutionary iteration
-├── agent/
-│   ├── core.py        # Agent loop
-│   ├── context.py     # Role A (OpenViking retrieval)
-│   ├── builder.py     # Role B
-│   ├── monitor.py     # Role C (multi-angle cross-check)
-│   └── skills/        # summarize, retrieve, evaluate, entity
-└── viking/
-    ├── client.py      # OpenViking client init
-    ├── project.py     # Project structure management
-    └── profiles.py    # Multi-angle profile generation
+├── pyproject.toml
+├── .python-version              # 3.13
+├── examples/
+│   └── sample_workflow.json     # Sample 2-node workflow
+└── flowcabal/
+    ├── __init__.py
+    ├── cli.py                   # click CLI entry point
+    ├── config.py                # Pydantic settings (~/.flowcabal/config.toml)
+    ├── llm.py                   # OpenAI-compatible async client
+    ├── db.py                    # SQLite persistence (aiosqlite)
+    ├── models/
+    │   ├── __init__.py
+    │   ├── textblock.py         # TextBlock, VirtualTextBlockDef, TextBlockList
+    │   ├── node.py              # NodeDefinition, ApiConfiguration, JSON serde
+    │   └── workflow.py          # WorkflowDefinition, topological_sort, JSON serde
+    ├── runner/
+    │   ├── __init__.py
+    │   ├── engine.py            # core-runner (topo sort → LLM → cache, agent integration)
+    │   ├── prompt.py            # Prompt assembly (resolve virtual blocks + agent context)
+    │   ├── cache.py             # Runtime output cache
+    │   └── curate.py            # Curation pipeline (persist to OpenViking)
+    ├── agent/
+    │   ├── __init__.py
+    │   ├── core.py              # AgentContext, Evaluation, Decision types
+    │   ├── context.py           # Role A (intent analysis → OpenViking retrieval)
+    │   ├── builder.py           # Role B (stub, Phase 4)
+    │   └── monitor.py           # Role C (factual consistency checking)
+    └── viking/
+        ├── __init__.py
+        ├── client.py            # OpenViking SyncOpenViking init/close
+        ├── project.py           # Project structure (viking:// directory layout)
+        └── profiles.py          # Multi-angle profile generation
+```
+
+### CLI usage
+
+```bash
+flowcabal init                              # create ~/.flowcabal/config.toml
+flowcabal run <workflow.json> [--stream] [--agents]  # execute from file
+flowcabal workflow save/list/load/delete/run         # SQLite persistence
+flowcabal project init/status               # OpenViking project
+flowcabal output persist/list               # curation
 ```
 
 ## WebSocket Protocol
@@ -163,7 +197,7 @@ Full protocol in `docs/new_design_v4.typ`.
 ## Tech Stack
 
 - **Frontend**: Svelte 5 (Runes), @xyflow/svelte, Vite 7, TypeScript 5.9, Tailwind 3, dagre/elkjs
-- **Backend**: Python, SQLite, OpenViking, OpenAI-compatible API
+- **Backend**: Python (uv), SQLite, OpenViking, OpenAI-compatible API
 
 ## Design Decisions
 
