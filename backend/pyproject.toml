@@ -8,6 +8,9 @@ dependencies = [
     "pydantic>=2",
     "click",
     "aiosqlite",
+    "sqlalchemy[asyncio]>=2.0",
+    "alembic",
+    "cryptography",
     "tomli-w",
     "openviking>=0.1.17",
 ]
