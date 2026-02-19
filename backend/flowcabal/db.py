@@ -12,8 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async
 
 from .config import FlowCabalConfig
 from .db_models import RunOutputRow, WorkflowRow
-from .models.textblock import NodeId
-from .models.workflow import WorkflowDefinition, workflow_from_dict, workflow_to_dict
+from .models import NodeId, WorkflowDefinition, workflow_from_dict, workflow_to_dict
 
 
 class Database:

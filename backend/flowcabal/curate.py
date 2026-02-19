@@ -7,7 +7,7 @@ from pathlib import Path
 
 from openviking import SyncOpenViking
 
-from ..models.textblock import NodeId
+from .models import NodeId
 
 
 def persist_output(
@@ -26,7 +26,6 @@ def persist_output(
     name = chapter_name or f"output-{node_id[:8]}"
     target_uri = f"viking://resources/project/manuscript/{name}/"
 
-    # add_resource requires a filesystem path, so write to a temp file
     with tempfile.NamedTemporaryFile(
         mode="w", suffix=".md", delete=False, prefix=f"fc-{name}-"
     ) as f:

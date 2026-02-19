@@ -10,8 +10,8 @@ from pathlib import Path
 import click
 
 from .config import FlowCabalConfig
-from .models.workflow import workflow_from_dict, workflow_to_dict
-from .runner.engine import CliCallbacks, run_workflow
+from .models import workflow_from_dict, workflow_to_dict
+from .engine import CliCallbacks, run_workflow
 
 
 @click.group()
@@ -26,7 +26,7 @@ def cli() -> None:
 
 @cli.command()
 def init() -> None:
-    """Create default config at ~/.flowcabal/config.toml."""
+    """Create default config at .flowcabal/config.toml (project-local)."""
     config_path = FlowCabalConfig.config_path()
     if config_path.exists():
         click.echo(f"Config already exists at {config_path}")
@@ -36,7 +36,70 @@ def init() -> None:
     config = FlowCabalConfig()
     config.save()
     click.echo(f"Created config at {config_path}")
-    click.echo("Edit it to add your API key and endpoint settings.")
+    click.echo("Set your API key: flowcabal key set")
+
+
+# ---------------------------------------------------------------------------
+# key management
+# ---------------------------------------------------------------------------
+
+_VALID_ROLES = ("default", "user_llm", "agent_llm", "embedding")
+
+
+@cli.group()
+def key() -> None:
+    """Manage API keys (encrypted in SQLite)."""
+
+
+@key.command("set")
+@click.argument("role", default="default", type=click.Choice(_VALID_ROLES))
+def key_set(role: str) -> None:
+    """Store an API key (encrypted). ROLE defaults to 'default' (all roles)."""
+    from .keystore import mask, save_api_key
+
+    config = FlowCabalConfig.load()
+    db_path = config.ensure_data_dir() / "flowcabal.db"
+    project_dir = FlowCabalConfig.project_dir()
+
+    value = click.prompt("API key", hide_input=True)
+    if not value.strip():
+        click.echo("Empty key, nothing saved.", err=True)
+        return
+
+    save_api_key(db_path, project_dir, role, value.strip())
+    click.echo(f"Saved {role} key: {mask(value.strip())}")
+
+
+@key.command("list")
+def key_list() -> None:
+    """Show configured API keys (masked)."""
+    from .keystore import load_api_keys, mask
+
+    config = FlowCabalConfig.load()
+    db_path = config.data_dir / "flowcabal.db"
+    project_dir = FlowCabalConfig.project_dir()
+
+    keys = load_api_keys(db_path, project_dir)
+    if not keys:
+        click.echo("No API keys configured. Run: flowcabal key set")
+        return
+    for role, value in sorted(keys.items()):
+        click.echo(f"  {role}: {mask(value)}")
+
+
+@key.command("delete")
+@click.argument("role", default="default", type=click.Choice(_VALID_ROLES))
+def key_delete(role: str) -> None:
+    """Remove an API key. ROLE defaults to 'default'."""
+    from .keystore import delete_api_key
+
+    config = FlowCabalConfig.load()
+    db_path = config.data_dir / "flowcabal.db"
+
+    if delete_api_key(db_path, role):
+        click.echo(f"Deleted {role} key.")
+    else:
+        click.echo(f"No {role} key found.", err=True)
 
 
 # ---------------------------------------------------------------------------
@@ -51,7 +114,7 @@ def run(workflow_file: Path, stream: bool, agents: bool) -> None:
     """Execute a workflow from a JSON file."""
     config = FlowCabalConfig.load()
     if not config.user_llm.api_key:
-        click.echo("Error: No API key configured. Run 'flowcabal init' and edit ~/.flowcabal/config.toml", err=True)
+        click.echo("Error: No API key. Run: flowcabal key set", err=True)
         sys.exit(1)
 
     with open(workflow_file) as f:
@@ -60,25 +123,25 @@ def run(workflow_file: Path, stream: bool, agents: bool) -> None:
     workflow = workflow_from_dict(data)
     click.echo(f"Loaded workflow: {workflow.name} ({len(workflow.nodes)} nodes)", err=True)
 
-    viking = None
-    if agents:
-        from .viking.client import init_viking
-        from .viking.project import ensure_project
+    agent_hooks = None
+    if agents or config.enable_agents:
+        from .viking import init_viking, ensure_project
+        from .agents import LiveAgentHooks
         viking = init_viking(config)
         ensure_project(viking)
+        agent_hooks = LiveAgentHooks(viking, config.agent_llm)
         click.echo("Agents enabled (Role A context + Role C monitor)", err=True)
 
     callbacks = CliCallbacks(stream=stream)
     try:
         outputs = asyncio.run(run_workflow(
             workflow, config, stream=stream, callbacks=callbacks,
-            viking=viking, enable_agents=agents,
+            agent_hooks=agent_hooks,
         ))
     finally:
-        if viking:
-            viking.close()
+        if agent_hooks is not None:
+            agent_hooks.viking.close()
 
-    # Print final outputs to stdout
     click.echo("\n=== Workflow Outputs ===", err=True)
     for node_id, output in outputs.items():
         node = workflow.nodes.get(node_id)
@@ -88,7 +151,7 @@ def run(workflow_file: Path, stream: bool, agents: bool) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Phase 2: workflow subcommands (added later)
+# workflow subcommands
 # ---------------------------------------------------------------------------
 
 @cli.group()
@@ -146,7 +209,6 @@ def workflow_load(workflow_id: str) -> None:
         async with Database(config) as db:
             wf = await db.load_workflow(workflow_id)
             if wf is None:
-                # Try prefix match
                 wf = await db.load_workflow_by_prefix(workflow_id)
             if wf is None:
                 click.echo(f"Workflow '{workflow_id}' not found.", err=True)
@@ -199,12 +261,13 @@ def workflow_run(workflow_id: str, stream: bool, agents: bool) -> None:
                 click.echo(f"Workflow '{workflow_id}' not found.", err=True)
                 sys.exit(1)
 
-        viking = None
-        if agents:
-            from .viking.client import init_viking
-            from .viking.project import ensure_project
+        agent_hooks = None
+        if agents or config.enable_agents:
+            from .viking import init_viking, ensure_project
+            from .agents import LiveAgentHooks
             viking = init_viking(config)
             ensure_project(viking)
+            agent_hooks = LiveAgentHooks(viking, config.agent_llm)
             click.echo("Agents enabled (Role A context + Role C monitor)", err=True)
 
         click.echo(f"Running workflow: {wf.name} ({len(wf.nodes)} nodes)", err=True)
@@ -212,11 +275,11 @@ def workflow_run(workflow_id: str, stream: bool, agents: bool) -> None:
         try:
             outputs = await run_workflow(
                 wf, config, stream=stream, callbacks=callbacks,
-                viking=viking, enable_agents=agents,
+                agent_hooks=agent_hooks,
             )
         finally:
-            if viking:
-                viking.close()
+            if agent_hooks is not None:
+                agent_hooks.viking.close()
 
         click.echo("\n=== Workflow Outputs ===", err=True)
         for node_id, output in outputs.items():
@@ -229,7 +292,7 @@ def workflow_run(workflow_id: str, stream: bool, agents: bool) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Phase 2: project subcommands
+# project subcommands
 # ---------------------------------------------------------------------------
 
 @cli.group()
@@ -240,8 +303,7 @@ def project() -> None:
 @project.command("init")
 def project_init() -> None:
     """Initialize the OpenViking project structure."""
-    from .viking.client import init_viking
-    from .viking.project import init_project
+    from .viking import init_viking, init_project
 
     config = FlowCabalConfig.load()
     client = init_viking(config)
@@ -255,8 +317,7 @@ def project_init() -> None:
 @project.command("status")
 def project_status() -> None:
     """Show project status and stats."""
-    from .viking.client import init_viking
-    from .viking.project import get_project_status
+    from .viking import init_viking, get_project_status
 
     config = FlowCabalConfig.load()
     client = init_viking(config)
@@ -273,7 +334,7 @@ def project_status() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Phase 2: output subcommands
+# output subcommands
 # ---------------------------------------------------------------------------
 
 @cli.group()
@@ -287,16 +348,13 @@ def output() -> None:
 @click.option("--name", default=None, help="Chapter/output name")
 def output_persist(node_id: str, run_id: str, name: str | None) -> None:
     """Persist a node output to OpenViking."""
-    from .viking.client import init_viking
-    from .viking.project import ensure_project
-    from .runner.curate import persist_output
+    from .viking import init_viking, ensure_project
+    from .curate import persist_output
 
     config = FlowCabalConfig.load()
     client = init_viking(config)
     try:
         ensure_project(client)
-        # For now, read output from the run_outputs table
-        # In the future, this will use the last run's cache
         from .db import Database
 
         async def _get_output() -> str | None:
@@ -317,8 +375,8 @@ def output_persist(node_id: str, run_id: str, name: str | None) -> None:
 @output.command("list")
 def output_list() -> None:
     """List curated outputs in OpenViking."""
-    from .viking.client import init_viking
-    from .runner.curate import list_outputs
+    from .viking import init_viking
+    from .curate import list_outputs
 
     config = FlowCabalConfig.load()
     client = init_viking(config)

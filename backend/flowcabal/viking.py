@@ -1,14 +1,41 @@
-"""OpenViking project structure management.
+"""OpenViking client initialization, lifecycle, and project structure.
 
-Creates and ensures the viking:// directory layout for a FlowCabal project.
+Merges: viking/client.py, viking/project.py.
 """
 
 from __future__ import annotations
 
 from openviking import SyncOpenViking
 
+from .config import FlowCabalConfig
 
-# The canonical project directory structure under viking://resources/project/
+
+# ---------------------------------------------------------------------------
+# Client lifecycle
+# ---------------------------------------------------------------------------
+
+def init_viking(config: FlowCabalConfig) -> SyncOpenViking:
+    """Create and initialize an OpenViking client in embedded mode.
+
+    Data is stored under config.data_dir / "viking".
+    """
+    viking_path = config.ensure_data_dir() / "viking"
+    viking_path.mkdir(parents=True, exist_ok=True)
+
+    client = SyncOpenViking(path=str(viking_path))
+    client.initialize()
+    return client
+
+
+def close_viking(client: SyncOpenViking) -> None:
+    """Cleanly shut down the OpenViking client."""
+    client.close()
+
+
+# ---------------------------------------------------------------------------
+# Project structure
+# ---------------------------------------------------------------------------
+
 _PROJECT_DIRS = [
     "viking://resources/project/",
     "viking://resources/project/meta/",
@@ -36,7 +63,6 @@ def init_project(client: SyncOpenViking) -> None:
         try:
             client.mkdir(uri)
         except Exception:
-            # Directory may already exist
             pass
 
 
@@ -55,7 +81,6 @@ def get_project_status(client: SyncOpenViking) -> dict:
     except Exception:
         return status
 
-    # Count items in each section
     for section in ["meta", "entities", "manuscript", "summaries", "profiles"]:
         uri = f"viking://resources/project/{section}/"
         try:

@@ -5,61 +5,37 @@
     "input-1": {
       "id": "input-1",
       "name": "Story Premise",
-      "position": {"x": 0, "y": 0},
-      "apiConfig": {
-        "connection": {"endpoint": "", "apiKey": "", "model": "gpt-4o"},
-        "parameters": {
-          "temperature": 0.9,
-          "maxTokens": 256,
-          "topP": 1,
-          "presencePenalty": 0,
-          "frequencyPenalty": 0,
-          "stopSequences": [],
-          "streaming": true
-        },
-        "systemPrompt": {
-          "id": "sp-1",
-          "blocks": [
-            {"type": "text", "id": "b1", "content": "You are a creative writing assistant. Generate a short, evocative premise for a fantasy story in 2-3 sentences."}
-          ]
-        },
-        "userPrompt": {
-          "id": "up-1",
-          "blocks": [
-            {"type": "text", "id": "b2", "content": "Write a premise for a story about a librarian who discovers that certain books can rewrite reality."}
-          ]
-        }
-      }
+      "system_prompt": {
+        "id": "sp-1",
+        "blocks": [
+          {"type": "text", "id": "b1", "content": "You are a creative writing assistant. Generate a short, evocative premise for a fantasy story in 2-3 sentences."}
+        ]
+      },
+      "user_prompt": {
+        "id": "up-1",
+        "blocks": [
+          {"type": "text", "id": "b2", "content": "Write a premise for a story about a librarian who discovers that certain books can rewrite reality."}
+        ]
+      },
+      "parameter_hints": {"temperature": 0.9, "max_tokens": 256}
     },
     "llm-1": {
       "id": "llm-1",
       "name": "Chapter Writer",
-      "position": {"x": 400, "y": 0},
-      "apiConfig": {
-        "connection": {"endpoint": "", "apiKey": "", "model": "gpt-4o"},
-        "parameters": {
-          "temperature": 0.8,
-          "maxTokens": 1024,
-          "topP": 1,
-          "presencePenalty": 0.1,
-          "frequencyPenalty": 0.1,
-          "stopSequences": [],
-          "streaming": true
-        },
-        "systemPrompt": {
-          "id": "sp-2",
-          "blocks": [
-            {"type": "text", "id": "b3", "content": "You are a literary fiction writer. Write vivid, engaging prose with strong sensory details. Write in third person past tense."}
-          ]
-        },
-        "userPrompt": {
-          "id": "up-2",
-          "blocks": [
-            {"type": "text", "id": "b4", "content": "Using the following premise, write the opening scene of a novel (about 500 words):\n\n"},
-            {"type": "virtual", "id": "b5", "sourceNodeId": "input-1", "displayName": "Premise"}
-          ]
-        }
-      }
+      "system_prompt": {
+        "id": "sp-2",
+        "blocks": [
+          {"type": "text", "id": "b3", "content": "You are a literary fiction writer. Write vivid, engaging prose with strong sensory details. Write in third person past tense."}
+        ]
+      },
+      "user_prompt": {
+        "id": "up-2",
+        "blocks": [
+          {"type": "text", "id": "b4", "content": "Using the following premise, write the opening scene of a novel (about 500 words):\n\n"},
+          {"type": "virtual", "id": "b5", "sourceNodeId": "input-1", "displayName": "Premise"}
+        ]
+      },
+      "parameter_hints": {"temperature": 0.8, "max_tokens": 1024}
     }
   }
 }
