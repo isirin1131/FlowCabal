@@ -1,45 +1,61 @@
 # FlowCabal
 
-Visual workflow editor for AI-assisted long-form writing. ComfyUI, but for text.
+AI 辅助长篇小说创作工具——"ComfyUI, but for text"。
 
-## TODO
+## 快速开始
 
-- [x] Base design (v3)
-- [x] Reference design analysis (OpenViking/OpenClaw/Trellis)
-- [x] v4 architecture design
-- [x] Headless backend Phase 1: Foundation
-  - [x] Core types (Python dataclasses mirroring TS `core/`)
-  - [x] Pydantic config (`~/.flowcabal/config.toml`)
-  - [x] Async OpenAI-compatible LLM client (streaming + non-streaming)
-  - [x] core-runner (Kahn's topological sort → sequential execution)
-  - [x] Prompt assembly (TextBlockList resolution + agent context injection)
-  - [x] CLI entry point (`flowcabal init`, `flowcabal run`)
-- [x] Headless backend Phase 2: Persistence + OpenViking
-  - [x] SQLite persistence (workflows CRUD, run outputs)
-  - [x] OpenViking embedded mode integration + project structure init
-  - [x] Curation pipeline (persist approved outputs → OpenViking with L0/L1)
-  - [x] Extended CLI (`flowcabal workflow/project/output` subcommands)
-- [x] Headless backend Phase 3: Agent system
-  - [x] Role A: intent analysis → OpenViking retrieval → context injection (~25-30K budget)
-  - [x] Role C: factual consistency checking (character, timeline, world rules, continuity)
-  - [x] Runner integration (retry loop + human escalation)
-  - [x] Multi-angle profile generation (characters, plot-threads)
-- [ ] Phase 4: Browser ↔ Backend integration
-  - [ ] Python WebSocket server layer on top of headless API
-  - [ ] Browser WebSocket client
-  - [ ] Workflow sync: Browser → WS → Python → SQLite
-  - [ ] Remove browser-side `db/` layer (IndexedDB/Dexie)
-- [ ] Phase 5: Advanced capabilities
-  - [ ] Role B: workflow construction suggestions
-  - [ ] Role C: multi-agent cross-checking
-  - [ ] Recursive invocation (iterative refinement)
-  - [ ] Evolutionary iteration (generate N → evaluate → select → iterate)
-  - [ ] Extended profile types (world state, themes, style)
-- [ ] Phase 6: Polish
-  - [ ] Agent chat interface (FloatingBall)
-  - [ ] Profile management UI
-  - [ ] Context source visualization (provenance)
-  - [ ] Performance optimization + error recovery
+```bash
+bun install
+bun run flowcabal init mynovel
+bun run flowcabal add-chapter chapter.md
+bun run flowcabal status
+bun run flowcabal generate
+```
+
+## 项目结构
+
+```
+packages/
+  engine/         核心无头引擎
+    src/
+      types.ts    领域类型
+      schema.ts   Zod schemas
+      dag/        Workflow DAG + 拓扑排序 + 执行器
+      store/      文件系统 store CRUD + L0 索引生成
+      context/    上下文组装（L0/L1）+ token 估算
+      llm/        Vercel AI SDK provider + generate/stream
+      agent/      Agent（单次/对话）+ 5 个工具 + 中文提示词
+  cli/            TUI 命令行
+    src/
+      commands/
+        init.ts         初始化项目
+        add-chapter.ts  添加章节 + Agent 分析
+        status.ts       项目状态
+        generate.ts     对话式创作 REPL
+        store.ts        store 管理（ls/read/write/index）
+```
+
+## 记忆架构
+
+三角度切片：
+- **characters/** — 角色卡（含语癖）
+- **timeline/** — 按时间序记事件
+- **world-rules/** — 世界观设定清单
+
+两类信息：
+- **规约 (prescriptive)** — 创作前已存在的约束，人维护
+- **状态 (descriptive)** — 从定稿章节提取
+
+上下文加载：
+- **L0**: `store/index.md`，每条一行摘要，始终注入
+- **L1/L2**: Agent 读 L0 后按需加载完整文件
+
+## 支持的 LLM
+
+- OpenAI
+- Anthropic
+- Google
+- OpenAI Compatible（DeepSeek 等）
 
 ## License
 

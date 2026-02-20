@@ -1,0 +1,19 @@
+{
+  "name": "@flowcabal/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "flowcabal": "src/index.ts"
+  },
+  "dependencies": {
+    "@flowcabal/engine": "workspace:*",
+    "@clack/prompts": "^0.8.0",
+    "ai": "^4.0.0",
+    "yargs": "^17.7.0"
+  },
+  "devDependencies": {
+    "@types/yargs": "^17.0.0",
+    "bun-types": "^1.1.0",
+    "typescript": "^5.5.0"
+  }
+}

@@ -1,13 +1,6 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-dist/
-build/
-.venv/
-
-# Frontend
 node_modules/
+dist/
+*.tsbuildinfo
 
 # FlowCabal data
 .flowcabal/
@@ -19,3 +12,7 @@ node_modules/
 
 # OS
 .DS_Store
+
+# env
+.env
+.env.*
