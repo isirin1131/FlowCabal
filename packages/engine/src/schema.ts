@@ -1,5 +1,15 @@
 import { z } from "zod";
 
+// ── JSON Value (for providerOptions) ──
+const JsonValueSchema: z.ZodType<import("./types.js").JsonValue> = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.null(),
+  z.lazy(() => z.array(JsonValueSchema)),
+  z.lazy(() => z.record(z.string(), JsonValueSchema)),
+]);
+
 // ── LLM Config ──
 export const LlmProviderSchema = z.enum([
   "openai",
@@ -16,6 +26,12 @@ export const LlmConfigSchema = z.object({
   baseURL: z.string().optional(),
   apiKey: z.string(),
   model: z.string(),
+  temperature: z.number().min(0).max(2).optional(),
+  maxTokens: z.number().int().positive().optional(),
+  topP: z.number().min(0).max(1).optional(),
+  frequencyPenalty: z.number().min(-2).max(2).optional(),
+  presencePenalty: z.number().min(-2).max(2).optional(),
+  providerOptions: z.record(z.string(), z.record(z.string(), z.lazy(() => JsonValueSchema))).optional(),
 });
 
 // ── TextBlock ──

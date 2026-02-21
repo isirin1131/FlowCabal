@@ -15,10 +15,7 @@ export function getProvider(config: LlmConfig) {
     case "openai":
       return createOpenAI({ apiKey: config.apiKey });
     case "openai-compatible":
-      return createOpenAI({
-        apiKey: config.apiKey,
-        baseURL: config.baseURL,
-      });
+      return createOpenAI({ apiKey: config.apiKey, baseURL: config.baseURL, });
     case "anthropic":
       return createAnthropic({ apiKey: config.apiKey });
     case "google":

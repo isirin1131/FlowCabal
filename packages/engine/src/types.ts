@@ -1,3 +1,12 @@
+// ── JSON ──
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue };
+
 // ── TextBlock ──
 export type TextBlock =
   | { kind: "literal"; content: string }
@@ -34,4 +43,10 @@ export interface LlmConfig {
   baseURL?: string;
   apiKey: string;
   model: string;
+  temperature?: number;
+  maxTokens?: number;
+  topP?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
+  providerOptions?: Record<string, Record<string, JsonValue>>;
 }

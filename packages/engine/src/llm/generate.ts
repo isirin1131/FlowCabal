@@ -1,25 +1,26 @@
 import { generateText, streamText } from "ai";
-
-// All @ai-sdk/* providers share the same callable pattern: provider(model) → LanguageModel
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Provider = (model: string) => any;
+import type { LlmConfig } from "../types.js";
+import { getProvider } from "./provider.js";
 
 /**
  * Generate text (non-streaming).
  */
 export async function generate(
-  provider: Provider,
-  model: string,
+  config: LlmConfig,
   system: string,
   prompt: string,
-  parameters?: { temperature?: number; maxTokens?: number }
 ): Promise<string> {
+  const provider = getProvider(config);
   const result = await generateText({
-    model: provider(model),
+    model: provider(config.model),
     system,
     prompt,
-    temperature: parameters?.temperature,
-    maxTokens: parameters?.maxTokens,
+    temperature: config.temperature,
+    maxTokens: config.maxTokens,
+    topP: config.topP,
+    frequencyPenalty: config.frequencyPenalty,
+    presencePenalty: config.presencePenalty,
+    providerOptions: config.providerOptions,
   });
   return result.text;
 }
@@ -29,19 +30,22 @@ export async function generate(
  * Returns the full accumulated text.
  */
 export async function streamGenerate(
-  provider: Provider,
-  model: string,
+  config: LlmConfig,
   system: string,
   prompt: string,
-  parameters?: { temperature?: number; maxTokens?: number },
-  onChunk?: (chunk: string) => void
+  onChunk?: (chunk: string) => void,
 ): Promise<string> {
+  const provider = getProvider(config);
   const result = streamText({
-    model: provider(model),
+    model: provider(config.model),
     system,
     prompt,
-    temperature: parameters?.temperature,
-    maxTokens: parameters?.maxTokens,
+    temperature: config.temperature,
+    maxTokens: config.maxTokens,
+    topP: config.topP,
+    frequencyPenalty: config.frequencyPenalty,
+    presencePenalty: config.presencePenalty,
+    providerOptions: config.providerOptions,
   });
 
   let full = "";
