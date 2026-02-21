@@ -1,35 +1,88 @@
 import { join } from "path";
 
-/** Resolve paths relative to project root */
-export function storePath(rootDir: string): string {
-  return join(rootDir, "store");
+// ── .flowcabal/ 根目录（仓库根） ──
+
+export function dotFlowcabalPath(rootDir: string): string {
+  return join(rootDir, ".flowcabal");
 }
 
-export function constraintsPath(rootDir: string): string {
-  return join(storePath(rootDir), "constraints");
+// ── data/：types.ts 里定义的持久化配置 ──
+
+export function dataPath(rootDir: string): string {
+  return join(dotFlowcabalPath(rootDir), "data");
 }
 
-export function statePath(rootDir: string): string {
-  return join(storePath(rootDir), "state");
+export function workflowsPath(rootDir: string): string {
+  return join(dataPath(rootDir), "workflows");
 }
 
-export function manuscriptsPath(rootDir: string): string {
-  return join(rootDir, "manuscripts");
+export function workflowFilePath(rootDir: string, workflowId: string): string {
+  return join(workflowsPath(rootDir), `${workflowId}.json`);
 }
 
-export function indexPath(rootDir: string): string {
-  return join(storePath(rootDir), "index.md");
+export function llmConfigsPath(rootDir: string): string {
+  return join(dataPath(rootDir), "llm-configs.json");
 }
 
-export function configPath(rootDir: string): string {
-  return join(rootDir, "flowcabal.json");
+// ── memory/：Agent 记忆（按小说项目隔离） ──
+
+export function memoryPath(rootDir: string, project: string): string {
+  return join(dotFlowcabalPath(rootDir), "memory", project);
 }
 
-/** Store subdirectories to initialize */
-export const STORE_DIRS = [
-  "constraints/characters",
-  "constraints/world-rules",
-  "constraints/plot",
-  "state/timeline",
-  "state/character-status",
+export function memoryIndexPath(rootDir: string, project: string): string {
+  return join(memoryPath(rootDir, project), "index.md");
+}
+
+export function charactersPath(rootDir: string, project: string): string {
+  return join(memoryPath(rootDir, project), "characters");
+}
+
+export function worldRulesPath(rootDir: string, project: string): string {
+  return join(memoryPath(rootDir, project), "world-rules");
+}
+
+export function plotPath(rootDir: string, project: string): string {
+  return join(memoryPath(rootDir, project), "plot");
+}
+
+export function timelinePath(rootDir: string, project: string): string {
+  return join(memoryPath(rootDir, project), "timeline");
+}
+
+export function characterStatusPath(rootDir: string, project: string): string {
+  return join(memoryPath(rootDir, project), "character-status");
+}
+
+export function manuscriptsPath(rootDir: string, project: string): string {
+  return join(memoryPath(rootDir, project), "manuscripts");
+}
+
+// ── runner-cache/：运行时缓存（按小说项目隔离） ──
+
+export function runnerCachePath(rootDir: string, project: string): string {
+  return join(dotFlowcabalPath(rootDir), "runner-cache", project);
+}
+
+export function nodeOutputPath(
+  rootDir: string,
+  project: string,
+  nodeId: string,
+): string {
+  return join(runnerCachePath(rootDir, project), "outputs", `${nodeId}.md`);
+}
+
+export function runnerStatePath(rootDir: string, project: string): string {
+  return join(runnerCachePath(rootDir, project), "state.json");
+}
+
+// ── 初始化时需要创建的记忆子目录 ──
+
+export const MEMORY_DIRS = [
+  "characters",
+  "world-rules",
+  "plot",
+  "timeline",
+  "character-status",
+  "manuscripts",
 ] as const;

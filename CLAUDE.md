@@ -11,20 +11,36 @@
 - `bun run typecheck` — 类型检查
 - `bun run flowcabal <command>` — 运行 CLI
 
-## 项目结构
+## 目录结构
 - `packages/engine/src/` — 核心引擎（types, schema, dag, store, context, llm, agent）
 - `packages/cli/src/` — CLI 入口 + 5 个 command（init, add-chapter, status, generate, store）
 - `docs/` — 设计文档（保留，不要动）
 - `backend/` — 旧代码 + 测试用样章（保留）
 
-## 用户项目目录结构
+## `.flowcabal/` 状态目录
+唯一一个，位于仓库根目录（免安装分发，不污染用户 home 空间）：
 ```
-project-root/
-  flowcabal.json          # ProjectConfig（defaultLlm 等）
-  manuscripts/            # 章节原文
-  store/                  # 记忆（constraints + state + index.md）
-  workflows/              # Workflow 模板（纯结构，跟着项目走）
-  .flowcabal/             # core-runner 缓存（per-workflow 用户配置、运行状态）
+.flowcabal/
+├── data/                        # 持久化配置（跨项目共享）
+│   ├── llm-configs.json         # 用户 LLM 配置（多套，按名引用）
+│   └── workflows/               # Workflow 模板
+│       └── <workflow-id>.json
+├── memory/                      # Agent 记忆（按小说项目隔离）
+│   └── <project>/
+│       ├── index.md             # L0 索引（Agent 导航入口）
+│       ├── premise.md           # 梗概、类型、主题内核
+│       ├── characters.md        # 角色：背景因果→性格→动机→关系
+│       ├── world.md             # 世界：硬规则、体系原理、边界
+│       ├── voice.md             # 叙事：POV、时态、文体锚点
+│       ├── outline.md           # 大纲 + 作者设想/创意笔记
+│       ├── chronicle.md         # 已发生事件梗概（中观粒度）
+│       ├── threads.md           # 伏笔/悬念追踪
+│       └── manuscripts/         # 定稿章节
+└── runner-cache/                # 运行时缓存（按小说项目隔离）
+    └── <project>/
+        ├── state.json           # 节点执行状态
+        └── outputs/
+            └── <node-id>.md     # 节点输出缓存
 ```
 
 ## 架构要点
@@ -43,8 +59,8 @@ project-root/
 - `agent-inject` — Agent 注入点，带 hint 告诉 Agent 方向，Agent 读 L0 自主决定注入什么内容；一个节点可以有多个注入点，出现在 prompt 的不同位置
 
 ### LLM 配置
-- `ProjectConfig.defaultLlm` 提供全局默认
-- per-node LLM 覆盖配置存在 core-runner 缓存中，不在 Workflow 元数据里
+- 用户 LLM 配置存在 `.flowcabal/data/llm-configs.json`，支持多套配置按名引用，其中一套为 default
+- per-node LLM 覆盖配置存在 runner-cache 中，不在 Workflow 元数据里
 
 ## 代码规范
 - 中文提示词、中文 UI 文案
