@@ -28,8 +28,7 @@ export async function executeWorkflow(
     const systemPrompt = resolveBlocks(node.systemPrompt, outputs);
     const userPrompt = resolveBlocks(node.userPrompt, outputs);
 
-    const llmConfig =
-      node.role === "user_llm" ? config.userLlm : config.agentLlm;
+    const llmConfig = node.llm ?? config.defaultLlm;
     const provider = getProvider(llmConfig);
 
     let text: string;

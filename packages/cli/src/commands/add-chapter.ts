@@ -46,7 +46,7 @@ export const addChapterCommand: CommandModule<{}, { file: string }> = {
     try {
       const result = await runAgent(
         rootDir,
-        config.agentLlm,
+        config.defaultLlm,
         `请分析以下章节并提取信息写入 store：\n\n${content}`,
         SYSTEM_PROMPT_ANALYZE
       );

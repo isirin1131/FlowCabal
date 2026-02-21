@@ -2,6 +2,9 @@ import type { LlmConfig } from "../types.js";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { createMistral } from "@ai-sdk/mistral";
+import { createXai } from "@ai-sdk/xai";
+import { createCohere } from "@ai-sdk/cohere";
 
 /**
  * Create a Vercel AI SDK provider from LlmConfig.
@@ -20,6 +23,12 @@ export function getProvider(config: LlmConfig) {
       return createAnthropic({ apiKey: config.apiKey });
     case "google":
       return createGoogleGenerativeAI({ apiKey: config.apiKey });
+    case "mistral":
+      return createMistral({ apiKey: config.apiKey });
+    case "xai":
+      return createXai({ apiKey: config.apiKey });
+    case "cohere":
+      return createCohere({ apiKey: config.apiKey });
     default:
       throw new Error(`Unknown provider: ${config.provider}`);
   }

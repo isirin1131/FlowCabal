@@ -78,8 +78,7 @@ export const initCommand: CommandModule<{}, { name: string }> = {
     const config = {
       name,
       rootDir,
-      userLlm: llmConfig,
-      agentLlm: llmConfig,
+      defaultLlm: llmConfig,
     };
 
     await writeFile(

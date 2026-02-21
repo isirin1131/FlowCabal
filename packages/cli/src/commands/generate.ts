@@ -33,7 +33,7 @@ export const generateCommand: CommandModule = {
       messages.push({ role: "user", content: input as string });
 
       process.stdout.write("\n助手: ");
-      const gen = conversationalAgent(rootDir, config.userLlm, messages);
+      const gen = conversationalAgent(rootDir, config.defaultLlm, messages);
 
       let full = "";
       while (true) {

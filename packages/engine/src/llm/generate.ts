@@ -1,8 +1,8 @@
 import { generateText, streamText } from "ai";
 
-type Provider = ReturnType<typeof import("@ai-sdk/openai").createOpenAI> |
-  ReturnType<typeof import("@ai-sdk/anthropic").createAnthropic> |
-  ReturnType<typeof import("@ai-sdk/google").createGoogleGenerativeAI>;
+// All @ai-sdk/* providers share the same callable pattern: provider(model) → LanguageModel
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Provider = (model: string) => any;
 
 /**
  * Generate text (non-streaming).
@@ -15,7 +15,7 @@ export async function generate(
   parameters?: { temperature?: number; maxTokens?: number }
 ): Promise<string> {
   const result = await generateText({
-    model: (provider as any)(model),
+    model: provider(model),
     system,
     prompt,
     temperature: parameters?.temperature,
@@ -37,7 +37,7 @@ export async function streamGenerate(
   onChunk?: (chunk: string) => void
 ): Promise<string> {
   const result = streamText({
-    model: (provider as any)(model),
+    model: provider(model),
     system,
     prompt,
     temperature: parameters?.temperature,
