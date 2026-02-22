@@ -21,37 +21,36 @@
 唯一一个，位于仓库根目录（免安装分发，不污染用户 home 空间）：
 ```
 .flowcabal/
-├── data/                        # 持久化配置（跨项目共享）
-│   ├── llm-configs.json         # 用户 LLM 配置（多套，按名引用）
-│   └── workflows/               # Workflow 模板
-│       └── <workflow-id>.json
-├── memory/                      # Agent 记忆（按小说项目隔离）
+├── data/                              # 持久化配置（跨项目、跨工作区共享）
+│   ├── llm-configs.json               # LLM 配置池（多套，按名引用，一套 default）
+│   ├── workflows/                     # Workflow 模板（纯蓝图，用于分享）
+│   │   └── <workflow-id>.json
+│   └── preferences/                   # 用户对模板的个性化配置
+│       └── <workflow-id>.json         # per-node LLM 覆盖等偏好，跨工作区生效
+├── memory/                            # Agent 记忆（按小说项目隔离）
 │   └── <project>/
-│       ├── index.md             # L0 索引（Agent 导航入口）
-│       ├── premise.md           # 梗概、类型、主题内核
-│       ├── characters.md        # 角色：背景因果→性格→动机→关系
-│       ├── world.md             # 世界：硬规则、体系原理、边界
-│       ├── voice.md             # 叙事：POV、时态、文体锚点
-│       ├── outline.md           # 大纲 + 作者设想/创意笔记
-│       ├── chronicle.md         # 已发生事件梗概（中观粒度）
-│       ├── threads.md           # 伏笔/悬念追踪
-│       └── manuscripts/         # 定稿章节
-└── runner-cache/                # 运行时缓存（按小说项目隔离）
-    └── <project>/
-        ├── state.json           # 节点执行状态
+│       ├── index.md                   # L0 导航
+│       ├── characters.md              # 角色生成性事实
+│       ├── world.md                   # 世界硬规则 + 类型设定约束
+│       ├── voice.md                   # 文体约束 + 类型叙事约束
+│       └── manuscripts/               # L2 完整信息源（定稿章节）
+└── runner-cache/                      # 工作区（按 workspace 隔离，删除即释放）
+    └── <workspace-id>/
+        ├── meta.json                  # { workflowId, projectId, createdAt }
         └── outputs/
-            └── <node-id>.md     # 节点输出缓存
+            └── <node-id>.json         # { promptHash, agentInjects, output }
 ```
 
 ## 架构要点
 
-### Workflow 与 Core-runner 分层
-- **Workflow** = 纯模板/蓝图，只描述节点结构和 prompt 组合方式，不含 LLM 配置和运行参数
-- **Core-runner** = 运行时引擎，读蓝图 + 读缓存配置拼出完整执行计划，有自己的持久化存储（`.flowcabal/`），文件级，不需要 db
+### Workflow / Workspace / Project 三层解耦
+- **Workflow** = 纯模板/蓝图，只描述节点结构和 prompt 组合方式，不含 LLM 配置，用于分享
+- **Workspace** = workflow 的一次实例化，绑定 project，存执行缓存；用户在其中反复调试；删除即释放
+- **Project** = 小说项目，拥有独立的 memory/ 目录
+- **Core-runner** = 运行时引擎，增量构建系统，以 node 为粒度缓存
 
 ### DAG 连接关系
 - 没有显式 edges —— 从 TextBlock 的 `kind: "ref"` 隐式推导
-- Agent 动态修改 workflow 时能 O(1) 得知连接变化
 
 ### TextBlock 三种类型
 - `literal` — 静态文本
@@ -60,7 +59,11 @@
 
 ### LLM 配置
 - 用户 LLM 配置存在 `.flowcabal/data/llm-configs.json`，支持多套配置按名引用，其中一套为 default
-- per-node LLM 覆盖配置存在 runner-cache 中，不在 Workflow 元数据里
+- per-node LLM 覆盖存在 `data/preferences/<workflow-id>.json`，跨工作区生效
+
+### 缓存二维失效
+- **结构性失效（自动）**：节点的 literal+ref prompt hash 变化 → 必须重跑，自动级联下游
+- **上下文过期（预警）**：project memory/manuscripts 被修改 → agent-inject 缓存可能过期 → 预警用户
 
 ## 代码规范
 - 中文提示词、中文 UI 文案

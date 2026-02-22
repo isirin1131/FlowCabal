@@ -3,7 +3,7 @@
 
 = FlowCabal 架构设计文档 v5
 
-*日期: 2026.02.20*
+*日期: 2026.02.22*
 
 推倒重来。抛弃 Python 后端、OpenViking、浏览器 UI、SQLite。纯 TypeScript + Bun，文件系统存储，TUI 优先。
 
@@ -18,8 +18,8 @@
 v4 设计是"正确但过重"的架构。核心问题：
 
 1. *OpenViking 强制 embedding*：向量搜索在约束空间 ~50-100KB 的场景下是杀鸡用牛刀。Agent 读一个索引文件就能决定加载什么，比余弦相似度更准确——Agent 理解叙事上下文
-2. *多角度侧写与约束切分重合*：v4 设计了 5 种侧写类型（角色、情节线、世界状态、主题、文风），但主题是人类决策、文风是流动的，不该被固化为侧写。剩下的三个角度（角色、时间线、世界观）用纯文件就能管理
-3. *Python + Browser + WS 链路过长*：三进程协调（浏览器 → WebSocket → Python + AGFS 子进程）增加了大量偶发复杂度。单进程 TypeScript 可以消除所有 IPC
+2. *多角度侧写与约束切分重合*：v4 设计了 5 种侧写类型（角色、情节线、世界状态、主题、文风），但主题是人类决策、文风是流动的，不该被固化为侧写
+3. *Python + Browser + WS 链路过长*：三进程协调增加了大量偶发复杂度。单进程 TypeScript 可以消除所有 IPC
 4. *三角色 Agent 过早优化*：Role A/B/C 的分离在没有工作的基础执行引擎之前是空中楼阁
 
 v5 的策略：*先让最小可用版本跑起来*，再逐步添加复杂度。
@@ -29,23 +29,20 @@ v5 的策略：*先让最小可用版本跑起来*，再逐步添加复杂度。
 从 v4（及更早版本）保留的设计决策：
 
 - *DAG 工作流 + 拓扑排序执行*：核心抽象不变
-- *TextBlock = literal | ref*：节点间通过引用传递输出
-- *L0/L1/L2 层次化上下文*：索引 → 摘要 → 全文的渐进加载
-- *规约 vs 状态*：两类信息的区分（prescriptive vs descriptive）
+- *TextBlock*：节点 prompt 的构成单元，通过引用传递输出
+- *L0/L1/L2 层次化上下文*：索引 → 记忆文件 → 原稿的渐进加载
 - *人类定义 what，AI 负责 how*：创作哲学不变
 - *有界上下文预算*：无论手稿多长，上下文加载有预算上限
 
-== 新的参考架构
+== 已废弃的旧概念
 
-#table(
-  columns: (auto, auto, 1fr),
-  inset: 8pt,
-  align: horizon,
-  [*来源*], [*采纳的设计*], [*在 v5 中的体现*],
-  [OpenCode], [项目骨架], [TypeScript + Bun monorepo，CLI 架构，配置管理],
-  [OpenClaw], [记忆设计], [三角度切片 + 两层信息分类，文件系统 store],
-  [Vercel AI SDK], [LLM 抽象], [统一的 provider/model 接口，流式输出，tool calling],
-)
+以下概念在设计演化中被证明不再需要：
+
+- *冻结节点输出（freeze）*：v1-v3 中用于在交互式 UI 里锁定下游节点不被上游更新覆盖。v5 是 TUI/CLI + 单次 DAG 执行，不存在"上游重跑、下游要保护"的场景
+- *环形节点*：迭代精修（生成→评估→重新生成）在 Agent 的推理内部完成，不需要 DAG 环。Kahn 算法天然拒绝环
+- *规约/状态分层（prescriptive/descriptive）*：人和 Agent 共同读写所有记忆文件，不需要区分先验/后验
+- *显式 Edge 类型*：从 TextBlock `kind: "ref"` 隐式推导即可
+- *workflow 级 state.json*：被 per-node 增量缓存取代
 
 #line(length: 100%)
 
@@ -60,13 +57,12 @@ v5 的策略：*先让最小可用版本跑起来*，再逐步添加复杂度。
 │  ┌──────────┐  ┌──────────┐  ┌───────────────┐  │
 │  │ CLI/TUI  │  │  Engine  │  │  LLM Provider │  │
 │  │ (yargs + │→│  (DAG +  │→│  (Vercel AI   │  │
-│  │  clack)  │  │  Store)  │  │   SDK)        │  │
+│  │  clack)  │  │  Agent)  │  │   SDK)        │  │
 │  └──────────┘  └──────────┘  └───────────────┘  │
 │                     │                            │
 │              ┌──────▼──────┐                     │
-│              │ 文件系统      │                     │
-│              │ store/       │                     │
-│              │ manuscripts/ │                     │
+│              │  .flowcabal/ │                     │
+│              │  文件系统      │                     │
 │              └─────────────┘                     │
 └─────────────────────────────────────────────────┘
 ```
@@ -81,16 +77,16 @@ flowcabal/
   packages/
     engine/                 # 核心无头引擎（零 UI 依赖）
       src/
-        types.ts            # 领域类型
-        schema.ts           # Zod schemas
-        dag/                # Workflow DAG
-          workflow.ts       # Workflow 容器 + Kahn 拓扑排序
-          executor.ts       # 顺序执行（流式）
-          resolve.ts        # TextBlock ref → 上游输出
-        store/              # 文件系统记忆
+        types.ts            # 领域类型（Workflow 元数据层）
+        schema.ts           # Zod schemas（运行时校验）
+        dag/                # DAG 执行
+          workflow.ts       # Kahn 拓扑排序
+          executor.ts       # 增量构建执行器
+          resolve.ts        # TextBlock 解析
+        store/              # 文件系统存储
+          paths.ts          # 路径定义（含完整路径树）
           store.ts          # CRUD
           index-gen.ts      # 生成 index.md (L0)
-          paths.ts          # 路径工具
         context/            # 上下文组装
           assembler.ts      # L0 + 按需 L1
           budget.ts         # token 估算
@@ -98,98 +94,109 @@ flowcabal/
           provider.ts       # Vercel AI SDK provider 工厂
           generate.ts       # generateText + streamText
         agent/              # Agent
-          agent.ts          # runAgent + conversationalAgent
-          tools.ts          # 5 个 Zod tool
+          agent.ts          # Agent 实现
+          tools.ts          # Zod tool 定义
           prompts.ts        # 中文系统提示词
     cli/                    # TUI
       src/
         index.ts            # bin: flowcabal
-        config.ts           # 加载 flowcabal.json
+        config.ts           # 配置加载
         commands/
-          init.ts           # flowcabal init
-          add-chapter.ts    # flowcabal add-chapter <file>
-          status.ts         # flowcabal status
-          generate.ts       # flowcabal generate（对话式 REPL）
-          store.ts          # flowcabal store ls|read|write|index
 ```
 
 Engine 包零 UI 依赖，可以被任何前端（TUI、Web、Electron）使用。
 
-== 与 v4 架构对比
+#line(length: 100%)
+
+= 核心概念：三层解耦
+
+== Workflow / Workspace / Project
+
+三个概念彼此解耦：
 
 #table(
-  columns: (auto, auto, auto),
+  columns: (auto, auto, 1fr),
   inset: 8pt,
   align: horizon,
-  [*维度*], [*v4*], [*v5*],
-  [语言], [Python 后端 + TypeScript 前端], [纯 TypeScript + Bun],
-  [进程], [Browser + WS + Python + AGFS], [单进程],
-  [存储], [SQLite + OpenViking (AGFS + LevelDB)], [纯文件系统],
-  [检索], [OpenViking 向量搜索 + HierarchicalRetriever], [Agent 驱动的 L0 索引 + 按需加载],
-  [UI], [Svelte 浏览器 UI], [TUI (Phase 1) → Web (Phase 2)],
-  [Agent], [三角色 (A/B/C)], [单 Agent + tool calling],
-  [LLM 集成], [直接 HTTP 调用], [Vercel AI SDK],
-  [配置], [SQLite + 内存], [`flowcabal.json`],
-  [代码量], [~3000+ 行（预估）], [~1200 行],
+  [*概念*], [*存储位置*], [*职责*],
+  [Workflow], [`data/workflows/`], [纯模板/蓝图。只描述节点结构和 prompt 组合方式（TextBlock[]），不含 LLM 配置。用于朋友间分享工作流],
+  [Project], [`memory/<project>/`], [小说项目。拥有独立的 Agent 记忆（角色、世界、文体、定稿章节）],
+  [Workspace], [`runner-cache/<workspace-id>/`], [Workflow 的一次实例化运行环境。绑定一个 project，存执行缓存。用户在其中反复调试。删除即释放全部缓存],
 )
+
+- 同一个 Workflow 可以被多个 Workspace 实例化
+- 同一个 Project 可以在不同 Workspace 中使用不同的 Workflow
+- Workflow 是*分享*的单元，Workspace 是*工作*的单元
+
+== 用户偏好
+
+per-node LLM 覆盖等用户个性化配置存在 `data/preferences/<workflow-id>.json`，跨工作区生效。这解决了"每次新建 workspace 都要重配 LLM"的问题，同时不污染 workflow 模板的纯净性。
 
 #line(length: 100%)
 
 = 类型系统
 
-== 核心类型
+== TextBlock
+
+节点 prompt 的构成单元，三种类型：
 
 ```typescript
-// 节点 prompt 的构成单元
 type TextBlock =
-  | { kind: "literal"; content: string }   // 字面量文本
-  | { kind: "ref"; nodeId: string };       // 引用上游节点输出
+  | { kind: "literal"; content: string }
+  | { kind: "ref"; nodeId: string }
+  | { kind: "agent-inject"; hint: string };
+```
 
-// DAG 节点定义
+- `literal` — 静态文本，用户直接编写
+- `ref` — 引用上游节点输出，执行时动态替换
+- `agent-inject` — Agent 注入点。`hint` 告诉 Agent 方向，Agent 读 L0 自主决定注入什么内容。一个节点可以有多个注入点，出现在 prompt 的不同位置
+
+`ref` 同时定义了 DAG 的隐式连接关系——不需要显式 Edge 类型。
+
+== NodeDef
+
+```typescript
 interface NodeDef {
   id: string;
   label: string;
-  role: "user_llm" | "agent_llm";          // 使用哪套 LLM
   systemPrompt: TextBlock[];
   userPrompt: TextBlock[];
-  parameters?: { temperature?: number; maxTokens?: number };
-}
-
-// DAG 边
-interface Edge { id: string; source: string; target: string }
-
-// 工作流 = 节点 + 边
-interface Workflow {
-  id: string; name: string;
-  nodes: NodeDef[]; edges: Edge[];
 }
 ```
 
-`TextBlock` 是 v4 以来一直保留的核心抽象。`kind: "ref"` 实现节点间数据流——下游节点的 prompt 可以引用上游节点的输出，在执行时动态替换。
+节点不存储 LLM 配置。LLM 选择在运行时由以下优先级决定：
+1. `data/preferences/<workflow-id>.json` 中的 per-node 覆盖
+2. `data/llm-configs.json` 中的 default 配置
 
-== 配置
+== Workflow
+
+```typescript
+interface Workflow {
+  id: string;
+  name: string;
+  nodes: NodeDef[];
+}
+```
+
+纯模板。没有 edges（从 ref 隐式推导），没有 LLM 配置，没有运行状态。
+
+== LLM 配置
 
 ```typescript
 type LlmProvider = "openai" | "anthropic" | "google" | "openai-compatible";
 
 interface LlmConfig {
+  name: string;
   provider: LlmProvider;
-  baseURL?: string;        // openai-compatible 需要（如 DeepSeek）
+  baseURL?: string;
   apiKey: string;
   model: string;
 }
-
-interface ProjectConfig {
-  name: string;
-  rootDir: string;
-  userLlm: LlmConfig;     // 创作用
-  agentLlm: LlmConfig;    // 元推理用（分析、提取、对话）
-}
 ```
 
-两套 LLM 配置从 v4 保留。创作用高质量模型，元推理用快速/廉价模型。`openai-compatible` provider 支持 DeepSeek 等第三方 API。
+用户在 `data/llm-configs.json` 中维护多套 LLM 配置，按 `name` 引用，其中一套为 default。`openai-compatible` 支持 DeepSeek 等第三方 API。
 
-所有类型均有对应的 Zod schema，用于运行时校验 `flowcabal.json`。
+所有类型均有对应的手写 Zod schema（`schema.ts`），用于运行时校验。types.ts 与 schema.ts 各自维护，不用 `z.infer`。
 
 #line(length: 100%)
 
@@ -197,150 +204,163 @@ interface ProjectConfig {
 
 == 设计哲学
 
-v4 的五种侧写类型（角色、情节线、世界状态、主题、文风）在实践中存在问题：
+=== 约束查询是核心能力
 
-- *主题*是人类的创作决策，不应被 LLM 提取固化——固化后反而会限制创作方向
-- *文风*是流动的，尤其在长篇中可能随情节阶段变化——固化为侧写会引导 LLM 趋向平均化
+记忆模块的底层能力是*约束查询*：给出新内容，判断它与已有章节有没有冲突、冲突在哪里。
 
-保留三个角度，因为它们是*可客观提取*的事实性信息：
+关键洞察：*约束查询和上下文注入是同一个能力的两面。* Agent 拿节点 prompt + 上游输出作为锚点去 memory 做约束查询，查到的相关约束就是该注入的上下文。不存在独立的"检索阶段"和"生成阶段"。
+
+=== Memory 是 manuscripts 的有损缓存
+
+Memory 文件不是独立的知识库，而是 manuscripts（定稿章节）的*有损缓存*。类比 coding agent：代码库是 memory，grep 是检索。对于 FlowCabal：`manuscripts/` 是完整信息源，memory 文件是为了避免每次都加载全部原文的缓存层。
+
+=== 不用 RAG
+
+RAG 的 embedding 召回基于语义相似性，但小说中语义相似的段落可能有几十上百种，召回无法区分哪个是当前需要的。Memory 的跳转链接是*因果关系驱动*的检索，比语义相似性更准确。
+
+== 种子文件
+
+init 时只创建有*真实约束力*的文件——即 Agent 无法从 manuscripts 自动衍生的东西：
 
 #table(
   columns: (auto, auto, 1fr),
   inset: 8pt,
   align: horizon,
-  [*角度*], [*路径*], [*内容*],
-  [角色], [`characters/`], [姓名、身份、外貌、性格、语癖、能力、当前状态],
-  [时间线], [`timeline/`], [按时间顺序的事件记录，每条简短],
-  [世界观], [`world-rules/`], [地名、组织、体系、规则——合并成设定清单],
+  [*文件*], [*约束域*], [*内容*],
+  [`index.md`], [导航], [L0 索引，Agent 的导航入口。可含一句话主题内核],
+  [`characters.md`], [角色一致性], [生成性事实：背景因果→性格→动机→关系。写因果链，不写特征列表],
+  [`world.md`], [设定一致性], [世界硬规则、体系原理、边界。含类型设定约束（如"硬科幻：无魔法"）],
+  [`voice.md`], [叙事一致性], [POV、文体、句法模式。需要句法级正例和反例，不能只是抽象标签。含类型叙事约束],
+  [`manuscripts/`], [全精度信息源], [定稿章节。L2 层，通过跳转链接按需可达],
 )
 
-另有 `plot/`（大纲）作为规约的一部分。
+=== 为什么不是更多文件
 
-== 两类信息
+以下文件在讨论中被明确排除：
 
-#table(
-  columns: (auto, auto, auto, auto),
-  inset: 8pt,
-  align: horizon,
-  [*类型*], [*含义*], [*来源*], [*Store 位置*],
-  [规约 (prescriptive)], [生成前就存在的约束], [人维护，LLM 辅助起草], [`constraints/`],
-  [状态 (descriptive)], [从已定稿章节提取的事实], [Agent 从手稿提取], [`state/`],
-)
+- `premise.md` — 梗概是高层 outline（作者意图，约束力不可靠）；类型拆入 world + voice 各一行；主题内核太抽象，index.md 一句话够了
+- `outline.md` — 纯作者意图，最善变，无约束力。作者意图是所有东西中约束能级最低的
+- `chronicle.md` — 初始为空，是 Agent 从 manuscripts 按需衍生的缓存，不该是种子
+- `threads.md` — 初始为空，已落笔伏笔的义务，Agent 在写作过程中自行创建
 
-这个区分来自 OpenClaw 的"策展持久化哲学"。规约是*先验*的——作者在写作前建立的世界规则和角色设定。状态是*后验*的——从已完成的章节中提取的事件和角色变化。
+*设计原则*：init 时只播种 Agent 无法从 manuscripts 自动衍生的东西。其余文件在写作过程中由 Agent 自行创建，index.md 维护导航。
 
-两者对 LLM 的约束力不同：规约是硬约束（"这个世界没有枪械"），状态是软约束（"截至第 5 章，主角在城堡中"——但下一章可以离开）。
+=== 生成性事实 vs 派生断言
 
-== Store 目录结构
+Memory 文件应写*生成性事实*（intensional），不写*派生断言*（extensional）。
 
-```
-<project>/
-  flowcabal.json
-  manuscripts/              # 手稿文件
-  store/
-    constraints/            # 规约（先验）
-      characters/           # 角色卡
-      world-rules/          # 设定清单
-      plot/                 # 大纲
-    state/                  # 状态（后验）
-      timeline/             # 每章事件线
-      character-status/     # 当前快照
-    index.md                # L0 自动生成
-```
+- 好：`"奥托对卡莲之死的愧疚驱动他所有决策"` — 一条生成规则，可以推导出无限多具体行为
+- 坏：`"奥托不会放弃复活卡莲 / 奥托不会信任陌生人 / 奥托说话彬彬有礼"` — 试图穷举无限集合
 
-纯 Markdown 文件。没有数据库，没有二进制格式。用户可以直接用文本编辑器查看和修改。
-
-== 上下文加载策略
-
-*核心假设*：约束空间很小。一部百万字小说的全部角色卡 + 世界规则 + 大纲 + 时间线，大约 50-100KB（~15-30K token）。这个规模完全可以直接加载，不需要向量搜索。
+== 上下文加载
 
 三级加载：
 
 #table(
-  columns: (auto, auto, auto, auto),
+  columns: (auto, auto, auto),
   inset: 8pt,
   align: horizon,
-  [*级别*], [*内容*], [*大小*], [*何时加载*],
-  [L0], [`index.md`——每条一行摘要], [~2-3K token], [始终注入 system prompt],
-  [L1], [单个条目的完整内容], [按需], [Agent 读 L0 后决定加载哪些],
-  [L2], [手稿原文], [按需], [Agent 需要引用具体段落时],
+  [*级别*], [*内容*], [*何时加载*],
+  [L0], [`index.md` — 导航入口], [Agent 每次启动时],
+  [L1], [各记忆文件（characters.md 等）], [Agent 读 L0 后按需加载],
+  [L2], [`manuscripts/` 原文], [通过跳转链接按需可达],
 )
 
-```
-Agent 视角：
+文件间通过*稀疏跳转链接*构成有向图，Agent 按需导航。跳转链接可指向 manuscripts/，Agent 用 SubAgent 递归探索以管理上下文。
 
-1. 收到 system prompt，其中包含 L0 索引：
-   - [constraints/characters/mirael.md] 制图师，女性，固执
-   - [constraints/characters/davan.md] 制图师公会成员，mirael的同事
-   - [state/timeline/ch7.md] 第七章事件线
-   - ...
+== 人和 Agent 共同读写
 
-2. Agent 根据当前任务决定需要哪些完整文件：
-   → read_store("constraints/characters/mirael.md")
-   → read_store("state/timeline/ch7.md")
-
-3. 有了完整上下文后执行任务
-```
-
-为什么这比向量搜索好：
-
-- *Agent 理解叙事上下文*：写第 8 章时，Agent 知道需要第 7 章的时间线和出场角色，这不是余弦相似度能捕捉的
-- *零基础设施*：不需要 embedding 模型、向量数据库、索引构建
-- *可调试*：`index.md` 是纯文本，用户可以直接阅读理解 Agent 看到了什么
-- *足够快*：文件系统读取 ~50 个小文件是微秒级操作
-
-== index.md 格式
-
-```markdown
-# Store Index
-
-- [constraints/characters/mirael.md] 制图师，主角
-- [constraints/characters/davan.md] 制图师公会成员
-- [constraints/world-rules/pale-reach.md] 苍白之境——正在向南推进的神秘冰川
-- [constraints/plot/outline.md] 全篇大纲
-- [state/timeline/ch7.md] 第七章：Mirael 到达 Thornwall
-- [state/character-status/mirael.md] 在 Thornwall，准备前往苍白之境
-```
-
-由 `index-gen.ts` 自动生成：取每个 Markdown 文件的第一行（去掉 `#` 前缀）作为摘要。Agent 每次写入 store 后应调用 `update_index` 刷新。
+所有记忆文件对人和 Agent 完全开放，不区分 prescriptive/descriptive。用户可以直接用文本编辑器修改 memory 文件，Agent 也可以在写作过程中创建新文件或更新已有文件。
 
 #line(length: 100%)
 
-= DAG 执行引擎
+= Runner-Core：增量构建引擎
 
-== 工作流模型
+== 执行模型
 
-工作流是有向无环图（DAG）。节点是 LLM 调用，边是数据依赖。
-
-```
-[Node A: 分析章节] ──→ [Node B: 生成大纲] ──→ [Node C: 写正文]
-```
-
-Node B 的 userPrompt 可以包含 `{ kind: "ref", nodeId: "A" }`，执行时自动替换为 Node A 的输出。
-
-== 拓扑排序 + 顺序执行
+Runner-core 是一个*增量构建系统*，以 node 为粒度缓存：
 
 ```
-1. Kahn 算法拓扑排序 → 得到合法执行顺序
-2. 按序执行每个节点：
-   a. 解析 TextBlock（literal 保留，ref 替换为上游输出）
-   b. 根据 node.role 选择 LLM 配置（userLlm 或 agentLlm）
-   c. 调用 LLM（支持流式输出）
-   d. 存储输出，供下游节点引用
-3. 返回所有节点输出
+遍历 DAG（Kahn 拓扑序）→ 对每个节点：
+  1. 解析 TextBlock[]（literal 保留，ref 替换为上游输出）
+  2. 计算 resolved prompt 的 hash（仅 literal + ref 部分）
+  3. 与缓存的 prompt hash 比对
+  4. 匹配 → 跳过执行，使用缓存输出
+  5. 不匹配 → 调用 LLM，缓存新输出 + prompt hash
 ```
 
-循环检测内置于 Kahn 排序——如果排序结果节点数少于总节点数，说明存在环，直接报错。
+失效自动级联：节点 A 的输出变了 → 节点 B 引用了 A（ref）→ B 的 resolved prompt 变了 → hash 不匹配 → B 重跑 → 依此类推。
 
-== 流式执行
+这个模型的动机是*用户调试工作流的实际行为*：改一个节点的 prompt → 跑一下看效果 → 再改 → 再跑。以 node 为粒度缓存意味着只有受影响的节点需要重跑。
 
-Executor 支持回调：
+== 缓存二维失效
 
-- `onNodeStart(node)` — 节点开始执行
-- `onNodeStream(node, chunk)` — 流式输出片段
-- `onNodeEnd(node, output)` — 节点执行完成
+=== 结构性失效（自动）
 
-TUI 通过这些回调实时显示生成过程。
+节点的 literal + ref 部分解析后的 prompt hash 变化 → 必须重跑，自动级联下游。
+
+=== 上下文过期（预警）
+
+agent-inject 的结果单独缓存（因为 Agent 查询比较贵），但引入了非确定性——同样的 prompt，Agent 两次注入的内容可能不同（memory 可能已更新）。
+
+处理方式：当 project 的 memory 或 manuscripts 被修改时，所有尚存的工作区（workspace）收到预警：*"当前缓存的 agent-inject 项可能已经不再可靠"*。用户决定是否对特定节点重新触发 agent-inject。
+
+=== per-node 缓存结构
+
+```json
+{
+  "promptHash": "abc123",
+  "agentInjects": {
+    "inject-point-id": {
+      "content": "Agent 注入的上下文...",
+      "timestamp": 1708600000
+    }
+  },
+  "output": "节点的 LLM 输出..."
+}
+```
+
+`promptHash` 只覆盖 literal + ref 部分。agent-inject 独立缓存、独立追踪时间戳。
+
+== Workspace 生命周期
+
+Workspace 只有两个状态：*存在*或*不存在*。
+
+- 创建：用户实例化一个 workflow + project 的组合
+- 使用：反复调试，增量构建
+- 删除：释放全部缓存，不可恢复
+
+不存在"归档"或"关闭"状态。所有存在的 workspace 都是活跃的，都接收上下文过期预警。
+
+#line(length: 100%)
+
+= `.flowcabal/` 目录结构
+
+```
+.flowcabal/
+├── data/                              # 持久化配置（跨项目、跨工作区）
+│   ├── llm-configs.json               # LLM 配置池（多套，按名引用，一套 default）
+│   ├── workflows/                     # Workflow 模板（纯蓝图，用于分享）
+│   │   └── <workflow-id>.json
+│   └── preferences/                   # 用户对模板的个性化配置
+│       └── <workflow-id>.json         # per-node LLM 覆盖等偏好，跨工作区生效
+├── memory/                            # Agent 记忆（按项目隔离）
+│   └── <project>/
+│       ├── index.md                   # L0 导航
+│       ├── characters.md              # 角色生成性事实
+│       ├── world.md                   # 世界硬规则 + 类型设定约束
+│       ├── voice.md                   # 文体约束 + 类型叙事约束
+│       └── manuscripts/               # L2 完整信息源（定稿章节）
+└── runner-cache/                      # 工作区（按 workspace 隔离，删除即释放）
+    └── <workspace-id>/
+        ├── meta.json                  # { workflowId, projectId, createdAt }
+        └── outputs/
+            └── <node-id>.json         # { promptHash, agentInjects, output }
+```
+
+唯一一个状态目录，位于仓库根目录。免安装分发，不污染用户 home 空间。
+
+路径定义见 `packages/engine/src/store/paths.ts`（文件顶部注释有同样的路径树）。
 
 #line(length: 100%)
 
@@ -349,181 +369,85 @@ TUI 通过这些回调实时显示生成过程。
 == Provider 工厂
 
 ```typescript
-// provider.ts — 根据配置创建 Vercel AI SDK provider
 function getProvider(config: LlmConfig) {
   switch (config.provider) {
-    case "openai":        return createOpenAI({ apiKey });
+    case "openai":            return createOpenAI({ apiKey });
     case "openai-compatible": return createOpenAI({ apiKey, baseURL });
-    case "anthropic":     return createAnthropic({ apiKey });
-    case "google":        return createGoogleGenerativeAI({ apiKey });
+    case "anthropic":         return createAnthropic({ apiKey });
+    case "google":            return createGoogleGenerativeAI({ apiKey });
   }
 }
 ```
 
-`openai-compatible` 复用 `@ai-sdk/openai`，只是覆盖 `baseURL`。DeepSeek、Moonshot、零一万物等国产模型都走这个路径。
+`openai-compatible` 复用 `@ai-sdk/openai`，只是覆盖 `baseURL`。DeepSeek 等国产模型走这个路径。
 
 == 生成接口
-
-两个函数：
 
 - `generate()` — 非流式，返回完整文本。用于 Agent 的 tool calling 循环
 - `streamGenerate()` — 流式，通过回调逐块输出。用于创作生成
 
-底层都是 Vercel AI SDK 的 `generateText` / `streamText`，统一处理了 provider 差异。
+底层都是 Vercel AI SDK 的 `generateText` / `streamText`。
 
 #line(length: 100%)
 
 = Agent 系统
 
-== 从三角色到单 Agent
+== 单 Agent + Tool Calling
 
-v4 设计了三个专门角色：
-- Role A: 上下文组装
-- Role B: 工作流构建
-- Role C: 事实检查
+v4 的三个专门角色（Role A/B/C）简化为*单个 Agent + tool calling*。理由：
 
-v5 简化为*单个 Agent + tool calling*。理由：
+1. 上下文组装（原 Role A）= Agent 通过约束查询自主完成
+2. 工作流构建（原 Role B）= 用户定义 workflow 模板
+3. 事实检查（原 Role C）= 约束查询的自然副产物
 
-1. 上下文组装（原 Role A）现在就是 Agent 调用 `read_store` 工具——不需要单独的角色
-2. 工作流构建（原 Role B）在 TUI 阶段不需要——工作流由用户定义
-3. 事实检查（原 Role C）可以作为 Agent 的指令之一，不需要独立角色
+当规模增大到需要专门角色时，再分拆。
 
-当规模增大到需要专门角色时，再分拆。符合"先让它跑起来"的原则。
+== agent-inject 机制
 
-== 工具集
+agent-inject 是 FlowCabal 的核心差异化能力。当 runner-core 遇到 `kind: "agent-inject"` 的 TextBlock 时：
 
-Agent 拥有 5 个工具，通过 Vercel AI SDK 的 tool calling 机制调用：
+1. 将节点 prompt + 上游输出（ref 已解析的部分）作为锚点
+2. Agent 读 L0 索引，按需导航到 L1/L2
+3. 执行约束查询：判断当前上下文与已有内容的关联和潜在冲突
+4. 查询结果即为注入内容——约束查询和上下文注入是同一个动作
 
-#table(
-  columns: (auto, auto, 1fr),
-  inset: 8pt,
-  align: horizon,
-  [*工具*], [*参数*], [*功能*],
-  [`list_store`], [无], [列出 store 中所有条目路径],
-  [`read_store`], [`path`], [读取指定条目的完整内容],
-  [`write_store`], [`path, content`], [写入或更新条目（Markdown）],
-  [`read_manuscript`], [`filename`], [读取手稿文件],
-  [`update_index`], [无], [重新生成 `index.md`（L0 索引）],
-)
-
-工具定义使用 Zod schema，自动生成 JSON Schema 供 LLM 理解参数格式。
-
-== 两种 Agent 模式
-
-=== 单次 Agent（`runAgent`）
-
-用于自动化任务，如分析章节：
-
-```
-用户: flowcabal add-chapter chapter7.md
-  → Agent 收到章节内容
-  → list_store() 查看现有记忆
-  → 分析章节，提取角色/事件/设定
-  → write_store() 写入多个条目
-  → update_index() 刷新索引
-  → 返回分析报告
-```
-
-Agent 最多执行 20 步（tool calling 循环），防止无限执行。
-
-=== 对话 Agent（`conversationalAgent`）
-
-用于交互式创作（`flowcabal generate`）：
-
-```
-用户: "帮我构思第八章的开头"
-  → Agent 读取 store 中的角色和时间线
-  → 结合上下文生成建议
-  → 用户继续对话，逐步精炼
-```
-
-对话 Agent 维护消息历史，支持流式输出。
+agent-inject 的结果被缓存在 workspace 中，与 prompt hash 独立追踪。
 
 == 系统提示词
 
-三套中文系统提示词：
-
-- *分析模式*：指导 Agent 从章节中提取角色信息、世界观设定、情节大纲、时间线、角色状态
-- *生成模式*：指导 Agent 读取 store 辅助创作，保持角色一致性和世界观连续性
-- *对话模式*：通用创作助手，支持讨论和修改 store
-
-#line(length: 100%)
-
-= CLI（TUI）
-
-== 命令一览
-
-#table(
-  columns: (auto, auto, 1fr),
-  inset: 8pt,
-  align: horizon,
-  [*命令*], [*参数*], [*功能*],
-  [`flowcabal init`], [`[name]`], [交互式创建项目（选择 LLM、输入 API key）],
-  [`flowcabal add-chapter`], [`<file>`], [添加章节到 manuscripts/ + Agent 自动分析],
-  [`flowcabal status`], [无], [显示手稿数、store 条目数、index.md 内容],
-  [`flowcabal generate`], [无], [对话式创作 REPL],
-  [`flowcabal store`], [`ls\|read\|write\|index [path]`], [直接管理 store 条目],
-)
-
-== 交互设计
-
-TUI 使用 `@clack/prompts` 提供美观的终端 UI（spinner、选择框、文本输入）。核心操作是命令式的，创作环节（`generate`）是对话式的。
-
-```
-$ flowcabal init mynovel
-◆  FlowCabal 项目初始化
-│
-◇  选择 LLM 提供商
-│  OpenAI Compatible (DeepSeek 等)
-│
-◇  API Key
-│  sk-***
-│
-◇  模型名称
-│  deepseek-chat
-│
-◆  项目创建完成
-│
-│  下一步:
-│  cd mynovel
-│  flowcabal add-chapter <file>
-│  flowcabal status
-│  flowcabal generate
-│
-└  开始创作吧！
-```
+中文系统提示词，指导 Agent 读取记忆、执行约束查询、辅助创作。
 
 #line(length: 100%)
 
 = 架构决策记录
 
-== 为什么抛弃 OpenViking
+== 为什么不用 RAG
 
 #table(
   columns: (auto, 1fr),
   inset: 8pt,
   align: horizon,
   [*问题*], [*分析*],
-  [强制 embedding], [约束空间 ~50-100KB，向量搜索是 O(n) 的，而 Agent 读索引是 O(1) 的决策],
-  [多角度切分重合], [OpenViking 的多级信息模型和 FlowCabal 的侧写系统功能重叠],
-  [依赖重量], [OpenViking 引入 AGFS 子进程 + LevelDB + embedding 模型——三层间接依赖],
-  [调试困难], [向量检索是黑盒，Agent 驱动的文件读取完全可追踪],
+  [语义歧义], [小说中语义相似的段落可能有几十上百种，embedding 召回无法区分哪个是当前需要的],
+  [因果盲区], [伏笔和回收在语义空间里往往很远，余弦相似度捕捉不到因果链],
+  [事实幻觉], [召回错误段落导致的不是普通幻觉，而是事实性幻觉——基于错误上下文的逻辑自洽输出],
+  [基础设施], [不需要 embedding 模型、向量数据库、索引构建],
 )
 
-== 为什么纯文件系统而非 SQLite
+Agent 驱动的导航（L0 索引 + 跳转链接）比语义相似性更准确，因为链接是因果关系驱动的。
+
+== 为什么纯文件系统
 
 #table(
   columns: (auto, 1fr),
   inset: 8pt,
   align: horizon,
   [*维度*], [*分析*],
-  [简单性], [Markdown 文件可直接阅读、编辑、版本控制],
+  [可读性], [Markdown 文件可直接阅读、编辑——人和 Agent 共同读写的前提],
   [Git 友好], [纯文本文件天然支持 diff、merge、history],
-  [足够], [~50-100 个小文件的 CRUD 不需要数据库],
-  [可升级], [如果未来需要，可以在文件系统之上加索引层],
+  [足够], [~50 个小文件的 CRUD 不需要数据库],
+  [零依赖], [不需要 SQLite、LevelDB 或任何外部存储],
 )
-
-SQLite 的优势（事务、查询）在当前规模下不需要。如果 store 增长到数千个文件（不太可能——一部小说的约束空间是有限的），再考虑引入。
 
 == 为什么 Vercel AI SDK
 
@@ -538,46 +462,13 @@ SQLite 的优势（事务、查询）在当前规模下不需要。如果 store 
   [TypeScript 原生], [类型安全，与项目技术栈一致],
 )
 
-== 为什么 TUI 优先
+== 为什么增量构建而非全量执行
 
-Phase 1 是 headless engine + TUI。理由：
+用户调试工作流的实际行为是：改一个节点 → 跑一下 → 再改 → 再跑。全量执行意味着每次修改都重跑所有节点（浪费 token + 时间）。以 node 为粒度的增量构建只重跑受影响的节点，缓存失效自动级联。
 
-1. *引擎优先*：先确保核心逻辑（DAG 执行、store 管理、Agent tool calling）正确工作
-2. *零前端依赖*：不需要 Svelte、React、打包器、浏览器——开发速度快
-3. *对话式交互天然适合终端*：`flowcabal generate` 就是一个 REPL
-4. *引擎可复用*：TUI 和未来的 Web UI 共享同一个 engine 包
+== 为什么 agent-inject 缓存需要预警而非自动失效
 
-Phase 2（Web UI / 可视化 DAG 编辑器）在引擎稳定后再开发。
-
-#line(length: 100%)
-
-= 与 v4 设计的关系
-
-#table(
-  columns: (auto, auto, auto),
-  inset: 8pt,
-  align: horizon,
-  [*模块*], [*v4*], [*v5*],
-  [语言], [Python + TypeScript], [纯 TypeScript + Bun],
-  [存储], [SQLite + OpenViking], [纯文件系统（Markdown）],
-  [检索], [OpenViking 向量搜索], [Agent 驱动的 L0 索引],
-  [侧写], [5 种多角度侧写], [3 角度切片（角色/时间线/世界观）],
-  [Agent], [三角色 (A/B/C)], [单 Agent + 5 工具],
-  [UI], [Svelte 浏览器], [TUI（Phase 1）],
-  [通信], [WebSocket], [直接函数调用],
-  [配置], [SQLite + 内存], [`flowcabal.json`],
-  [LLM], [直接 HTTP], [Vercel AI SDK],
-  [TextBlock], [保留], [保留],
-  [DAG 执行], [保留（Python）], [保留（TypeScript）],
-  [L0/L1/L2], [OpenViking 自动生成], [index-gen.ts + Agent 按需加载],
-  [规约/状态], [保留], [保留],
-  [Prompt 组装], [三层模型], [resolveBlocks（literal + ref）],
-  [策展管线], [两级模型 + 异步侧写], [手动 store 管理 + Agent 分析],
-  [递归/进化], [概念设计], [推迟],
-  [代码量], [~3000+ 行（预估）], [~1200 行],
-)
-
-v4 的核心抽象（TextBlock、DAG、L0/L1/L2、规约/状态）全部保留。变化的是实现方式——从分布式多进程架构变为单进程文件系统架构。
+agent-inject 的 Agent 查询比较贵（需要多次 tool calling）。自动失效意味着每次 memory 变更都要重新执行所有 agent-inject——这在频繁编辑记忆时代价太高。预警机制让用户自主决定何时重新触发，平衡了*正确性*和*成本*。
 
 #line(length: 100%)
 
@@ -585,15 +476,13 @@ v4 的核心抽象（TextBlock、DAG、L0/L1/L2、规约/状态）全部保留�
 
 == Phase 1：Headless Engine + TUI（当前）
 
-已完成。~1200 行 TypeScript，27 个文件。
-
 - Monorepo 骨架（engine + cli）
 - 类型系统 + Zod schema
-- 文件系统 store CRUD + L0 索引生成
-- DAG 拓扑排序 + 执行器（流式）
+- Memory 种子文件初始化
+- DAG 拓扑排序 + 增量构建执行器
 - Vercel AI SDK provider 工厂
-- Agent（单次 + 对话）+ 5 工具 + 中文提示词
-- CLI 5 个命令
+- Agent + tool calling + 中文提示词
+- CLI 命令
 
 == Phase 2：可视化 DAG 编辑器（未来）
 
@@ -601,8 +490,9 @@ v4 的核心抽象（TextBlock、DAG、L0/L1/L2、规约/状态）全部保留�
 
 - 可视化工作流编辑（拖拽节点、连线）
 - 实时执行可视化（节点状态、流式输出）
-- Store 浏览器（查看/编辑记忆条目）
-- 工作流模板（常用创作模式的预设 DAG）
+- Memory 浏览器（查看/编辑记忆文件）
+- Workspace 管理（创建、切换、删除）
+- 上下文过期预警 UI
 
 Engine 包作为 Web 前端的后端，通过直接 import 或 API 层连接。
 
@@ -610,7 +500,6 @@ Engine 包作为 Web 前端的后端，通过直接 import 或 API 层连接。
 
 视实际使用情况决定是否需要：
 
-- 多 Agent 角色分拆（回到 Role A/B/C，如果单 Agent 不够用）
-- 递归调用 + 进化式迭代（v4 设计的高级工作流组件）
-- 策展管线（自动一致性检查、异步侧写更新）
+- 多 Agent 角色分拆（如果单 Agent 不够用）
+- 策展管线（自动一致性检查）
 - 导入/导出（与其他写作工具互通）
