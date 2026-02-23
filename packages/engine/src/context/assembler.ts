@@ -1,6 +1,6 @@
 import { readFile } from "fs/promises";
 import { existsSync } from "fs";
-import { indexPath } from "../store/paths.js";
+import { memoryIndexPath } from "../paths.js";
 import { readStoreEntry } from "../store/store.js";
 
 /**

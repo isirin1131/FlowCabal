@@ -8,7 +8,7 @@ import {
 import { generateIndex } from "../store/index-gen.js";
 import { readFile } from "fs/promises";
 import { join } from "path";
-import { manuscriptsPath } from "../store/paths.js";
+import { manuscriptsPath } from "../paths.js";
 import { existsSync } from "fs";
 
 /**
