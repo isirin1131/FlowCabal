@@ -1,12 +1,9 @@
 import { generateText, streamText, type CoreMessage } from "ai";
 import type { LlmConfig } from "../types.js";
 import { getProvider } from "../llm/provider.js";
-import { createTools } from "./tools.js";
-import { loadL0 } from "../context/assembler.js";
-import {
-  SYSTEM_PROMPT_ANALYZE,
-  SYSTEM_PROMPT_CHAT,
-} from "./prompts.js";
+// TODO: import tools from future memory/tools module
+// TODO: import prompts from future agent/prompts module
+// TODO: import loadL0 from future memory or context module
 
 /**
  * Run agent for a single task (e.g., analyze a chapter).

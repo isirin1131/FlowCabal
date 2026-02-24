@@ -18,11 +18,10 @@ packages/
     src/
       types.ts    领域类型
       schema.ts   Zod schemas
-      dag/        Workflow DAG + 拓扑排序 + 执行器
-      store/      文件系统路径 + CRUD
-      context/    上下文组装（L0/L1）+ token 估算
+      paths.ts    .flowcabal/ 路径注册表
       llm/        Vercel AI SDK provider + generate/stream
-      agent/      Agent + 工具 + 中文提示词
+      dag-core/   执行引擎（TextBlock 解析、token 估算、拓扑排序、executor）
+      agent/      Agent 子系统（tool-use loop、上下文组装、memory CRUD、工具集）
   cli/            TUI 命令行
     src/
       commands/

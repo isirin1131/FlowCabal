@@ -1,7 +1,7 @@
 import { readFile } from "fs/promises";
 import { existsSync } from "fs";
 import { memoryIndexPath } from "../paths.js";
-import { readStoreEntry } from "../store/store.js";
+// TODO: import memory read function from future memory module
 
 /**
  * Assemble context for an LLM call:

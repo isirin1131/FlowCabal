@@ -12,7 +12,12 @@
 - `bun run flowcabal <command>` — 运行 CLI
 
 ## 目录结构
-- `packages/engine/src/` — 核心引擎（types, schema, dag, store, context, llm, agent）
+- `packages/engine/src/` — 核心引擎
+  - `types.ts` / `schema.ts` — 领域类型 + Zod schema
+  - `paths.ts` — `.flowcabal/` 路径注册表
+  - `llm/` — Vercel AI SDK provider + generate/stream（共享基础设施）
+  - `dag-core/` — 执行引擎（TextBlock 解析、token 估算；未实现：拓扑排序、executor）
+  - `agent/` — Agent 子系统（tool-use loop、上下文组装；未实现：memory CRUD、工具集、prompt）
 - `packages/cli/src/` — CLI 入口 + 5 个 command（init, add-chapter, status, generate, store）
 - `docs/` — 设计文档（保留，不要动）
 - `backend/` — 旧代码 + 测试用样章（保留）
@@ -43,6 +48,12 @@
 
 ## 架构要点
 
+### 模块职责与持久化边界
+- **dag-core/** — 执行引擎，独占 `runner-cache/` 读写，读取 `data/` 配置
+- **agent/** — Agent 子系统，独占 `memory/` 读写（人类也直接编辑 memory）
+- **llm/** — 共享基础设施，dag-core 和 agent 都依赖，避免循环依赖
+- Agent 通过 dag-core 暴露的 RuntimeContext 接口查询运行时状态，不直接读 runner-cache
+
 ### Workflow / Workspace / Project 三层解耦
 - **Workflow** = 纯模板/蓝图，只描述节点结构和 prompt 组合方式，不含 LLM 配置，用于分享
 - **Workspace** = workflow 的一次实例化，绑定 project，存执行缓存；用户在其中反复调试；删除即释放
@@ -64,6 +75,16 @@
 ### 缓存二维失效
 - **结构性失效（自动）**：节点的 literal+ref prompt hash 变化 → 必须重跑，自动级联下游
 - **上下文过期（预警）**：project memory/manuscripts 被修改 → agent-inject 缓存可能过期 → 预警用户
+
+### Executor 事件模型
+- 用 discriminated union（`ExecutorEvent`）而非 callbacks
+- 可序列化（直接 JSON.stringify 发 WebSocket）、可扩展（加事件不改签名）、可回放（测试/调试）
+
+### 前端适配预留
+- engine 是纯库，不 console.log、不假设 terminal
+- Workflow 操作走 engine API，不直接操作文件
+- 状态可序列化，类型保持 JSON-friendly
+- executor 接受 AbortSignal，预留执行中断
 
 ## 代码规范
 - 中文提示词、中文 UI 文案
