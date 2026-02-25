@@ -50,3 +50,18 @@ export interface LlmConfig {
   presencePenalty?: number;
   providerOptions?: Record<string, Record<string, JsonValue>>;
 }
+
+// ── LLM Configs File ──
+/** llm-configs.json: Record<name, LlmConfig>，"default" 为默认配置 */
+export type LlmConfigsFile = Record<string, LlmConfig>;
+
+// ── Runtime Context（Agent ↔ DAG-core 接口） ──
+export interface RuntimeContext {
+  getNodeOutput(nodeId: string): string | null;
+  getWorkflowNodes(): NodeDef[];
+}
+
+// ── Project Config ──
+export interface ProjectConfig {
+  name: string;
+}

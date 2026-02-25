@@ -1,16 +1,16 @@
 import type { CommandModule } from "yargs";
 import * as p from "@clack/prompts";
 import {
-  listStore,
-  readStoreEntry,
-  writeStoreEntry,
-  generateIndex,
+  listMemoryFiles,
+  readMemoryFile,
+  writeMemoryFile,
+  generateMemoryIndex,
 } from "@flowcabal/engine";
 import { findProjectRoot } from "../config.js";
 
 export const storeCommand: CommandModule = {
   command: "store <action> [path]",
-  describe: "管理 store 条目",
+  describe: "管理 memory 条目",
   builder: (yargs) =>
     yargs
       .positional("action", {
@@ -35,9 +35,9 @@ export const storeCommand: CommandModule = {
 
     switch (action) {
       case "ls": {
-        const entries = await listStore(rootDir);
+        const entries = await listMemoryFiles(rootDir);
         if (entries.length === 0) {
-          p.log.warn("Store 为空");
+          p.log.warn("Memory 为空");
         } else {
           for (const e of entries) {
             console.log(e);
@@ -48,10 +48,10 @@ export const storeCommand: CommandModule = {
 
       case "read": {
         if (!entryPath) {
-          p.cancel("请指定条目路径，如: flowcabal store read constraints/characters/xxx.md");
+          p.cancel("请指定条目路径，如: flowcabal store read characters/张三.md");
           process.exit(1);
         }
-        const entry = await readStoreEntry(rootDir, entryPath);
+        const entry = await readMemoryFile(rootDir, entryPath);
         if (!entry) {
           p.cancel(`未找到: ${entryPath}`);
           process.exit(1);
@@ -73,13 +73,13 @@ export const storeCommand: CommandModule = {
           p.cancel("已取消");
           process.exit(0);
         }
-        await writeStoreEntry(rootDir, entryPath, content as string);
+        await writeMemoryFile(rootDir, entryPath, content as string);
         p.log.success(`已写入: ${entryPath}`);
         break;
       }
 
       case "index": {
-        const idx = await generateIndex(rootDir);
+        const idx = await generateMemoryIndex(rootDir);
         console.log(idx);
         p.log.success("索引已更新");
         break;

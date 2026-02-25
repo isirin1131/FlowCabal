@@ -55,3 +55,11 @@ export const WorkflowSchema = z.object({
   name: z.string(),
   nodes: z.array(NodeDefSchema),
 });
+
+// ── LLM Configs File ──
+export const LlmConfigsFileSchema = z.record(z.string(), LlmConfigSchema);
+
+// ── Project Config ──
+export const ProjectConfigSchema = z.object({
+  name: z.string(),
+});

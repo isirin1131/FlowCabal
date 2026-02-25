@@ -2,7 +2,7 @@ import type { CommandModule } from "yargs";
 import type { CoreMessage } from "ai";
 import * as p from "@clack/prompts";
 import { conversationalAgent } from "@flowcabal/engine";
-import { findProjectRoot, loadConfig } from "../config.js";
+import { findProjectRoot, loadDefaultLlmConfig } from "../config.js";
 
 export const generateCommand: CommandModule = {
   command: "generate",
@@ -14,7 +14,7 @@ export const generateCommand: CommandModule = {
       process.exit(1);
     }
 
-    const config = await loadConfig(rootDir);
+    const llmConfig = await loadDefaultLlmConfig();
     p.intro("对话式创作模式（输入 exit 退出）");
 
     const messages: CoreMessage[] = [];
@@ -33,7 +33,7 @@ export const generateCommand: CommandModule = {
       messages.push({ role: "user", content: input as string });
 
       process.stdout.write("\n助手: ");
-      const gen = conversationalAgent(rootDir, config.defaultLlm, messages);
+      const gen = conversationalAgent(rootDir, llmConfig, messages);
 
       let full = "";
       while (true) {

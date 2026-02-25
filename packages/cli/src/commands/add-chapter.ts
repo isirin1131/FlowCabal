@@ -4,7 +4,7 @@ import { join, basename } from "path";
 import { existsSync } from "fs";
 import * as p from "@clack/prompts";
 import { runAgent, manuscriptsPath, SYSTEM_PROMPT_ANALYZE } from "@flowcabal/engine";
-import { findProjectRoot, loadConfig } from "../config.js";
+import { findProjectRoot, loadDefaultLlmConfig } from "../config.js";
 
 export const addChapterCommand: CommandModule<{}, { file: string }> = {
   command: "add-chapter <file>",
@@ -24,7 +24,7 @@ export const addChapterCommand: CommandModule<{}, { file: string }> = {
       process.exit(1);
     }
 
-    const config = await loadConfig(rootDir);
+    const llmConfig = await loadDefaultLlmConfig();
     const filePath = argv.file;
 
     if (!existsSync(filePath)) {
@@ -46,9 +46,9 @@ export const addChapterCommand: CommandModule<{}, { file: string }> = {
     try {
       const result = await runAgent(
         rootDir,
-        config.defaultLlm,
-        `请分析以下章节并提取信息写入 store：\n\n${content}`,
-        SYSTEM_PROMPT_ANALYZE
+        llmConfig,
+        `请分析以下章节并提取信息写入 memory：\n\n${content}`,
+        SYSTEM_PROMPT_ANALYZE,
       );
 
       s.stop("分析完成");

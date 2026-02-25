@@ -1,9 +1,39 @@
 import { generateText, streamText, type CoreMessage } from "ai";
-import type { LlmConfig } from "../types.js";
+import type { LlmConfig, RuntimeContext } from "../types.js";
 import { getProvider } from "../llm/provider.js";
-// TODO: import tools from future memory/tools module
-// TODO: import prompts from future agent/prompts module
-// TODO: import loadL0 from future memory or context module
+import { createTools } from "./tools.js";
+import { SYSTEM_PROMPT_ANALYZE, SYSTEM_PROMPT_CHAT } from "./prompts.js";
+import { loadL0 } from "./assembler.js";
+
+// ── Shared setup ──
+
+interface AgentOptions {
+  rootDir: string;
+  llmConfig: LlmConfig;
+  systemPrompt?: string;
+  runtimeCtx?: RuntimeContext;
+  maxSteps?: number;
+  abortSignal?: AbortSignal;
+}
+
+async function prepareAgent(opts: AgentOptions) {
+  const provider = getProvider(opts.llmConfig);
+  const tools = createTools(opts.rootDir, opts.runtimeCtx);
+  const l0 = await loadL0(opts.rootDir);
+
+  const base = opts.systemPrompt ?? SYSTEM_PROMPT_ANALYZE;
+  const system = l0 ? `${base}\n\n当前索引:\n${l0}` : base;
+
+  return {
+    model: provider(opts.llmConfig.model),
+    system,
+    tools,
+    maxSteps: opts.maxSteps ?? 20,
+    abortSignal: opts.abortSignal,
+  };
+}
+
+// ── Public API ──
 
 /**
  * Run agent for a single task (e.g., analyze a chapter).
@@ -14,20 +44,16 @@ export async function runAgent(
   llmConfig: LlmConfig,
   userMessage: string,
   systemPrompt?: string,
-  onStream?: (chunk: string) => void
+  runtimeCtx?: RuntimeContext,
+  abortSignal?: AbortSignal,
 ): Promise<string> {
-  const provider = getProvider(llmConfig);
-  const tools = createTools(rootDir);
-  const l0 = await loadL0(rootDir);
-
-  const system = [systemPrompt ?? SYSTEM_PROMPT_ANALYZE, l0 ? `\n\n当前索引:\n${l0}` : ""].join("");
+  const prepared = await prepareAgent({
+    rootDir, llmConfig, systemPrompt, runtimeCtx, abortSignal,
+  });
 
   const result = await generateText({
-    model: (provider as any)(llmConfig.model),
-    system,
+    ...prepared,
     prompt: userMessage,
-    tools,
-    maxSteps: 20,
   });
 
   return result.text;
@@ -40,20 +66,19 @@ export async function runAgent(
 export async function* conversationalAgent(
   rootDir: string,
   llmConfig: LlmConfig,
-  messages: CoreMessage[]
+  messages: CoreMessage[],
+  runtimeCtx?: RuntimeContext,
+  abortSignal?: AbortSignal,
 ): AsyncGenerator<string, string> {
-  const provider = getProvider(llmConfig);
-  const tools = createTools(rootDir);
-  const l0 = await loadL0(rootDir);
-
-  const system = [SYSTEM_PROMPT_CHAT, l0 ? `\n\n当前索引:\n${l0}` : ""].join("");
+  const prepared = await prepareAgent({
+    rootDir, llmConfig,
+    systemPrompt: SYSTEM_PROMPT_CHAT,
+    runtimeCtx, abortSignal,
+  });
 
   const result = streamText({
-    model: (provider as any)(llmConfig.model),
-    system,
+    ...prepared,
     messages,
-    tools,
-    maxSteps: 20,
   });
 
   let full = "";

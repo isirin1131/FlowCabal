@@ -1,10 +1,9 @@
 import type { CommandModule } from "yargs";
-import { readFile } from "fs/promises";
+import { readFile, readdir } from "fs/promises";
 import { existsSync } from "fs";
 import * as p from "@clack/prompts";
-import { indexPath, listStore, manuscriptsPath } from "@flowcabal/engine";
+import { memoryIndexPath, listMemoryFiles, manuscriptsPath } from "@flowcabal/engine";
 import { findProjectRoot } from "../config.js";
-import { readdir } from "fs/promises";
 
 export const statusCommand: CommandModule = {
   command: "status",
@@ -29,15 +28,15 @@ export const statusCommand: CommandModule = {
       p.log.message(`  ${m}`);
     }
 
-    // Store entries
-    const entries = await listStore(rootDir);
-    p.log.info(`Store 条目: ${entries.length}`);
+    // Memory entries
+    const entries = await listMemoryFiles(rootDir);
+    p.log.info(`Memory 条目: ${entries.length}`);
     for (const e of entries) {
       p.log.message(`  ${e}`);
     }
 
     // Index
-    const idx = indexPath(rootDir);
+    const idx = memoryIndexPath(rootDir);
     if (existsSync(idx)) {
       const content = await readFile(idx, "utf-8");
       p.note(content, "index.md (L0)");

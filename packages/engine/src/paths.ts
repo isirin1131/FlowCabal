@@ -1,87 +1,74 @@
 import { join } from "path";
+import { homedir } from "os";
 
 // ──────────────────────────────────────────────────────────────
-// .flowcabal/ 路径树
+// 路径分两层：
 //
-// .flowcabal/
-// ├── data/                              # 持久化配置（跨项目、跨工作区）
-// │   ├── llm-configs.json               # LLM 配置池（多套，按名引用，一套 default）
-// │   ├── workflows/
-// │   │   └── <workflow-id>.json         # 纯模板，用于分享
-// │   └── preferences/
-// │       └── <workflow-id>.json         # 用户对模板的个性化配置（per-node LLM 覆盖等）
-// ├── memory/<project>/                  # Agent 记忆（按项目隔离，种子文件 init 时创建）
-// │   ├── index.md                       # L0 导航
-// │   ├── characters.md                  # 角色生成性事实
-// │   ├── world.md                       # 世界硬规则 + 类型设定约束
-// │   ├── voice.md                       # 文体约束 + 类型叙事约束
-// │   └── manuscripts/                   # L2 完整信息源（定稿章节）
-// └── runner-cache/                      # 工作区（删除即释放全部缓存）
+// 全局配置 ~/.config/flowcabal/
+// ├── llm-configs.json               # LLM 配置池（多套，按名引用，一套 default）
+// ├── workflows/
+// │   └── <workflow-id>.json         # 纯模板，用于分享
+// └── preferences/
+//     └── <workflow-id>.json         # 用户对模板的个性化配置（per-node LLM 覆盖等）
+//
+// 项目本地 <project-root>/.flowcabal/
+// ├── memory/                         # Agent 记忆
+// │   ├── index.md                   # L0 导航（自动生成）
+// │   ├── voice.md                   # 文体约束 + 类型叙事约束
+// │   ├── characters/                # 角色（Agent 按需创建，一角色一文件）
+// │   ├── world/                     # 世界观（Agent 按需创建，一概念一文件）
+// │   └── manuscripts/               # L2 完整信息源（定稿章节）
+// └── runner-cache/                   # 工作区（删除即释放全部缓存）
 //     └── <workspace-id>/
-//         ├── meta.json                  # { workflowId, projectId, createdAt }
+//         ├── meta.json              # { workflowId, createdAt }
 //         └── outputs/
-//             └── <node-id>.json         # { promptHash, agentInjects, output }
+//             └── <node-id>.json     # { promptHash, agentInjects, output }
 // ──────────────────────────────────────────────────────────────
 
-// ── .flowcabal/ 根目录（仓库根） ──
+// ── 全局配置（~/.config/flowcabal/） ──
+
+export function globalConfigPath(): string {
+  return join(homedir(), ".config", "flowcabal");
+}
+
+export function globalLlmConfigsPath(): string {
+  return join(globalConfigPath(), "llm-configs.json");
+}
+
+export function globalWorkflowsPath(): string {
+  return join(globalConfigPath(), "workflows");
+}
+
+export function globalWorkflowFilePath(workflowId: string): string {
+  return join(globalWorkflowsPath(), `${workflowId}.json`);
+}
+
+export function globalPreferencesPath(): string {
+  return join(globalConfigPath(), "preferences");
+}
+
+export function globalWorkflowPreferencesPath(workflowId: string): string {
+  return join(globalPreferencesPath(), `${workflowId}.json`);
+}
+
+// ── 项目本地（<project-root>/.flowcabal/） ──
 
 export function dotFlowcabalPath(rootDir: string): string {
   return join(rootDir, ".flowcabal");
 }
 
-// ── data/：持久化配置（跨项目、跨工作区） ──
+// ── memory/：Agent 记忆 ──
 
-export function dataPath(rootDir: string): string {
-  return join(dotFlowcabalPath(rootDir), "data");
+export function memoryPath(rootDir: string): string {
+  return join(dotFlowcabalPath(rootDir), "memory");
 }
 
-export function workflowsPath(rootDir: string): string {
-  return join(dataPath(rootDir), "workflows");
+export function memoryIndexPath(rootDir: string): string {
+  return join(memoryPath(rootDir), "index.md");
 }
 
-export function workflowFilePath(rootDir: string, workflowId: string): string {
-  return join(workflowsPath(rootDir), `${workflowId}.json`);
-}
-
-export function llmConfigsPath(rootDir: string): string {
-  return join(dataPath(rootDir), "llm-configs.json");
-}
-
-export function preferencesPath(rootDir: string): string {
-  return join(dataPath(rootDir), "preferences");
-}
-
-export function workflowPreferencesPath(
-  rootDir: string,
-  workflowId: string,
-): string {
-  return join(preferencesPath(rootDir), `${workflowId}.json`);
-}
-
-// ── memory/：Agent 记忆（按项目隔离） ──
-
-export function memoryPath(rootDir: string, project: string): string {
-  return join(dotFlowcabalPath(rootDir), "memory", project);
-}
-
-export function memoryIndexPath(rootDir: string, project: string): string {
-  return join(memoryPath(rootDir, project), "index.md");
-}
-
-export function charactersPath(rootDir: string, project: string): string {
-  return join(memoryPath(rootDir, project), "characters.md");
-}
-
-export function worldPath(rootDir: string, project: string): string {
-  return join(memoryPath(rootDir, project), "world.md");
-}
-
-export function voicePath(rootDir: string, project: string): string {
-  return join(memoryPath(rootDir, project), "voice.md");
-}
-
-export function manuscriptsPath(rootDir: string, project: string): string {
-  return join(memoryPath(rootDir, project), "manuscripts");
+export function manuscriptsPath(rootDir: string): string {
+  return join(memoryPath(rootDir), "manuscripts");
 }
 
 // ── runner-cache/：工作区（按 workspace 隔离，删除即释放） ──
@@ -114,10 +101,12 @@ export function nodeOutputPath(
 /** init 时创建的种子 .md 文件（相对于 memoryPath） */
 export const MEMORY_SEED_FILES = [
   "index.md",
-  "characters.md",
-  "world.md",
   "voice.md",
 ] as const;
 
 /** init 时创建的种子目录（相对于 memoryPath） */
-export const MEMORY_SEED_DIRS = ["manuscripts"] as const;
+export const MEMORY_SEED_DIRS = [
+  "characters",
+  "world",
+  "manuscripts",
+] as const;
