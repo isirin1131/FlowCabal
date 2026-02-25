@@ -7,6 +7,7 @@ const MEMORY_CONVENTIONS = `## 记忆系统约定
 - 文件之间用 → path/to/file.md 标记交叉引用（如：受「三火之律」约束 → world/magic-system.md）
 - write_memory 是全量覆写——写入前必须先 read_memory 读出现有内容，合并后再写回，否则会丢失数据
 - 删除或重命名文件时，搜索并更新其他文件中指向它的引用
+- 每个文件首行格式：「# 标题 — 一句话摘要」（如 # 张三 — 男，28岁，灵火师，主角挚友），索引自动提取首行（80字截断）作为 L0 导航
 - 完成所有修改后调用一次 update_index 刷新索引`;
 
 export const SYSTEM_PROMPT_ANALYZE = `你是一个专业的小说分析助手。你的任务是分析用户提供的文本，并将关键信息提取到记忆系统中。
