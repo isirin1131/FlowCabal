@@ -88,3 +88,58 @@ export async function* conversationalAgent(
   }
   return full;
 }
+
+// ── Structured Agent Events (for TUI) ──
+
+export type AgentEvent =
+  | { type: "text"; chunk: string }
+  | { type: "tool-call"; name: string; args: Record<string, unknown> }
+  | { type: "tool-result"; name: string; result: unknown };
+
+/**
+ * Conversational agent with structured events — yields AgentEvent
+ * for text chunks, tool calls, and tool results.
+ */
+export async function* conversationalAgentEvents(
+  rootDir: string,
+  llmConfig: LlmConfig,
+  messages: CoreMessage[],
+  runtimeCtx?: RuntimeContext,
+  abortSignal?: AbortSignal,
+): AsyncGenerator<AgentEvent, string> {
+  const prepared = await prepareAgent({
+    rootDir, llmConfig,
+    systemPrompt: SYSTEM_PROMPT_CHAT,
+    runtimeCtx, abortSignal,
+  });
+
+  const result = streamText({
+    ...prepared,
+    messages,
+  });
+
+  let full = "";
+  for await (const part of result.fullStream) {
+    switch (part.type) {
+      case "text-delta":
+        full += part.textDelta;
+        yield { type: "text", chunk: part.textDelta };
+        break;
+      case "tool-call":
+        yield {
+          type: "tool-call",
+          name: part.toolName,
+          args: part.args as Record<string, unknown>,
+        };
+        break;
+      case "tool-result":
+        yield {
+          type: "tool-result",
+          name: part.toolName,
+          result: part.result,
+        };
+        break;
+    }
+  }
+  return full;
+}
