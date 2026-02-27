@@ -13,23 +13,26 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Native builds (guaranteed)
           - os: ubuntu-latest
-            target: linux-x64
             artifact: flowcabal-linux-x64
-          - os: ubuntu-24.04-arm
-            target: linux-arm64
-            artifact: flowcabal-linux-arm64
-          - os: macos-13
-            target: darwin-x64
-            artifact: flowcabal-darwin-x64
+            cross: ""
           - os: macos-latest
-            target: darwin-arm64
             artifact: flowcabal-darwin-arm64
+            cross: ""
           - os: windows-latest
-            target: windows-x64
             artifact: flowcabal-windows-x64.exe
+            cross: ""
+          # Cross-compiled builds (best-effort)
+          - os: ubuntu-latest
+            artifact: flowcabal-linux-arm64
+            cross: "--target=bun-linux-arm64"
+          - os: macos-latest
+            artifact: flowcabal-darwin-x64
+            cross: "--target=bun-darwin-x64"
 
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.cross != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -41,7 +44,7 @@ jobs:
         run: bun install
 
       - name: Build binary
-        run: bun build --compile packages/tui/src/index.ts --outfile ${{ matrix.artifact }}
+        run: bun build --compile ${{ matrix.cross }} packages/tui/src/index.ts --outfile ${{ matrix.artifact }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -51,6 +54,7 @@ jobs:
 
   release:
     needs: build
+    if: always() && !cancelled()
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -65,7 +69,7 @@ jobs:
         run: ls -lh dist/
 
       - name: Make binaries executable
-        run: chmod +x dist/flowcabal-linux-* dist/flowcabal-darwin-*
+        run: chmod +x dist/flowcabal-linux-* dist/flowcabal-darwin-* 2>/dev/null || true
 
       - name: Create release
         env:
