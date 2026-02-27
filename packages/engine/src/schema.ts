@@ -63,3 +63,59 @@ export const LlmConfigsFileSchema = z.record(z.string(), LlmConfigSchema);
 export const ProjectConfigSchema = z.object({
   name: z.string(),
 });
+
+// ── Workspace Meta ──
+export const WorkspaceMetaSchema = z.object({
+  projectId: z.string(),
+  createdAt: z.string(),
+});
+
+// ── Version Source ──
+export const VersionSourceSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("generated") }),
+  z.object({ kind: z.literal("human-edit") }),
+  z.object({ kind: z.literal("conversation"), summary: z.string() }),
+]);
+
+// ── Execution Trace ──
+export const ExecutionTraceSchema = z.object({
+  model: z.string(),
+  inputTokens: z.number(),
+  outputTokens: z.number(),
+  durationMs: z.number(),
+  resolvedSystem: z.string(),
+  resolvedUser: z.string(),
+});
+
+// ── Node Version ──
+export const NodeVersionSchema = z.object({
+  id: z.string(),
+  promptHash: z.string(),
+  agentInjects: z.record(z.string(), z.string()),
+  output: z.string(),
+  source: VersionSourceSchema,
+  current: z.boolean(),
+  createdAt: z.string(),
+  trace: ExecutionTraceSchema.optional(),
+});
+
+// ── Node Version File（磁盘格式） ──
+export const NodeVersionFileSchema = z.object({
+  versions: z.array(NodeVersionSchema),
+  currentId: z.string(),
+});
+
+// ── Node Override ──
+export const NodeOverrideSchema = z.object({
+  llmConfigName: z.string().optional(),
+  temperature: z.number().min(0).max(2).optional(),
+  maxTokens: z.number().int().positive().optional(),
+  topP: z.number().min(0).max(1).optional(),
+  frequencyPenalty: z.number().min(-2).max(2).optional(),
+  presencePenalty: z.number().min(-2).max(2).optional(),
+});
+
+// ── Workspace Preferences ──
+export const WorkspacePreferencesSchema = z.object({
+  nodeOverrides: z.record(z.string(), NodeOverrideSchema).optional(),
+});

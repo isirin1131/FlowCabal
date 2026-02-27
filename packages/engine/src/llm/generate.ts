@@ -9,6 +9,7 @@ export async function generate(
   config: LlmConfig,
   system: string,
   prompt: string,
+  abortSignal?: AbortSignal,
 ): Promise<string> {
   const provider = getProvider(config);
   const result = await generateText({
@@ -21,22 +22,23 @@ export async function generate(
     frequencyPenalty: config.frequencyPenalty,
     presencePenalty: config.presencePenalty,
     providerOptions: config.providerOptions,
+    abortSignal,
   });
   return result.text;
 }
 
 /**
- * Stream text, calling onChunk for each delta.
- * Returns the full accumulated text.
+ * Create a stream without consuming it.
+ * Caller iterates stream.textStream directly (e.g., executor yields chunks as events).
  */
-export async function streamGenerate(
+export function createStream(
   config: LlmConfig,
   system: string,
   prompt: string,
-  onChunk?: (chunk: string) => void,
-): Promise<string> {
+  abortSignal?: AbortSignal,
+) {
   const provider = getProvider(config);
-  const result = streamText({
+  return streamText({
     model: provider(config.model),
     system,
     prompt,
@@ -46,12 +48,6 @@ export async function streamGenerate(
     frequencyPenalty: config.frequencyPenalty,
     presencePenalty: config.presencePenalty,
     providerOptions: config.providerOptions,
+    abortSignal,
   });
-
-  let full = "";
-  for await (const chunk of result.textStream) {
-    full += chunk;
-    onChunk?.(chunk);
-  }
-  return full;
 }

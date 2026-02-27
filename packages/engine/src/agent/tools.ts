@@ -74,18 +74,41 @@ export function createTools(
     ...(runtimeCtx
       ? {
           query_runtime: tool({
-            description: "查询工作流运行时状态（节点输出等）",
+            description: "查询工作流运行时状态（节点输出、状态、版本等）",
             parameters: z.object({
-              nodeId: z.string().optional().describe("要查询输出的节点 ID，不传则返回所有节点列表"),
+              action: z.enum(["list", "output", "status", "versions"]).describe(
+                "list=列出所有节点, output=查看节点输出, status=查看节点状态, versions=查看节点版本历史",
+              ),
+              nodeId: z.string().optional().describe("目标节点 ID（action=list 时不需要）"),
             }),
-            execute: async ({ nodeId }) => {
-              if (nodeId) {
+            execute: async ({ action, nodeId }) => {
+              if (action === "list") {
+                const nodes = runtimeCtx.getWorkflowNodes();
+                return { nodes: nodes.map((n) => ({ id: n.id, label: n.label })) };
+              }
+              if (!nodeId) return { error: "需要 nodeId 参数" };
+              if (action === "output") {
                 const output = runtimeCtx.getNodeOutput(nodeId);
                 if (output === null) return { error: `节点 ${nodeId} 无输出` };
                 return { nodeId, output };
               }
-              const nodes = runtimeCtx.getWorkflowNodes();
-              return { nodes: nodes.map((n) => ({ id: n.id, label: n.label })) };
+              if (action === "status") {
+                const status = runtimeCtx.getNodeStatus(nodeId);
+                return { nodeId, status };
+              }
+              if (action === "versions") {
+                const versions = runtimeCtx.getNodeVersions(nodeId);
+                return {
+                  nodeId,
+                  versions: versions.map((v) => ({
+                    id: v.id,
+                    source: v.source.kind,
+                    current: v.current,
+                    createdAt: v.createdAt,
+                  })),
+                };
+              }
+              return { error: `未知 action: ${action}` };
             },
           }),
         }

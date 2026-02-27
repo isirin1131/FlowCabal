@@ -20,9 +20,10 @@ import { homedir } from "os";
 // │   └── manuscripts/               # L2 完整信息源（定稿章节）
 // └── runner-cache/                   # 工作区（删除即释放全部缓存）
 //     └── <workspace-id>/
-//         ├── meta.json              # { workflowId, createdAt }
+//         ├── meta.json              # { projectId, createdAt }
+//         ├── nodes.json             # NodeDef[]（workspace 的真实节点来源）
 //         └── outputs/
-//             └── <node-id>.json     # { promptHash, agentInjects, output }
+//             └── <node-id>.json     # { versions: NodeVersion[], currentId }
 // ──────────────────────────────────────────────────────────────
 
 // ── 全局配置（~/.config/flowcabal/） ──
@@ -88,12 +89,26 @@ export function workspaceMetaPath(
   return join(workspacePath(rootDir, workspaceId), "meta.json");
 }
 
+export function workspaceNodesPath(
+  rootDir: string,
+  workspaceId: string,
+): string {
+  return join(workspacePath(rootDir, workspaceId), "nodes.json");
+}
+
 export function nodeOutputPath(
   rootDir: string,
   workspaceId: string,
   nodeId: string,
 ): string {
   return join(workspacePath(rootDir, workspaceId), "outputs", `${nodeId}.json`);
+}
+
+export function workspacePreferencesPath(
+  rootDir: string,
+  workspaceId: string,
+): string {
+  return join(workspacePath(rootDir, workspaceId), "preferences.json");
 }
 
 // ── 初始化时创建的种子文件和目录 ──

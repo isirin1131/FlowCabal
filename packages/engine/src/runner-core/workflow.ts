@@ -5,20 +5,7 @@ import type { Workflow, NodeDef, TextBlock } from "../types.js";
  * 返回 Map<nodeId, Set<被依赖的 nodeId>>
  */
 export function extractDeps(workflow: Workflow): Map<string, Set<string>> {
-  const deps = new Map<string, Set<string>>();
-
-  for (const node of workflow.nodes) {
-    deps.set(node.id, new Set<string>());
-  }
-
-  for (const node of workflow.nodes) {
-    const refs = collectRefs([...node.systemPrompt, ...node.userPrompt]);
-    for (const refId of refs) {
-      deps.get(node.id)!.add(refId);
-    }
-  }
-
-  return deps;
+  return extractNodeDeps(workflow.nodes);
 }
 
 /**
@@ -78,6 +65,99 @@ export function topoSort(workflow: Workflow): NodeDef[] {
   }
 
   return sorted;
+}
+
+/**
+ * 从 NodeDef[] 推导依赖关系（无需完整 Workflow）。
+ */
+export function extractNodeDeps(nodes: NodeDef[]): Map<string, Set<string>> {
+  const deps = new Map<string, Set<string>>();
+  for (const node of nodes) {
+    deps.set(node.id, new Set<string>());
+  }
+  for (const node of nodes) {
+    const refs = collectRefs([...node.systemPrompt, ...node.userPrompt]);
+    for (const refId of refs) {
+      deps.get(node.id)!.add(refId);
+    }
+  }
+  return deps;
+}
+
+/**
+ * 拓扑分层：返回 string[][]，每层内节点可并行执行。
+ * nodes 必须是无环子图。
+ */
+export function topoLevels(nodes: NodeDef[]): string[][] {
+  const deps = extractNodeDeps(nodes);
+  const nodeSet = new Set(nodes.map((n) => n.id));
+
+  // 过滤掉子图外的依赖
+  for (const [nodeId, nodeDeps] of deps) {
+    for (const dep of nodeDeps) {
+      if (!nodeSet.has(dep)) nodeDeps.delete(dep);
+    }
+  }
+
+  const remaining = new Set(nodeSet);
+  const levels: string[][] = [];
+
+  while (remaining.size > 0) {
+    // 当前层：所有依赖已全部被之前层处理过的节点
+    const level: string[] = [];
+    for (const nodeId of remaining) {
+      const nodeDeps = deps.get(nodeId)!;
+      if (nodeDeps.size === 0) {
+        level.push(nodeId);
+      }
+    }
+    if (level.length === 0) {
+      throw new Error("Cycle detected in subgraph");
+    }
+    levels.push(level);
+    for (const id of level) {
+      remaining.delete(id);
+    }
+    // 从剩余节点的依赖中移除本层节点
+    for (const nodeId of remaining) {
+      const nodeDeps = deps.get(nodeId)!;
+      for (const id of level) {
+        nodeDeps.delete(id);
+      }
+    }
+  }
+
+  return levels;
+}
+
+/**
+ * 计算 targets 的最小依赖子图。
+ * 返回子图内所有 nodeId（包括 targets 本身）。
+ */
+export function computeSubgraph(nodes: NodeDef[], targets: string[]): string[] {
+  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+  const deps = extractNodeDeps(nodes);
+  const visited = new Set<string>();
+
+  function visit(nodeId: string) {
+    if (visited.has(nodeId)) return;
+    visited.add(nodeId);
+    const nodeDeps = deps.get(nodeId);
+    if (nodeDeps) {
+      for (const dep of nodeDeps) {
+        visit(dep);
+      }
+    }
+  }
+
+  for (const target of targets) {
+    if (!nodeMap.has(target)) {
+      throw new Error(`Target node "${target}" not found`);
+    }
+    visit(target);
+  }
+
+  return Array.from(visited);
 }
 
 /**
