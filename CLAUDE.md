@@ -5,15 +5,19 @@
 - LLM 集成：Vercel AI SDK（`ai`, `@ai-sdk/openai`, `@ai-sdk/anthropic`, `@ai-sdk/google`）
 - Schema 校验：Zod
 - TUI：OpenTUI（`@opentui/core` + `@opentui/react`）
-- CLI（仅 init）：yargs + @clack/prompts
+- CLI：yargs + @clack/prompts
 - 分发：`bun build --compile` 单文件二进制，GitHub Actions 多平台编译
 
 ## 常用命令
 - `bun install` — 安装依赖
-- `bun run typecheck` — 类型检查（engine + tui）
-- `bun run flowcabal init` — 初始化项目（@clack/prompts 交互，TUI 外运行）
+- `bun run typecheck` — 类型检查（engine + tui + cli）
+- `bun run flowcabal init` — 初始化项目（@clack/prompts 交互）
 - `bun run flowcabal` — 启动 TUI
 - `bun run flowcabal --workspace <id>` — 指定 workspace 启动
+- `bun run flowcabal node add <label>` — 创建节点
+- `bun run flowcabal node connect <nodeId> <upstreamId>` — 连接节点
+- `bun run flowcabal edit <nodeId> [blockIndex]` — 编辑 block 文本
+- `bun run flowcabal run` — 执行 DAG
 
 ## 目录结构
 - `packages/engine/src/` — 核心引擎（纯库，零 IO 假设）
@@ -44,7 +48,18 @@
   - `hooks/` — 6 个 React hooks（useWorkspace, useFocus, useKeybindings, useRun, useMemory, useAgentChat）
   - `views/` — 5 个视图（dashboard, node-detail, memory-browser, agent-chat, todo-queue）
   - `components/` — 8 个可复用组件（status-bar, command-input, node-list, progress-bar, text-block-renderer, version-list, streaming-output, file-tree）
-- `packages/cli/` — 旧 CLI（已被 tui 替代，待删除）
+- `packages/cli/` — 命令行界面（yargs + @clack/prompts）
+  - `src/index.ts` — yargs 入口
+  - `src/config.ts` — findProjectRoot, loadLlmConfigs, resolveWorkspace
+  - `src/commands/` — 11 个命令文件
+    - `init.ts` — 项目初始化
+    - `create.ts` — workspace 创建
+    - `lock.ts` / `log.ts` / `show.ts` / `status.ts` — workspace 查询
+    - `edit.ts` — 单 block 文本编辑（$EDITOR）
+    - `node.ts` — 节点编排子命令组（add/rm/rename/connect/disconnect/add-literal/add-inject/rm-block）
+    - `run.ts` — DAG 执行
+    - `add-chapter.ts` — 章节添加 + Agent 记忆提取
+    - `generate.ts` — 单节点生成
 - `docs/` — 设计文档（保留，不要动）
 - `backend/` — 旧代码 + 测试用样章（保留）
 - `.github/workflows/release.yml` — 多平台编译 + GitHub Release 自动发布
@@ -87,6 +102,10 @@
 - **agent/** — Agent 子系统，独占 `memory/` 读写（人类也直接编辑 memory）
 - **llm/** — 共享基础设施，runner-core 和 agent 都依赖
 - **tui/** — engine API 的纯展示层，零领域逻辑
+- **cli/** — engine API 的命令行界面，@clack/prompts 交互
+  - `edit` 只编辑单个 block 的文本（literal→content, agent-inject→hint），ref 不可编辑
+  - `node` 子命令组负责所有结构编排（增删节点、连接/断开 ref、管理 block）
+  - nodeId 支持前缀匹配（复用 show.ts 模式）
 - Agent 通过 RuntimeContext 接口查询运行时状态（从 state 实时读取），不直接读 runner-cache
 
 ### TUI 状态管理

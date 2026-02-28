@@ -11,6 +11,7 @@ import { lockCommand } from "./commands/lock.js";
 import { logCommand } from "./commands/log.js";
 import { showCommand } from "./commands/show.js";
 import { editCommand } from "./commands/edit.js";
+import { nodeCommand } from "./commands/node.js";
 
 yargs(hideBin(process.argv))
   .scriptName("flowcabal")
@@ -22,6 +23,7 @@ yargs(hideBin(process.argv))
   .command(logCommand)
   .command(showCommand)
   .command(editCommand)
+  .command(nodeCommand)
   .command(runCommand)
   .command(addChapterCommand)
   .command(generateCommand)

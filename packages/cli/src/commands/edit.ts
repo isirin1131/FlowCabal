@@ -4,25 +4,51 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { spawnSync } from "child_process";
 import * as p from "@clack/prompts";
-import {
-  openWorkspace,
-  writeWorkspaceNodes,
-  validateWorkflow,
-  newId,
-  NodeDefSchema,
-} from "@flowcabal/engine";
-import type { NodeDef } from "@flowcabal/engine";
+import { openWorkspace } from "@flowcabal/engine";
+import type { TextBlock, NodeDef } from "@flowcabal/engine";
 import { findProjectRoot, resolveWorkspace, loadLlmConfigs } from "../config.js";
 
+function blockLabel(block: TextBlock, nodes: NodeDef[]): string {
+  switch (block.kind) {
+    case "literal": {
+      const preview = block.content.length > 60
+        ? block.content.slice(0, 60) + "..."
+        : block.content;
+      return `[literal] ${preview}`;
+    }
+    case "ref": {
+      const upstream = nodes.find((n) => n.id === block.nodeId);
+      return `[ref] → ${upstream ? upstream.label : block.nodeId.slice(0, 8)}`;
+    }
+    case "agent-inject":
+      return `[agent-inject] ${block.hint}`;
+  }
+}
+
 export const editCommand: CommandModule = {
-  command: "edit",
-  describe: "编辑节点（打开 $EDITOR）",
+  command: "edit [nodeId] [blockIndex]",
+  describe: "编辑单个 block 的文本内容（$EDITOR）",
   builder: (yargs) =>
-    yargs.version(false).option("workspace", {
-      alias: "w",
-      type: "string",
-      describe: "workspace ID",
-    }),
+    yargs
+      .version(false)
+      .positional("nodeId", {
+        type: "string",
+        describe: "节点 ID（支持前缀匹配）",
+      })
+      .positional("blockIndex", {
+        type: "number",
+        describe: "block 索引",
+      })
+      .option("workspace", {
+        alias: "w",
+        type: "string",
+        describe: "workspace ID",
+      })
+      .option("system", {
+        type: "boolean",
+        default: false,
+        describe: "编辑 systemPrompt（默认 userPrompt）",
+      }),
   handler: async (argv) => {
     const rootDir = findProjectRoot();
     if (!rootDir) {
@@ -37,98 +63,109 @@ export const editCommand: CommandModule = {
     const ws = await openWorkspace(rootDir, wsId, llmConfigs);
     const nodes = ws.getNodes();
 
-    const editor = process.env.EDITOR || "vi";
-    const tmpFile = join(tmpdir(), `flowcabal-edit-${wsId.slice(0, 8)}.json`);
-
-    // 写入临时文件
-    const json = JSON.stringify(nodes, null, 2);
-    await writeFile(tmpFile, json, "utf-8");
-
-    // 编辑循环
-    while (true) {
-      // 打开编辑器
-      const result = spawnSync(editor, [tmpFile], {
-        stdio: "inherit",
-      });
-
-      if (result.status !== 0) {
-        p.cancel("编辑器异常退出");
-        await cleanup(tmpFile);
+    // ── 选择节点 ──
+    let node: NodeDef;
+    const nodeIdArg = argv.nodeId as string | undefined;
+    if (nodeIdArg) {
+      const matches = nodes.filter((n) => n.id.startsWith(nodeIdArg));
+      if (matches.length === 0) {
+        p.cancel(`没有找到匹配 "${nodeIdArg}" 的节点`);
         process.exit(1);
       }
-
-      // 读取编辑后的内容
-      const edited = await Bun.file(tmpFile).text();
-
-      // 解析 JSON
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(edited);
-      } catch {
-        p.log.error("JSON 解析失败");
-        const retry = await askRetry();
-        if (!retry) {
-          await cleanup(tmpFile);
-          return;
-        }
-        continue;
+      if (matches.length > 1) {
+        p.cancel(`"${nodeIdArg}" 匹配多个节点，请提供更长的前缀`);
+        process.exit(1);
       }
-
-      // Zod 校验
-      const nodesResult = NodeDefSchema.array().safeParse(parsed);
-      if (!nodesResult.success) {
-        const msgs = nodesResult.error.issues.map((i: { message: string }) => i.message).join(", ");
-        p.log.error(`节点校验失败: ${msgs}`);
-        const retry = await askRetry();
-        if (!retry) {
-          await cleanup(tmpFile);
-          return;
-        }
-        continue;
+      node = matches[0];
+    } else {
+      if (nodes.length === 0) {
+        p.cancel("没有节点");
+        process.exit(1);
       }
-
-      let validatedNodes: NodeDef[] = nodesResult.data;
-
-      // 为缺失 id 的新节点生成 id
-      validatedNodes = validatedNodes.map((n) => {
-        if (!n.id) {
-          return { ...n, id: newId() };
-        }
-        return n;
+      const selected = await p.select({
+        message: "选择节点",
+        options: nodes.map((n) => ({
+          label: `${n.label} [${n.id.slice(0, 8)}]`,
+          value: n.id,
+        })),
       });
+      if (p.isCancel(selected)) return;
+      node = nodes.find((n) => n.id === selected)!;
+    }
 
-      // DAG 校验
-      try {
-        validateWorkflow({
-          id: "edit-validation",
-          name: "edit-validation",
-          nodes: validatedNodes,
-        });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        p.log.error(`DAG 校验失败: ${msg}`);
-        const retry = await askRetry();
-        if (!retry) {
-          await cleanup(tmpFile);
-          return;
-        }
-        continue;
-      }
+    const promptKey: "system" | "user" = argv.system ? "system" : "user";
+    const blocks = promptKey === "system" ? node.systemPrompt : node.userPrompt;
 
-      // 写回 workspace
-      await writeWorkspaceNodes(rootDir, wsId, validatedNodes);
-      p.log.success(`已保存 ${validatedNodes.length} 个节点`);
-      await cleanup(tmpFile);
+    if (blocks.length === 0) {
+      p.log.warn(`${promptKey}Prompt 为空，没有可编辑的 block`);
       return;
     }
+
+    // ── 选择 block ──
+    let blockIndex: number;
+    const blockIndexArg = argv.blockIndex as number | undefined;
+    if (blockIndexArg !== undefined) {
+      if (blockIndexArg < 0 || blockIndexArg >= blocks.length) {
+        p.cancel(`block 索引 ${blockIndexArg} 越界 (0..${blocks.length - 1})`);
+        process.exit(1);
+      }
+      blockIndex = blockIndexArg;
+    } else if (blocks.length === 1) {
+      blockIndex = 0;
+    } else {
+      const selected = await p.select({
+        message: "选择 block",
+        options: blocks.map((b, i) => ({
+          label: `[${i}] ${blockLabel(b, nodes)}`,
+          value: i,
+        })),
+      });
+      if (p.isCancel(selected)) return;
+      blockIndex = selected as number;
+    }
+
+    const block = blocks[blockIndex];
+
+    // ref 不可编辑
+    if (block.kind === "ref") {
+      p.log.warn("ref block 不可直接编辑，请使用 node connect/disconnect 管理连接");
+      return;
+    }
+
+    // ── 打开编辑器 ──
+    const text = block.kind === "literal" ? block.content : block.hint;
+    const editor = process.env.EDITOR || "vi";
+    const ext = block.kind === "literal" ? ".md" : ".txt";
+    const tmpFile = join(tmpdir(), `flowcabal-edit-${node.id.slice(0, 8)}-${blockIndex}${ext}`);
+
+    await writeFile(tmpFile, text, "utf-8");
+
+    const result = spawnSync(editor, [tmpFile], { stdio: "inherit" });
+    if (result.status !== 0) {
+      p.cancel("编辑器异常退出");
+      await cleanup(tmpFile);
+      process.exit(1);
+    }
+
+    const edited = await Bun.file(tmpFile).text();
+    await cleanup(tmpFile);
+
+    if (edited === text) {
+      p.log.info("内容未变更");
+      return;
+    }
+
+    // ── 更新 block ──
+    const newBlock: TextBlock = block.kind === "literal"
+      ? { kind: "literal", content: edited }
+      : { kind: "agent-inject", hint: edited };
+
+    await ws.removeBlock(node.id, promptKey, blockIndex);
+    await ws.addBlock(node.id, promptKey, blockIndex, newBlock);
+
+    p.log.success(`已更新 ${node.label} 的 ${promptKey}Prompt[${blockIndex}]`);
   },
 };
-
-async function askRetry(): Promise<boolean> {
-  const retry = await p.confirm({ message: "重新编辑？" });
-  if (p.isCancel(retry)) return false;
-  return retry;
-}
 
 async function cleanup(path: string): Promise<void> {
   try {
