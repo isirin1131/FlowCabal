@@ -10,7 +10,7 @@ export const addChapterCommand: CommandModule<{}, { file: string }> = {
   command: "add-chapter <file>",
   describe: "添加章节并让 Agent 分析提取记忆",
   builder: (yargs) =>
-    yargs.positional("file", {
+    yargs.version(false).positional("file", {
       type: "string",
       describe: "章节文件路径",
       demandOption: true,

@@ -5,8 +5,9 @@ import { conversationalAgent } from "@flowcabal/engine";
 import { findProjectRoot, loadDefaultLlmConfig } from "../config.js";
 
 export const generateCommand: CommandModule = {
-  command: "generate",
-  describe: "对话式创作模式（REPL）",
+  command: "agent",
+  describe: "对话式创作模式",
+  builder: (yargs) => yargs.version(false),
   handler: async () => {
     const rootDir = findProjectRoot();
     if (!rootDir) {

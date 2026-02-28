@@ -48,6 +48,10 @@ export interface Workspace {
   setNodeOutput(nodeId: string, text: string): Promise<void>;
   pickVersion(nodeId: string, versionId: string): Promise<void>;
 
+  // 节点管理
+  addNode(node: NodeDef): Promise<void>;
+  removeNode(nodeId: string): Promise<void>;
+
   // Prompt 结构化编辑
   addBlock(nodeId: string, prompt: "system" | "user", index: number, block: TextBlock): Promise<void>;
   removeBlock(nodeId: string, prompt: "system" | "user", index: number): Promise<void>;
@@ -205,6 +209,27 @@ export async function openWorkspace(
 
     async pickVersion(nodeId: string, versionId: string): Promise<void> {
       await state.switchVersion(nodeId, versionId);
+    },
+
+    // ── 节点管理 ──
+
+    async addNode(node: NodeDef): Promise<void> {
+      const currentNodes = state.getNodes();
+      if (currentNodes.some((n) => n.id === node.id)) {
+        throw new Error(`节点 "${node.id}" 已存在`);
+      }
+      await state.updateNodes([...currentNodes, node]);
+      targets.push(node.id);
+    },
+
+    async removeNode(nodeId: string): Promise<void> {
+      const currentNodes = state.getNodes();
+      const filtered = currentNodes.filter((n) => n.id !== nodeId);
+      if (filtered.length === currentNodes.length) {
+        throw new Error(`节点 "${nodeId}" 不存在`);
+      }
+      await state.updateNodes(filtered);
+      targets = targets.filter((t) => t !== nodeId);
     },
 
     // ── Prompt 结构化编辑 ──

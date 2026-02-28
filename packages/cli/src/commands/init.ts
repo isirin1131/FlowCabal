@@ -8,6 +8,7 @@ import { initMemory, globalLlmConfigsPath } from "@flowcabal/engine";
 export const initCommand: CommandModule = {
   command: "init",
   describe: "初始化当前目录为 FlowCabal 项目",
+  builder: (yargs) => yargs.version(false),
   handler: async () => {
     p.intro("FlowCabal 项目初始化");
 

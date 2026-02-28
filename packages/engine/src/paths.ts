@@ -72,6 +72,12 @@ export function manuscriptsPath(rootDir: string): string {
   return join(memoryPath(rootDir), "manuscripts");
 }
 
+// ── current-workspace：lock 文件（纯文本，只存 workspace ID） ──
+
+export function currentWorkspacePath(rootDir: string): string {
+  return join(dotFlowcabalPath(rootDir), "current-workspace");
+}
+
 // ── runner-cache/：工作区（按 workspace 隔离，删除即释放） ──
 
 export function runnerCachePath(rootDir: string): string {
