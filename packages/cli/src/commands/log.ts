@@ -3,12 +3,7 @@ import * as p from "@clack/prompts";
 import type { NodeDef } from "@flowcabal/engine";
 import { openWorkspace, extractNodeDeps } from "@flowcabal/engine";
 import { findProjectRoot, resolveWorkspace, loadLlmConfigs } from "../config.js";
-
-const STATUS_ICON: Record<string, string> = {
-  cached: "✓",
-  stale: "~",
-  pending: "○",
-};
+import { STATUS_ICON } from "../utils.js";
 
 export const logCommand: CommandModule = {
   command: "log",

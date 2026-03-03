@@ -1,32 +1,9 @@
 import type { CommandModule } from "yargs";
 import * as p from "@clack/prompts";
-import type { TextBlock, NodeDef } from "@flowcabal/engine";
+import type { NodeDef } from "@flowcabal/engine";
 import { openWorkspace } from "@flowcabal/engine";
 import { findProjectRoot, resolveWorkspace, loadLlmConfigs } from "../config.js";
-
-const STATUS_ICON: Record<string, string> = {
-  cached: "✓",
-  stale: "~",
-  pending: "○",
-};
-
-function formatBlock(block: TextBlock, nodes: NodeDef[]): string {
-  switch (block.kind) {
-    case "literal": {
-      const preview = block.content.length > 80
-        ? block.content.slice(0, 80) + "..."
-        : block.content;
-      return `[literal] ${preview}`;
-    }
-    case "ref": {
-      const upstream = nodes.find((n) => n.id === block.nodeId);
-      const label = upstream ? upstream.label : "???";
-      return `[ref] → ${label} [${block.nodeId.slice(0, 8)}]`;
-    }
-    case "agent-inject":
-      return `[agent-inject] ${block.hint}`;
-  }
-}
+import { STATUS_ICON, matchNode, formatBlock } from "../utils.js";
 
 export const showCommand: CommandModule = {
   command: "show <nodeId>",
@@ -60,17 +37,7 @@ export const showCommand: CommandModule = {
 
     // 前缀匹配节点 ID
     const nodeIdArg = argv.nodeId as string;
-    const matches = nodes.filter((n) => n.id.startsWith(nodeIdArg));
-    if (matches.length === 0) {
-      p.cancel(`没有找到匹配 "${nodeIdArg}" 的节点`);
-      process.exit(1);
-    }
-    if (matches.length > 1) {
-      p.cancel(`"${nodeIdArg}" 匹配多个节点，请提供更长的前缀`);
-      process.exit(1);
-    }
-
-    const node = matches[0];
+    const node = matchNode(nodes, nodeIdArg);
     const status = ws.getNodeStatus(node.id);
     const versions = ws.getVersions(node.id);
     const icon = STATUS_ICON[status] ?? "?";

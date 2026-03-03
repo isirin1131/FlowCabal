@@ -5,7 +5,6 @@ import {
   workspaceNodesPath,
 } from "../paths.js";
 import { WorkspaceMetaSchema } from "../schema.js";
-import { NodeDefSchema } from "../schema.js";
 import { newId } from "../id.js";
 import type {
   WorkspaceMeta,
@@ -51,18 +50,7 @@ export async function readWorkspaceMeta(
   return readJson(workspaceMetaPath(rootDir, workspaceId), WorkspaceMetaSchema);
 }
 
-// ── Workspace 节点读写 ──
-
-export async function readWorkspaceNodes(
-  rootDir: string,
-  workspaceId: string,
-): Promise<NodeDef[]> {
-  const result = await readJson(
-    workspaceNodesPath(rootDir, workspaceId),
-    z.array(NodeDefSchema),
-  );
-  return result ?? [];
-}
+// ── Workspace 节点写入 ──
 
 export async function writeWorkspaceNodes(
   rootDir: string,

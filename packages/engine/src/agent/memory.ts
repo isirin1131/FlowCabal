@@ -10,7 +10,7 @@ import {
 
 // ── Types ──
 
-export interface MemoryEntry {
+interface MemoryEntry {
   /** 相对于 memoryPath 的路径，如 "characters/张三.md" */
   relativePath: string;
   content: string;

@@ -21,10 +21,3 @@ export function estimateTokens(text: string): number {
   }
   return Math.ceil(cjkCount / 1.5 + otherCount / 4);
 }
-
-/**
- * Check if content fits within a token budget.
- */
-export function fitsInBudget(text: string, maxTokens: number): boolean {
-  return estimateTokens(text) <= maxTokens;
-}

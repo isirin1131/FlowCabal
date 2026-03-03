@@ -1,5 +1,5 @@
 import type { CommandModule } from "yargs";
-import { writeFile, unlink } from "fs/promises";
+import { writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { spawnSync } from "child_process";
@@ -7,29 +7,7 @@ import * as p from "@clack/prompts";
 import { openWorkspace, newId, extractNodeDeps } from "@flowcabal/engine";
 import type { NodeDef } from "@flowcabal/engine";
 import { findProjectRoot, resolveWorkspace, loadLlmConfigs } from "../config.js";
-
-// ── 共用工具 ──
-
-function matchNode(nodes: NodeDef[], prefix: string): NodeDef {
-  const matches = nodes.filter((n) => n.id.startsWith(prefix));
-  if (matches.length === 0) {
-    p.cancel(`没有找到匹配 "${prefix}" 的节点`);
-    process.exit(1);
-  }
-  if (matches.length > 1) {
-    p.cancel(`"${prefix}" 匹配多个节点，请提供更长的前缀`);
-    process.exit(1);
-  }
-  return matches[0];
-}
-
-async function cleanup(path: string): Promise<void> {
-  try {
-    await unlink(path);
-  } catch {
-    // ignore
-  }
-}
+import { matchNode, cleanup } from "../utils.js";
 
 // ── node add ──
 

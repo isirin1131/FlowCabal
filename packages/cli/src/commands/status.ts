@@ -10,6 +10,7 @@ import {
   extractNodeDeps,
 } from "@flowcabal/engine";
 import { findProjectRoot, listWorkspaces, resolveWorkspace, loadLlmConfigs } from "../config.js";
+import { STATUS_ICON } from "../utils.js";
 
 export const statusCommand: CommandModule = {
   command: "status",
@@ -73,16 +74,10 @@ export const statusCommand: CommandModule = {
 
         p.log.info(`workspace ${wsId.slice(0, 12)} — ${dashboard.nodes.length} 个节点`);
 
-        const statusIcon: Record<string, string> = {
-          cached: "✓",
-          stale: "~",
-          pending: "○",
-        };
-
         const deps = extractNodeDeps(nodes);
 
         for (const node of dashboard.nodes) {
-          const icon = statusIcon[node.status] ?? "?";
+          const icon = STATUS_ICON[node.status] ?? "?";
           const upstream = deps.get(node.id);
           let depStr = "";
           if (upstream && upstream.size > 0) {

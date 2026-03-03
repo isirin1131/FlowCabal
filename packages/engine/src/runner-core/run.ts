@@ -12,6 +12,7 @@ import type {
   WorkspacePreferences,
   TokenEstimate,
   LevelNodeResult,
+  RuntimeContext,
 } from "../types.js";
 import { memoryIndexPath, nodeOutputPath } from "../paths.js";
 import type { WorkspaceState } from "./state.js";
@@ -39,8 +40,6 @@ function createEventBus() {
 }
 
 // ── Helpers ──
-
-export { computePromptHash };
 
 function resolveLlmConfig(
   llmConfigs: LlmConfigsFile,
@@ -225,7 +224,7 @@ async function runLoop(
       bus.emit({ type: "level:start", level: levelIdx, nodeIds: levelIds });
 
       // 构建 RuntimeContext（从 state 读实时数据）
-      const runtimeCtx = {
+      const runtimeCtx: RuntimeContext = {
         getNodeOutput: (id: string) => state.getNodeOutput(id),
         getWorkflowNodes: () => state.getNodes(),
         getNodeStatus: (id: string) => state.getNodeStatus(id),
@@ -291,18 +290,11 @@ interface NodeExecOpts {
   bus: ReturnType<typeof createEventBus>;
 }
 
-interface RuntimeCtx {
-  getNodeOutput(nodeId: string): string | null;
-  getWorkflowNodes(): NodeDef[];
-  getNodeStatus(nodeId: string): import("../types.js").NodeStatus;
-  getNodeVersions(nodeId: string): import("../types.js").NodeVersion[];
-}
-
 async function executeOneNode(
   nodeId: string,
   nodeMap: Map<string, NodeDef>,
   state: WorkspaceState,
-  runtimeCtx: RuntimeCtx,
+  runtimeCtx: RuntimeContext,
   opts: NodeExecOpts,
 ): Promise<LevelNodeResult> {
   const { llmConfigs, preferences, signal, bus } = opts;

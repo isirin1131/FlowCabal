@@ -1,5 +1,5 @@
 import type { CommandModule } from "yargs";
-import { writeFile, unlink } from "fs/promises";
+import { writeFile } from "fs/promises";
 import { tmpdir } from "os";
 import { join } from "path";
 import { spawnSync } from "child_process";
@@ -7,23 +7,7 @@ import * as p from "@clack/prompts";
 import { openWorkspace } from "@flowcabal/engine";
 import type { TextBlock, NodeDef } from "@flowcabal/engine";
 import { findProjectRoot, resolveWorkspace, loadLlmConfigs } from "../config.js";
-
-function blockLabel(block: TextBlock, nodes: NodeDef[]): string {
-  switch (block.kind) {
-    case "literal": {
-      const preview = block.content.length > 60
-        ? block.content.slice(0, 60) + "..."
-        : block.content;
-      return `[literal] ${preview}`;
-    }
-    case "ref": {
-      const upstream = nodes.find((n) => n.id === block.nodeId);
-      return `[ref] → ${upstream ? upstream.label : block.nodeId.slice(0, 8)}`;
-    }
-    case "agent-inject":
-      return `[agent-inject] ${block.hint}`;
-  }
-}
+import { matchNode, formatBlock, cleanup } from "../utils.js";
 
 export const editCommand: CommandModule = {
   command: "edit [nodeId] [blockIndex]",
@@ -67,16 +51,7 @@ export const editCommand: CommandModule = {
     let node: NodeDef;
     const nodeIdArg = argv.nodeId as string | undefined;
     if (nodeIdArg) {
-      const matches = nodes.filter((n) => n.id.startsWith(nodeIdArg));
-      if (matches.length === 0) {
-        p.cancel(`没有找到匹配 "${nodeIdArg}" 的节点`);
-        process.exit(1);
-      }
-      if (matches.length > 1) {
-        p.cancel(`"${nodeIdArg}" 匹配多个节点，请提供更长的前缀`);
-        process.exit(1);
-      }
-      node = matches[0];
+      node = matchNode(nodes, nodeIdArg);
     } else {
       if (nodes.length === 0) {
         p.cancel("没有节点");
@@ -116,7 +91,7 @@ export const editCommand: CommandModule = {
       const selected = await p.select({
         message: "选择 block",
         options: blocks.map((b, i) => ({
-          label: `[${i}] ${blockLabel(b, nodes)}`,
+          label: `[${i}] ${formatBlock(b, nodes)}`,
           value: i,
         })),
       });
@@ -166,11 +141,3 @@ export const editCommand: CommandModule = {
     p.log.success(`已更新 ${node.label} 的 ${promptKey}Prompt[${blockIndex}]`);
   },
 };
-
-async function cleanup(path: string): Promise<void> {
-  try {
-    await unlink(path);
-  } catch {
-    // ignore
-  }
-}

@@ -36,22 +36,6 @@ export function globalLlmConfigsPath(): string {
   return join(globalConfigPath(), "llm-configs.json");
 }
 
-export function globalWorkflowsPath(): string {
-  return join(globalConfigPath(), "workflows");
-}
-
-export function globalWorkflowFilePath(workflowId: string): string {
-  return join(globalWorkflowsPath(), `${workflowId}.json`);
-}
-
-export function globalPreferencesPath(): string {
-  return join(globalConfigPath(), "preferences");
-}
-
-export function globalWorkflowPreferencesPath(workflowId: string): string {
-  return join(globalPreferencesPath(), `${workflowId}.json`);
-}
-
 // ── 项目本地（<project-root>/.flowcabal/） ──
 
 export function dotFlowcabalPath(rootDir: string): string {

@@ -4,7 +4,7 @@ import type { Workflow, NodeDef, TextBlock } from "../types.js";
  * 从 workflow 的 TextBlock ref 隐式推导邻接表。
  * 返回 Map<nodeId, Set<被依赖的 nodeId>>
  */
-export function extractDeps(workflow: Workflow): Map<string, Set<string>> {
+function extractDeps(workflow: Workflow): Map<string, Set<string>> {
   return extractNodeDeps(workflow.nodes);
 }
 
@@ -21,7 +21,7 @@ function collectRefs(blocks: TextBlock[]): string[] {
  * Kahn 算法拓扑排序。
  * 返回拓扑序的 NodeDef[]，如果存在环则抛出错误。
  */
-export function topoSort(workflow: Workflow): NodeDef[] {
+function topoSort(workflow: Workflow): NodeDef[] {
   const deps = extractDeps(workflow);
   const nodeMap = new Map(workflow.nodes.map((n) => [n.id, n]));
 

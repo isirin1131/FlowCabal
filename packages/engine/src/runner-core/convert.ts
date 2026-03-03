@@ -38,24 +38,3 @@ export function importWorkflow(workflow: Workflow): NodeDef[] {
     userPrompt: remapBlocks(node.userPrompt, idMap),
   }));
 }
-
-/**
- * 导出为 workflow：nanoid → 按序编号 "0","1","2",...，refs 重映射。
- */
-export function exportWorkflow(nodes: NodeDef[], name: string): Workflow {
-  // 1. 按数组序给节点编号
-  const idMap = new Map<string, string>();
-  for (let i = 0; i < nodes.length; i++) {
-    idMap.set(nodes[i].id, String(i));
-  }
-
-  // 2. 重写所有节点
-  const exported = nodes.map((node, i) => ({
-    id: String(i),
-    label: node.label,
-    systemPrompt: remapBlocks(node.systemPrompt, idMap),
-    userPrompt: remapBlocks(node.userPrompt, idMap),
-  }));
-
-  return { id: newId(), name, nodes: exported };
-}

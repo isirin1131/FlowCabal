@@ -90,11 +90,6 @@ export async function openWorkspace(
     return node;
   }
 
-  function getBlockArray(nodeId: string, prompt: "system" | "user"): TextBlock[] {
-    const node = getNode(nodeId);
-    return prompt === "system" ? node.systemPrompt : node.userPrompt;
-  }
-
   const ws: Workspace = {
     rootDir,
     workspaceId,
