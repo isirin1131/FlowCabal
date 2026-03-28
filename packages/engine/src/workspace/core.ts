@@ -2,7 +2,6 @@ import { Workspace, NodeDef, TextBlock } from '../types';
 import { newId } from './utils';
 
 
-
 // ========= node CRUD ===================
 
 export function getNode(ws: Workspace, nodeId: string): NodeDef | undefined {
@@ -67,47 +66,28 @@ export function renameNode(ws: Workspace, nodeId: string, newLabel: string): boo
     return true;
 }
 
-function syncRef(ws: Workspace, nodeId: string, refNodeId: string, isAdd: boolean): void {
-    if (isAdd) {
-        if (!ws.upstream.has(nodeId)) ws.upstream.set(nodeId, []);
-        if (!ws.upstream.get(nodeId)!.includes(refNodeId)) {
-            ws.upstream.get(nodeId)!.push(refNodeId);
-        }
-        if (!ws.downstream.has(refNodeId)) ws.downstream.set(refNodeId, []);
-        if (!ws.downstream.get(refNodeId)!.includes(nodeId)) {
-            ws.downstream.get(refNodeId)!.push(nodeId);
-        }
-    } else {
-        const upstream = ws.upstream.get(nodeId);
-        if (upstream) {
-            const i = upstream.indexOf(refNodeId);
-            if (i !== -1) upstream.splice(i, 1);
-        }
-        const downstream = ws.downstream.get(refNodeId);
-        if (downstream) {
-            const i = downstream.indexOf(nodeId);
-            if (i !== -1) downstream.splice(i, 1);
-        }
-    }
-    if (!ws.stale_nodes.includes(nodeId)) {
-        ws.stale_nodes.push(nodeId);
-    }
-}
 
-export function addBlock(ws: Workspace, nodeId: string, block: TextBlock, isSystem: boolean): boolean {
+// ========= block CRUD ===================
+
+export function insertBlock(ws: Workspace, nodeId: string, block: TextBlock, isSystem: boolean, index?: number): boolean {
     const node = getNode(ws, nodeId);
     if (!node) return false;
-    if (isSystem) {
-        node.systemPrompt.push(block);
+    const blocks = isSystem ? node.systemPrompt : node.userPrompt;
+    if (index === undefined || index >= blocks.length) {
+        blocks.push(block);
     } else {
-        node.userPrompt.push(block);
+        blocks.splice(index, 0, block);
     }
+
     if (block.kind === 'ref') {
-        syncRef(ws, nodeId, block.nodeId, true);
+        const refId = block.nodeId;
+        if (!ws.upstream.has(nodeId)) ws.upstream.set(nodeId, []);
+        if (!ws.upstream.get(nodeId)!.includes(refId)) ws.upstream.get(nodeId)!.push(refId);
+        if (!ws.downstream.has(refId)) ws.downstream.set(refId, []);
+        if (!ws.downstream.get(refId)!.includes(nodeId)) ws.downstream.get(refId)!.push(nodeId);
     }
-    if (!ws.stale_nodes.includes(nodeId)) {
-        ws.stale_nodes.push(nodeId);
-    }
+
+    if (!ws.stale_nodes.includes(nodeId)) ws.stale_nodes.push(nodeId);
     return true;
 }
 
@@ -117,12 +97,16 @@ export function removeBlock(ws: Workspace, nodeId: string, isSystem: boolean, bl
     const blocks = isSystem ? node.systemPrompt : node.userPrompt;
     if (blockIndex < 0 || blockIndex >= blocks.length) return false;
     const removed = blocks.splice(blockIndex, 1)[0];
+
     if (removed.kind === 'ref') {
-        syncRef(ws, nodeId, removed.nodeId, false);
+        const refId = removed.nodeId;
+        const up = ws.upstream.get(nodeId);
+        if (up) { const i = up.indexOf(refId); if (i !== -1) up.splice(i, 1); }
+        const down = ws.downstream.get(refId);
+        if (down) { const i = down.indexOf(nodeId); if (i !== -1) down.splice(i, 1); }
     }
-    if (!ws.stale_nodes.includes(nodeId)) {
-        ws.stale_nodes.push(nodeId);
-    }
+
+    if (!ws.stale_nodes.includes(nodeId)) ws.stale_nodes.push(nodeId);
     return true;
 }
 
@@ -132,20 +116,24 @@ export function updateBlock(ws: Workspace, nodeId: string, isSystem: boolean, bl
     const blocks = isSystem ? node.systemPrompt : node.userPrompt;
     if (blockIndex < 0 || blockIndex >= blocks.length) return false;
     const oldBlock = blocks[blockIndex];
-    if (oldBlock.kind === 'ref') {
-        const oldRefId = oldBlock.nodeId;
-        if (block.kind === 'ref' && block.nodeId !== oldRefId) {
-            syncRef(ws, nodeId, oldRefId, false);
-            syncRef(ws, nodeId, block.nodeId, true);
-        } else if (block.kind !== 'ref') {
-            syncRef(ws, nodeId, oldRefId, false);
-        }
-    } else if (block.kind === 'ref') {
-        syncRef(ws, nodeId, block.nodeId, true);
-    }
     blocks[blockIndex] = block;
-    if (!ws.stale_nodes.includes(nodeId)) {
-        ws.stale_nodes.push(nodeId);
+
+    if (oldBlock.kind === 'ref') {
+        const oldRef = oldBlock.nodeId;
+        const up = ws.upstream.get(nodeId);
+        if (up) { const i = up.indexOf(oldRef); if (i !== -1) up.splice(i, 1); }
+        const down = ws.downstream.get(oldRef);
+        if (down) { const i = down.indexOf(nodeId); if (i !== -1) down.splice(i, 1); }
     }
+
+    if (block.kind === 'ref') {
+        const refId = block.nodeId;
+        if (!ws.upstream.has(nodeId)) ws.upstream.set(nodeId, []);
+        if (!ws.upstream.get(nodeId)!.includes(refId)) ws.upstream.get(nodeId)!.push(refId);
+        if (!ws.downstream.has(refId)) ws.downstream.set(refId, []);
+        if (!ws.downstream.get(refId)!.includes(nodeId)) ws.downstream.get(refId)!.push(nodeId);
+    }
+
+    if (!ws.stale_nodes.includes(nodeId)) ws.stale_nodes.push(nodeId);
     return true;
 }
