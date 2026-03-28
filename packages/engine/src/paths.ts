@@ -84,7 +84,6 @@ function workspaceToJson(workspace: Workspace): object {
     downstream: Object.fromEntries(workspace.downstream),
     target_nodes: workspace.target_nodes,
     stale_nodes: workspace.stale_nodes,
-    todo_queue: workspace.todo_queue,
   };
 }
 
@@ -99,7 +98,6 @@ function jsonToWorkspace(data: any): Workspace {
     downstream: new Map(Object.entries(parsed.downstream)),
     target_nodes: parsed.target_nodes,
     stale_nodes: parsed.stale_nodes,
-    todo_queue: parsed.todo_queue,
   };
 }
 

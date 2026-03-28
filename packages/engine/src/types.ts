@@ -37,7 +37,6 @@ export interface Workspace {
   downstream: Map<string, string[]>;
   target_nodes: string[];
   stale_nodes: string[];
-  todo_queue: string[];
 }
 
 // ── LLM ──

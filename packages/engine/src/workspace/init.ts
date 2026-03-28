@@ -19,11 +19,11 @@ function buildDependencies(nodes: NodeDef[]): { upstream: Map<string, string[]>,
         }
 
         for (const refNodeId of refs) {
-            if (!downstream.has(node.id)) downstream.set(node.id, []);
-            downstream.get(node.id)!.push(refNodeId);
+            if (!upstream.has(node.id)) upstream.set(node.id, []);
+            upstream.get(node.id)!.push(refNodeId);
 
-            if (!upstream.has(refNodeId)) upstream.set(refNodeId, []);
-            upstream.get(refNodeId)!.push(node.id);
+            if (!downstream.has(refNodeId)) downstream.set(refNodeId, []);
+            downstream.get(refNodeId)!.push(node.id);
         }
     }
 
@@ -39,8 +39,7 @@ export function initFromEmpty(name: string): Workspace {
         upstream: new Map(),
         downstream: new Map(),
         target_nodes: [],
-        stale_nodes: [],
-        todo_queue: []
+        stale_nodes: []
     };
 }
 
@@ -100,8 +99,7 @@ export function workflowToWorkspace(workflow: Workflow): Workspace {
         upstream: new Map<string, string[]>,
         downstream: new Map<string, string[]>,
         target_nodes: allNodeIds,
-        stale_nodes: [],
-        todo_queue: []
+        stale_nodes: []
     };
 }
 

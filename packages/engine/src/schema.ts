@@ -67,7 +67,6 @@ export const WorkspaceSchema = z.object({
   downstream: z.record(z.string(), z.array(z.string())),
   target_nodes: z.array(z.string()),
   stale_nodes: z.array(z.string()),
-  todo_queue: z.array(z.string()),
 });
 
 // ── LLM Configs File ──
