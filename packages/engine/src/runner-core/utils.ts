@@ -1,6 +1,11 @@
+import { customAlphabet } from "nanoid";
+
+// nanoid
+const alphabet = "0123456789abcdefghijklmnopqrstuvwxyz";
+export const newId = customAlphabet(alphabet, 36);
+
 /**
- * Rough token estimation: ~4 chars per token for English, ~2 for CJK.
- * Good enough for budget planning — not a precise tokenizer.
+ * a simple token usage predicter
  */
 export function estimateTokens(text: string): number {
   let cjkCount = 0;

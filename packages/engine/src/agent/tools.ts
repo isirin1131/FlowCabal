@@ -83,24 +83,24 @@ export function createTools(
             }),
             execute: async ({ action, nodeId }) => {
               if (action === "list") {
-                const nodes = runtimeCtx.getWorkflowNodes();
-                return { nodes: nodes.map((n) => ({ id: n.id, label: n.label })) };
+                const nodes = runtimeCtx?.getWorkflowNodes?.() || [];
+                return { nodes: nodes.map((n: any) => ({ id: n.id, label: n.label })) };
               }
               if (!nodeId) return { error: "需要 nodeId 参数" };
               if (action === "output") {
-                const output = runtimeCtx.getNodeOutput(nodeId);
+                const output = runtimeCtx?.getNodeOutput?.(nodeId) || null;
                 if (output === null) return { error: `节点 ${nodeId} 无输出` };
                 return { nodeId, output };
               }
               if (action === "status") {
-                const status = runtimeCtx.getNodeStatus(nodeId);
+                const status = runtimeCtx?.getNodeStatus?.(nodeId) || null;
                 return { nodeId, status };
               }
               if (action === "versions") {
-                const versions = runtimeCtx.getNodeVersions(nodeId);
+                const versions = runtimeCtx?.getNodeVersions?.(nodeId) || [];
                 return {
                   nodeId,
-                  versions: versions.map((v) => ({
+                  versions: versions.map((v: any) => ({
                     id: v.id,
                     source: v.source.kind,
                     current: v.current,

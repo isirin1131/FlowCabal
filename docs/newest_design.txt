@@ -1,8 +1,0 @@
-现阶段用户可以自行对 memory files 用 git 进行版本管理，将来我们也会原生支持，但现阶段要集中力量把 runner-core 部分做好。所以现在可以不考虑 agent inject 部分的缓存失效，这点是重点。
-
-1. 用户可以添加和编辑节点，可以列出所有节点的 nano_id，可以按照 nano_id 查询节点的信息
-2. 用户可以编辑一个 target nodes set，workspace 第一次识别到一个节点时（不管是从 workflow 中导入还是在 workspace 中新创建），这个节点默认在 target nodes set 里面，一个节点若运行结束，它会被自动移出 target nodes set，一个节点若被修改，则自动移入 target nodes set。
-2.5. 正如我们不考虑 agent inject 的缓存失效，workspace 的缓存也应当取消，这是基于一点设计哲学：如果用户不重视生成的东西，那我们也认为它没有价值。
-3. 基于 1 和 2，用户可以获得一个实时解析的 todo list 和一个实时维护的 “可能过时的节点”，todo list 完全依赖于 target node set 和工作流的依赖结构，它会依照 Kahn 序的解析顺序分层，而 “可能过时的节点” 独立于 target 体系，它只在其上游节点被修改时或被运行时加入，自身运行后则被移出。这个可能过时的节点完全只用来提醒用户这些节点可能过时，用户可以自行决定要不要把他们加入 target nodes set。当然肯定需要一些高效数据结构。
-3.5. 第三点是简化设计，第四点则是增加设计。
-4. 在 todo list 中，用户将可以为每个节点和每个层设置 agent gate，让 agent 以一些精准的或者模糊的评判标准判断要不要让这个 todo list 继续运行下去。

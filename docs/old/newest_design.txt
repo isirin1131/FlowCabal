@@ -1,0 +1,277 @@
+
+---
+
+runner-core/ 重构设计
+
+  核心前提
+
+  CLI-first：Beta 版 99% CLI / 1% UI。每个操作都是原子命令，TUI/GUI 只是调用同样的原子操作的视觉包装。外部 Agent（Claude Code、Cursor、Cline）可以零成本通过 shell 驱动 FlowCabal。
+
+  设计哲学："如果用户不重视生成的东西，那我们也认为它没有价值。"
+
+  7 项职责
+
+  1. Node 管理 — CRUD 节点，nano_id 查询
+  2. Target Set（持久化，自动管理）— 新建节点→自动加入，修改节点→自动加入，跑完→自动移除。用户可手动增删。
+  3. Stale Roots（持久化，惰性）— 上游节点被修改/重跑时，直接下游加入 stale roots。自身重跑→从 stale roots 移除 + 向自身下游传播。完整的 Possibly Stale 集合按需 BFS 推导，不实时维护。
+  4. Todo List（实时计算，不存储）— Target Set + DAG 依赖 → Kahn 拓扑排序 → 分层级列表
+  5. Execution — 简单函数：给一组节点（一个 level），并行执行，返回结果。无 RunHandle，无事件总线，无 auto/step 模式。编排逻辑属于调用方。
+  6. Version 管理 — 多版本存储，切换当前版本
+  7. Preferences — per-node LLM 参数覆盖
+
+  移除的东西
+
+  - 结构性 hash 缓存失效（computePromptHash / computeStructuralHash）— 过时判断完全由 Target Set + Stale Roots 驱动
+  - RunHandle / 事件总线（RunEvent、subscribe、advance、abort）— 执行变成简单函数调用
+  - RunMode（auto | step）— 不再有执行模式
+  - Agent Gates — 冗余，外部 Agent 本身就是 gate
+  - Workspace 长会话对象（openWorkspace() → 返回有状态 Workspace 实例）— 替换为无状态原子操作函数
+  - agent-inject 缓存失效 — 暂不考虑，用户自行用 git 管理 memory files
+
+  API 模型
+
+  不再是 openWorkspace() → 长生命周期的 Workspace 对象 → 调用方法。
+
+  而是一组无状态原子操作函数，每次调用独立完成：加载→执行→持久化→返回。CLI 每条命令调用一个函数，TUI 内部也是调用同样的函数。
+
+  执行模型
+
+  executeLevel(nodes: NodeDef[], outputs: Map<string, string>, llmConfig: LlmConfig)
+    → Promise<Map<string, string>>  // nodeId → output
+
+  给一组同层节点 + 上游 outputs，并行调用 LLM，返回结果。调用方（CLI/TUI/外部 Agent）自行决定逐层推进还是一口气跑完。
+
+  保留的模块
+
+  - workflow.ts — extractNodeDeps()、topoSort()、topoLevels()、computeSubgraph()、validateWorkflow() — 干净的纯函数，Todo List 计算需要
+  - resolve.ts — resolveBlocks()、resolveBlocksFull() — 保留（computePromptHash() 可能移除）
+  - budget.ts — estimateTokens() — 保留
+  - convert.ts — importWorkflow() — 保留
+  - cache.ts — readJson/writeJson 保留，workspace 生命周期函数可能重组
+
+
+
+
+---
+对。外部 agent 本身就是 gate——它跑一层、看输出、自己决定要不要继续。把这个逻辑内置到引擎里是重复的。                                                                                       
+                                                                                                                                                                                           
+那现在 runner-core/ 的设计收敛了：                                                                                                                      
+最终职责                                                                                                                                                                                   
+                
+1. 节点管理 — CRUD nodes，按 id 查询                                                                                                                                                       
+2. Target Set — 持久化，自动维护（新建→加入，修改→加入，跑完→移出）
+3. Stale Roots — 持久化，懒惰推导 Possibly Stale（上游变化→加入，自身重跑→移出+传播）                                                                                                      
+4. Todo List — 实时计算（Target Set + DAG → Kahn 分层）                                                                                                                                    
+5. 执行 — 跑一个节点或一层，返回结果，不编排后续                                                                                                                                           
+6. 版本管理 — 多版本存储、切换当前版本                                                                                                                                                     
+7. Preferences — per-node LLM 参数覆盖                                                                                                                                                     
+                                                                                                                                                                                           
+执行引擎不再需要 RunHandle、事件总线、auto/step 模式。就是一个函数：给我一组节点，并行跑完，返回结果。编排逻辑留给调用方。
+
+---
+
+现阶段用户可以自行对 memory files 用 git 进行版本管理，将来我们也会原生支持，但现阶段要集中力量把 runner-core 部分做好。所以现在可以不考虑 agent inject 部分的缓存失效，这点是重点。
+
+1. 用户可以添加和编辑节点，可以列出所有节点的 nano_id，可以按照 nano_id 查询节点的信息
+2. 用户可以编辑一个 target nodes set，workspace 第一次识别到一个节点时（不管是从 workflow 中导入还是在 workspace 中新创建），这个节点默认在 target nodes set 里面，一个节点若运行结束，它会被自动移出 target nodes set，一个节点若被修改，则自动移入 target nodes set。
+2.5. 正如我们不考虑 agent inject 的缓存失效，workspace 的缓存也应当取消，这是基于一点设计哲学：如果用户不重视生成的东西，那我们也认为它没有价值。
+3. 基于 1 和 2，用户可以获得一个实时解析的 todo list 和一个实时维护的 “可能过时的节点”，todo list 完全依赖于 target node set 和工作流的依赖结构，它会依照 Kahn 序的解析顺序分层，而 “可能过时的节点” 独立于 target 体系，它只在其上游节点被修改时或被运行时加入，自身运行后则被移出。这个可能过时的节点完全只用来提醒用户这些节点可能过时，用户可以自行决定要不要把他们加入 target nodes set。当然肯定需要一些高效数据结构。
+3.5. 第三点是简化设计，第四点则是增加设计。
+4. 在 todo list 中，用户将可以为每个节点和每个层设置 agent gate，让 agent 以一些精准的或者模糊的评判标准判断要不要让这个 todo list 继续运行下去。
+
+---
+
+好的，这是为您整理好的 Markdown 格式文档：
+
+```markdown
+# Plan to implement
+
+## runner-core/ 重构计划
+
+### Context
+
+当前 `runner-core/` 设计混乱：`state.ts` 过胖（存储+计算+事件全混在一起），`workspace.ts` 是几乎无用的薄包装，`run.ts` 有不必要的 RunHandle/EventBus/auto-step 模式。Beta 版需要 **CLI-first** 的原子操作 API，让外部 Agent（Claude Code、Cursor）零成本驱动。
+
+**核心改变**：从“打开会话对象 → 调用方法”变为“每次调用一个独立函数，加载→执行→持久化→返回”。
+
+---
+
+### Phase 1: types.ts + schema.ts + paths.ts
+
+#### `types.ts` — 新增
+
+```typescript
+// 替代 rootDir + workspaceId 二元组
+export interface WorkspaceLoc {
+  rootDir: string;
+  workspaceId: string;
+}
+
+// Todo List（实时计算，不存储）
+export interface TodoList {
+  levels: TodoLevel[];
+  totalNodes: number;
+}
+export interface TodoLevel {
+  index: number;
+  nodeIds: string[];
+}
+
+// 执行结果（替代 LevelNodeResult + RunSummary）
+export interface NodeExecResult {
+  nodeId: string;
+  versionId: string;
+  output: string;
+  error?: string;
+}
+
+// NodeStatus 重定义
+export type NodeStatus = "done" | "stale" | "pending";
+// done = 有输出且不在 possibly-stale 集合
+// stale = 有输出但在 possibly-stale 集合
+// pending = 无输出
+```
+
+#### `types.ts` — 删除
+
+- `StateEvent`（5 种）— 无事件监听
+- `RunEvent`（15 种）— 无事件总线
+- `RunHandle` — 无长会话
+- `RunMode` — 无 auto/step
+- `ExecutionPlan` — 用 TodoList 替代
+- `RunSummary` — 调用方自行统计
+- `LevelNodeResult` — 用 NodeExecResult 替代
+- `WorkspaceDashboard` — 调用方从原子查询组合
+
+#### `types.ts` — 修改
+
+- `NodeVersion.promptHash` → 删除（不再用 structural hash 判断缓存）
+
+#### `schema.ts`
+
+- `NodeVersionSchema.promptHash` → `z.string().optional()`（兼容旧数据，新数据不写入）
+- 新增 `TargetsFileSchema = z.array(z.string())`
+- 新增 `StaleRootsFileSchema = z.array(z.string())`
+
+#### `paths.ts` — 新增两个路径函数
+
+```typescript
+export function workspaceTargetsPath(rootDir, workspaceId): string
+  // → .flowcabal/runner-cache/<wsId>/targets.json
+
+export function workspaceStaleRootsPath(rootDir, workspaceId): string
+  // → .flowcabal/runner-cache/<wsId>/stale-roots.json
+```
+
+---
+
+### Phase 2: runner-core/ 新文件结构
+
+**删除**：`state.ts`、`workspace.ts`、`run.ts`、`cache.ts`
+**保留**：`workflow.ts`、`resolve.ts`、`budget.ts`、`convert.ts`
+**新建**：`io.ts`、`nodes.ts`、`targets.ts`、`stale.ts`、`todo.ts`、`execute.ts`、`versions.ts`、`preferences.ts`
+
+#### `io.ts` — 薄 I/O 层（吸收 cache.ts）
+
+```typescript
+// 基础工具（从 cache.ts 搬来）
+export async function readJson<T>(path, schema): Promise<T | null>
+export async function writeJson(path, data): Promise<void>
+
+// Workspace 生命周期（从 cache.ts 搬来）
+export async function createWorkspace(rootDir, projectId): Promise<string>
+export async function readWorkspaceMeta(rootDir, wsId): Promise<WorkspaceMeta | null>
+
+// 各文件读写
+export async function loadNodes(loc): Promise<NodeDef[]>
+export async function saveNodes(loc, nodes): Promise<void>
+export async function loadPreferences(loc): Promise<WorkspacePreferences>
+export async function savePreferences(loc, prefs): Promise<void>
+export async function loadTargets(loc): Promise<string[]>
+export async function saveTargets(loc, targets): Promise<void>
+export async function loadStaleRoots(loc): Promise<string[]>
+export async function saveStaleRoots(loc, roots): Promise<void>
+export async function loadVersionFile(loc, nodeId): Promise<NodeVersionFile | null>
+export async function saveVersionFile(loc, nodeId, file): Promise<void>
+```
+
+#### `nodes.ts` — 节点管理（原子操作）
+
+每个函数：`load → mutate → save → 更新 targets/stale`
+
+```typescript
+export async function addNode(loc, node: NodeDef): Promise<void>
+  // 追加节点 → save nodes → 自动加入 targets
+
+export async function removeNode(loc, nodeId): Promise<void>
+  // 过滤节点 → save nodes → 从 targets 和 stale-roots 中清除
+
+export async function updateNodeLabel(loc, nodeId, newLabel): Promise<void>
+  // 纯重命名，不触发 stale（label 不影响 prompt）
+
+export async function addBlock(loc, nodeId, prompt, index, block: TextBlock): Promise<void>
+  // splice 插入 → save nodes → 加入 targets + 标记下游 stale
+
+export async function removeBlock(loc, nodeId, prompt, index): Promise<void>
+  // splice 删除 → save nodes → 加入 targets + 标记下游 stale
+
+export async function moveBlock(loc, nodeId, prompt, from, to): Promise<void>
+  // splice 移动 → save nodes → 加入 targets + 标记下游 stale
+```
+
+**副作用 helper（nodes.ts 内部）**：
+```typescript
+// 当节点 prompt 被修改时调用
+async function onNodeModified(loc, nodeId, allNodes): Promise<void>
+  // 1. addToTargets(loc, [nodeId])
+  // 2. 找所有直接下游 → markStale(loc, downstreamIds)
+```
+
+#### `targets.ts` — Target Set
+
+```typescript
+export async function getTargets(loc): Promise<string[]>
+  // load targets.json → 过滤掉不存在的 nodeId（防御性清理）
+
+export async function addToTargets(loc, nodeIds: string[]): Promise<void>
+  // load → 去重合并 → save
+
+export async function removeFromTargets(loc, nodeIds: string[]): Promise<void>
+  // load → 过滤 → save
+
+export async function clearTargets(loc): Promise<void>
+```
+
+#### `stale.ts` — Stale Roots + 状态查询
+
+```typescript
+export async function getStaleRoots(loc): Promise<string[]>
+  // load stale-roots.json → 过滤掉不存在的 nodeId
+
+export async function markStale(loc, nodeIds: string[]): Promise<void>
+  // load → 去重合并 → save
+
+export async function clearStale(loc, nodeIds: string[]): Promise<void>
+  // load → 过滤 → save
+
+// 纯函数：BFS 从 stale roots 沿 DAG 前向传播
+export function computePossiblyStale(nodes: NodeDef[], staleRoots: string[]): Set<string>
+
+// 查询单个节点状态
+export async function getNodeStatus(loc, nodeId): Promise<NodeStatus>
+  // pending: 无 current version
+  // stale: 在 possibly-stale 集合中
+  // done: 其他
+```
+
+#### `todo.ts` — Todo List（纯计算）
+
+```typescript
+export function computeTodoList(
+  nodes: NodeDef[],
+  targets: string[],
+  possiblyStale: Set<string>
+): TodoList
+  // 从 targets 开始，按依赖关系分层，过滤掉 possiblyStale 中的节点
+```
+```
