@@ -170,7 +170,8 @@ async function main() {
     process.exit(1);
   }
 
-  const workspaceId = getWorkspaceId(args) || resolveWorkspace(rootDir);
+  const { getCurrentWorkspace } = await import('./commands/workspace-cmd.ts');
+  const workspaceId = getWorkspaceId(args) || getCurrentWorkspace(rootDir) || resolveWorkspace(rootDir);
   
   let cmd = args[0];
   let subcmd = args[1];
@@ -198,8 +199,48 @@ async function main() {
         break;
       }
       case 'workspace': {
-        const wsId = workspaceId ? `--workspace=${workspaceId}` : '';
-        console.log(`使用: flowcabal ${subcmd} ${wsId}`);
+        const { workspaceSwitch, workspaceStatus, workspaceShow, workspaceDelete, getCurrentWorkspace } = await import('./commands/workspace-cmd.ts');
+        
+        switch (subcmd) {
+          case 'switch': {
+            const wsId = args[2];
+            if (!wsId) {
+              console.error('请指定 workspace ID');
+              process.exit(1);
+            }
+            workspaceSwitch(rootDir, wsId);
+            break;
+          }
+          case 'status': {
+            const wsId = args[2] || getCurrentWorkspace(rootDir);
+            if (!wsId) {
+              console.error('请指定 workspace ID 或先使用 workspace switch');
+              process.exit(1);
+            }
+            workspaceStatus(rootDir, wsId);
+            break;
+          }
+          case 'show': {
+            const wsId = args[2] || getCurrentWorkspace(rootDir);
+            if (!wsId) {
+              console.error('请指定 workspace ID 或先使用 workspace switch');
+              process.exit(1);
+            }
+            workspaceShow(rootDir, wsId);
+            break;
+          }
+          case 'delete': {
+            const wsId = args[2];
+            if (!wsId) {
+              console.error('请指定 workspace ID');
+              process.exit(1);
+            }
+            workspaceDelete(rootDir, wsId);
+            break;
+          }
+          default:
+            console.log(COMMAND_HELP['workspace list']);
+        }
         break;
       }
       case 'node': {
@@ -393,6 +434,46 @@ async function main() {
           default:
             console.log(COMMAND_HELP.llm);
         }
+        break;
+      }
+      case 'status': {
+        const { workspaceStatus, getCurrentWorkspace } = await import('./commands/workspace-cmd.ts');
+        const wsId = args[1] || getCurrentWorkspace(rootDir);
+        if (!wsId) {
+          console.error('请指定 workspace 或先使用 workspace switch');
+          process.exit(1);
+        }
+        workspaceStatus(rootDir, wsId);
+        break;
+      }
+      case 'show': {
+        const { workspaceShow, getCurrentWorkspace } = await import('./commands/workspace-cmd.ts');
+        const wsId = args[1] || getCurrentWorkspace(rootDir);
+        if (!wsId) {
+          console.error('请指定 workspace 或先使用 workspace switch');
+          process.exit(1);
+        }
+        workspaceShow(rootDir, wsId);
+        break;
+      }
+      case 'log': {
+        const { workspaceLog, getCurrentWorkspace } = await import('./commands/workspace-cmd.ts');
+        const wsId = args[1] || getCurrentWorkspace(rootDir);
+        if (!wsId) {
+          console.error('请指定 workspace 或先使用 workspace switch');
+          process.exit(1);
+        }
+        workspaceLog(rootDir, wsId);
+        break;
+      }
+      case 'lock': {
+        const { workspaceLock, getCurrentWorkspace } = await import('./commands/workspace-cmd.ts');
+        const wsId = args[1] || getCurrentWorkspace(rootDir);
+        if (!wsId) {
+          console.error('请指定 workspace 或先使用 workspace switch');
+          process.exit(1);
+        }
+        workspaceLock(rootDir, wsId);
         break;
       }
       default:
