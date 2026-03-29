@@ -1,6 +1,5 @@
 #!/usr/bin/env bun
-import yargs from 'yargs';
-import { hideBin } from 'yargs/helpers';
+import { findProjectRoot, resolveWorkspace } from './config.js';
 
 const HELP = `# flowcabal — 小说创作工作流引擎
 
@@ -139,8 +138,16 @@ const COMMAND_HELP: Record<string, string> = {
 - llm set-default <name>  设置默认`,
 };
 
+function getWorkspaceId(args: string[]): string | null {
+  const idx = args.findIndex(a => a.startsWith('--workspace='));
+  if (idx >= 0) {
+    return args[idx].replace('--workspace=', '');
+  }
+  return null;
+}
+
 async function main() {
-  const args = hideBin(process.argv);
+  const args = process.argv.slice(2);
   
   if (args.includes('--help') || args.includes('-h')) {
     const cmd = args.find(a => !a.startsWith('-'));
@@ -157,6 +164,14 @@ async function main() {
     return;
   }
 
+  const rootDir = findProjectRoot(process.cwd());
+  if (!rootDir) {
+    console.error('请先运行 flowcabal init');
+    process.exit(1);
+  }
+
+  const workspaceId = getWorkspaceId(args) || resolveWorkspace(rootDir);
+  
   let cmd = args[0];
   let subcmd = args[1];
   
@@ -173,45 +188,220 @@ async function main() {
       }
       case 'create': {
         const { createWorkspace } = await import('./commands/create.js');
+        const { loadLlmConfigs } = await import('./config.js');
         const name = args[1];
         if (!name) {
           console.error('请指定 workspace 名称');
-          process.exit(1);
-        }
-        const { findProjectRoot, loadLlmConfigs } = await import('./config.js');
-        const rootDir = findProjectRoot(process.cwd());
-        if (!rootDir) {
-          console.error('请先运行 flowcabal init');
           process.exit(1);
         }
         await createWorkspace(name, rootDir, loadLlmConfigs(rootDir));
         break;
       }
       case 'workspace': {
-        if (subcmd === 'list') {
-          const { listWorkspaces } = await import('./commands/workspace.js');
-          const { findProjectRoot } = await import('./config.js');
-          const rootDir = findProjectRoot(process.cwd());
-          if (!rootDir) {
-            console.error('请先运行 flowcabal init');
-            process.exit(1);
+        const wsId = workspaceId ? `--workspace=${workspaceId}` : '';
+        console.log(`使用: flowcabal ${subcmd} ${wsId}`);
+        break;
+      }
+      case 'node': {
+        if (!workspaceId) {
+          console.error('请指定 workspace: --workspace=<id>');
+          process.exit(1);
+        }
+        switch (subcmd) {
+          case 'add': {
+            const { nodeAdd } = await import('./commands/node.js');
+            const label = args[2];
+            if (!label) {
+              console.error('请指定节点名称');
+              process.exit(1);
+            }
+            await nodeAdd(label, rootDir, workspaceId);
+            break;
           }
-          listWorkspaces(rootDir);
+          case 'rm': {
+            const { nodeRm } = await import('./commands/node.js');
+            const nodeId = args[2];
+            if (!nodeId) {
+              console.error('请指定节点 ID');
+              process.exit(1);
+            }
+            await nodeRm(nodeId, rootDir, workspaceId);
+            break;
+          }
+          case 'rename': {
+            const { nodeRename } = await import('./commands/node.js');
+            const nodeId = args[2];
+            const newLabel = args[3];
+            if (!nodeId || !newLabel) {
+              console.error('用法: node rename <id> <newLabel>');
+              process.exit(1);
+            }
+            await nodeRename(nodeId, newLabel, rootDir, workspaceId);
+            break;
+          }
+          case 'list': {
+            const { nodeList } = await import('./commands/node.js');
+            nodeList(rootDir, workspaceId);
+            break;
+          }
+          case 'show': {
+            const { nodeShow } = await import('./commands/node.js');
+            const nodeId = args[2];
+            if (!nodeId) {
+              console.error('请指定节点 ID');
+              process.exit(1);
+            }
+            nodeShow(nodeId, rootDir, workspaceId);
+            break;
+          }
+          case 'status': {
+            const { nodeStatus } = await import('./commands/node.js');
+            const nodeId = args[2];
+            if (!nodeId) {
+              console.error('请指定节点 ID');
+              process.exit(1);
+            }
+            nodeStatus(nodeId, rootDir, workspaceId);
+            break;
+          }
+          case 'add-ref': {
+            const { nodeAddRef } = await import('./commands/node.js');
+            const nodeId = args[2];
+            const upstreamId = args[3];
+            if (!nodeId || !upstreamId) {
+              console.error('用法: node add-ref <id> <upstream>');
+              process.exit(1);
+            }
+            await nodeAddRef(nodeId, upstreamId, rootDir, workspaceId);
+            break;
+          }
+          case 'add-literal': {
+            const { nodeAddLiteral } = await import('./commands/node.js');
+            const nodeId = args[2];
+            const content = args.slice(3).join(' ');
+            if (!nodeId || !content) {
+              console.error('用法: node add-literal <id> <content>');
+              process.exit(1);
+            }
+            await nodeAddLiteral(nodeId, content, rootDir, workspaceId);
+            break;
+          }
+          case 'add-inject': {
+            const { nodeAddInject } = await import('./commands/node.js');
+            const nodeId = args[2];
+            const hint = args.slice(3).join(' ');
+            if (!nodeId || !hint) {
+              console.error('用法: node add-inject <id> <hint>');
+              process.exit(1);
+            }
+            await nodeAddInject(nodeId, hint, rootDir, workspaceId);
+            break;
+          }
+          case 'rm-block': {
+            const { nodeRmBlock } = await import('./commands/node.js');
+            const nodeId = args[2];
+            const blockIndex = parseInt(args[3]);
+            if (!nodeId || isNaN(blockIndex)) {
+              console.error('用法: node rm-block <id> <index>');
+              process.exit(1);
+            }
+            await nodeRmBlock(nodeId, blockIndex, rootDir, workspaceId);
+            break;
+          }
+          case 'target': {
+            const { nodeTarget } = await import('./commands/node.js');
+            const nodeId = args[2];
+            if (!nodeId) {
+              console.error('请指定节点 ID');
+              process.exit(1);
+            }
+            await nodeTarget(nodeId, rootDir, workspaceId, true);
+            break;
+          }
+          case 'untarget': {
+            const { nodeTarget } = await import('./commands/node.js');
+            const nodeId = args[2];
+            if (!nodeId) {
+              console.error('请指定节点 ID');
+              process.exit(1);
+            }
+            await nodeTarget(nodeId, rootDir, workspaceId, false);
+            break;
+          }
+          default:
+            console.log(COMMAND_HELP.node);
         }
         break;
       }
-      case 'node':
-      case 'run':
-      case 'memory':
-      case 'llm':
-        console.log(`flowcabal ${cmd} 子命令请使用 --help 查看帮助`);
+      case 'run': {
+        if (!workspaceId) {
+          console.error('请指定 workspace: --workspace=<id>');
+          process.exit(1);
+        }
+        switch (subcmd) {
+          case 'single': {
+            const { run } = await import('./commands/run.js');
+            await run(rootDir, workspaceId, true);
+            break;
+          }
+          case 'preview': {
+            const { runPreview } = await import('./commands/run.js');
+            runPreview(rootDir, workspaceId);
+            break;
+          }
+          case undefined: {
+            const { run } = await import('./commands/run.js');
+            await run(rootDir, workspaceId, false);
+            break;
+          }
+          default:
+            console.log(COMMAND_HELP.run);
+        }
         break;
+      }
+      case 'memory': {
+        if (subcmd === 'chat') {
+          const { memoryChat } = await import('./commands/memory.js');
+          await memoryChat(rootDir);
+        } else {
+          console.log(COMMAND_HELP.memory);
+        }
+        break;
+      }
+      case 'llm': {
+        switch (subcmd) {
+          case 'list': {
+            const { llmList } = await import('./commands/llm.js');
+            llmList(rootDir);
+            break;
+          }
+          case 'add': {
+            const { llmAdd } = await import('./commands/llm.js');
+            await llmAdd(rootDir);
+            break;
+          }
+          case 'set-default': {
+            const { llmSetDefault } = await import('./commands/llm.js');
+            const name = args[2];
+            if (!name) {
+              console.error('请指定配置名称');
+              process.exit(1);
+            }
+            llmSetDefault(rootDir, name);
+            break;
+          }
+          default:
+            console.log(COMMAND_HELP.llm);
+        }
+        break;
+      }
       default:
         console.log(`未知命令: ${cmd}`);
         console.log('使用 flowcabal --help 查看帮助');
     }
   } catch (e) {
     console.error('Error:', e);
+    process.exit(1);
   }
 }
 

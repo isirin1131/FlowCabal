@@ -9,7 +9,9 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "declaration": true,
-    "outDir": "./dist"
+    "outDir": "./dist",
+    "noEmit": true,
+    "types": ["node"]
   },
   "include": ["src/**/*"]
 }
