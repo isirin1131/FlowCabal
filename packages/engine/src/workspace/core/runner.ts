@@ -2,8 +2,14 @@ import { Workspace, LlmConfig, TextBlock } from '../../types';
 import { generate } from '../../llm/generate.js';
 import { todoList, calcStale } from './graph.js';
 import { getNode } from './node.js';
+import { runMemoryAgent } from '../../agent/memory-agent.js';
 
-function resolvePrompt(ws: Workspace, blocks: TextBlock[]): string {
+async function resolvePrompt(
+    ws: Workspace,
+    blocks: TextBlock[],
+    rootDir: string,
+    llmConfig: LlmConfig,
+): Promise<string> {
     const parts: string[] = [];
     for (const block of blocks) {
         if (block.kind === 'literal') {
@@ -11,17 +17,30 @@ function resolvePrompt(ws: Workspace, blocks: TextBlock[]): string {
         } else if (block.kind === 'ref') {
             const output = ws.outputs.get(block.nodeId);
             if (output) parts.push(output);
+        } else if (block.kind === 'agent-inject') {
+            const injected = await runMemoryAgent(
+                rootDir,
+                llmConfig,
+                block.hint,
+                { readonly: true },
+            );
+            if (injected) parts.push(injected);
         }
     }
     return parts.join('\n\n');
 }
 
-async function runNode(ws: Workspace, nodeId: string, config: LlmConfig): Promise<void> {
+async function runNode(
+    ws: Workspace,
+    nodeId: string,
+    config: LlmConfig,
+    rootDir: string,
+): Promise<void> {
     const node = getNode(ws, nodeId);
     if (!node) return;
 
-    const system = resolvePrompt(ws, node.systemPrompt);
-    const user = resolvePrompt(ws, node.userPrompt);
+    const system = await resolvePrompt(ws, node.systemPrompt, rootDir, config);
+    const user = await resolvePrompt(ws, node.userPrompt, rootDir, config);
 
     const output = await generate(config, system, user);
     ws.outputs.set(nodeId, output);
@@ -29,23 +48,31 @@ async function runNode(ws: Workspace, nodeId: string, config: LlmConfig): Promis
     ws.target_nodes = ws.target_nodes.filter(id => id !== nodeId);
 }
 
-export async function runSingle(ws: Workspace, config: LlmConfig): Promise<string | null> {
+export async function runSingle(
+    ws: Workspace,
+    config: LlmConfig,
+    rootDir: string,
+): Promise<string | null> {
     calcStale(ws);
     const list = todoList(ws);
     if (list.length === 0) return null;
 
     const nodeId = list[0];
-    await runNode(ws, nodeId, config);
+    await runNode(ws, nodeId, config, rootDir);
     return nodeId;
 }
 
-export async function runAll(ws: Workspace, config: LlmConfig): Promise<string[]> {
+export async function runAll(
+    ws: Workspace,
+    config: LlmConfig,
+    rootDir: string,
+): Promise<string[]> {
     calcStale(ws);
     const list = todoList(ws);
     const executed: string[] = [];
 
     for (const nodeId of list) {
-        await runNode(ws, nodeId, config);
+        await runNode(ws, nodeId, config, rootDir);
         executed.push(nodeId);
     }
 
