@@ -1,5 +1,6 @@
-import { Workspace, NodeDef, TextBlock } from '../types';
-import { newId } from './utils';
+import { Workspace, NodeDef, TextBlock } from '../../types';
+import { newId } from '../utils';
+
 
 
 // ========= node CRUD ===================
