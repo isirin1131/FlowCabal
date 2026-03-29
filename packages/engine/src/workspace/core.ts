@@ -87,7 +87,7 @@ export function insertBlock(ws: Workspace, nodeId: string, block: TextBlock, isS
         if (!ws.downstream.get(refId)!.includes(nodeId)) ws.downstream.get(refId)!.push(nodeId);
     }
 
-    if (!ws.stale_nodes.includes(nodeId)) ws.stale_nodes.push(nodeId);
+    if (ws.outputs.has(nodeId) && !ws.stale_nodes.includes(nodeId)) ws.stale_nodes.push(nodeId);
     return true;
 }
 
@@ -106,7 +106,7 @@ export function removeBlock(ws: Workspace, nodeId: string, isSystem: boolean, bl
         if (down) { const i = down.indexOf(nodeId); if (i !== -1) down.splice(i, 1); }
     }
 
-    if (!ws.stale_nodes.includes(nodeId)) ws.stale_nodes.push(nodeId);
+    if (ws.outputs.has(nodeId) && !ws.stale_nodes.includes(nodeId)) ws.stale_nodes.push(nodeId);
     return true;
 }
 
@@ -134,6 +134,6 @@ export function updateBlock(ws: Workspace, nodeId: string, isSystem: boolean, bl
         if (!ws.downstream.get(refId)!.includes(nodeId)) ws.downstream.get(refId)!.push(nodeId);
     }
 
-    if (!ws.stale_nodes.includes(nodeId)) ws.stale_nodes.push(nodeId);
+    if (ws.outputs.has(nodeId) && !ws.stale_nodes.includes(nodeId)) ws.stale_nodes.push(nodeId);
     return true;
 }
