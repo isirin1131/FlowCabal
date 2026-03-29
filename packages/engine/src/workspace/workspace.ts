@@ -112,10 +112,24 @@ export function loadPreferences(rootDir: string, workspaceId: string): Workspace
   return JSON.parse(readFileSync(prefsPath, 'utf-8'));
 }
 
+const GLOBAL_CONFIG_DIR = join(process.env.HOME || '', '.config', 'flowcabal');
+
 export function loadLlmConfig(rootDir: string, configName: string): LlmConfig | null {
   const configPath = join(rootDir, '.flowcabal', 'llm-configs.json');
-  if (!existsSync(configPath)) return null;
+  let configs: Record<string, LlmConfig> = {};
   
-  const configs = JSON.parse(readFileSync(configPath, 'utf-8'));
+  if (existsSync(configPath)) {
+    try {
+      configs = { ...configs, ...JSON.parse(readFileSync(configPath, 'utf-8')) };
+    } catch {}
+  }
+  
+  const globalPath = join(GLOBAL_CONFIG_DIR, 'llm-configs.json');
+  if (existsSync(globalPath)) {
+    try {
+      configs = { ...configs, ...JSON.parse(readFileSync(globalPath, 'utf-8')) };
+    } catch {}
+  }
+  
   return configs[configName] || null;
 }

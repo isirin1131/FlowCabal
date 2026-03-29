@@ -238,6 +238,11 @@ async function main() {
             workspaceDelete(rootDir, wsId);
             break;
           }
+          case 'list': {
+            const { listWorkspaces } = await import('./commands/workspace.js');
+            listWorkspaces(rootDir);
+            break;
+          }
           default:
             console.log(COMMAND_HELP['workspace list']);
         }

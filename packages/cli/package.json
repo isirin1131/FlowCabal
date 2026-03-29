@@ -2,6 +2,9 @@
   "name": "@flowcabal/cli",
   "version": "0.1.0",
   "type": "module",
+  "bin": {
+    "flowcabal": "./src/index.ts"
+  },
   "dependencies": {
     "@flowcabal/engine": "workspace:*",
     "yargs": "^17.7.2"
