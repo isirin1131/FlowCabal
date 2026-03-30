@@ -1,19 +1,31 @@
-import { mkdirSync, existsSync } from 'fs';
+import { mkdirSync, writeFileSync, existsSync } from 'fs';
 import { join } from 'path';
-import { readLlmConfigs } from '@flowcabal/engine';
+import {
+  readLlmConfigs,
+  getMemoryDir,
+  getCacheDir,
+  MEMORY_SEED_FILES,
+  MEMORY_SEED_DIRS,
+} from '@flowcabal/engine';
 
 export async function initProject(rootDir: string): Promise<void> {
-  const flowcabalDir = join(rootDir, '.flowcabal');
-  const memoryDir = join(flowcabalDir, 'memory');
-  const cacheDir = join(flowcabalDir, 'runner-cache');
+  const memoryDir = getMemoryDir(rootDir);
+  const cacheDir = getCacheDir(rootDir);
 
-  if (existsSync(flowcabalDir)) {
-    console.log('项目已初始化');
-    return;
-  }
-
+  // 全部幂等：已存在则跳过
   mkdirSync(memoryDir, { recursive: true });
   mkdirSync(cacheDir, { recursive: true });
+
+  for (const dir of MEMORY_SEED_DIRS) {
+    mkdirSync(join(memoryDir, dir), { recursive: true });
+  }
+
+  for (const file of MEMORY_SEED_FILES) {
+    const filePath = join(memoryDir, file);
+    if (!existsSync(filePath)) {
+      writeFileSync(filePath, '', 'utf-8');
+    }
+  }
 
   // 全局配置：已有则跳过
   const existing = readLlmConfigs();
