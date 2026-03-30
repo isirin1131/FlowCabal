@@ -1,5 +1,6 @@
-import { mkdirSync, existsSync, writeFileSync } from 'fs';
+import { mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
+import { readLlmConfigs } from '@flowcabal/engine';
 
 export async function initProject(rootDir: string): Promise<void> {
   const flowcabalDir = join(rootDir, '.flowcabal');
@@ -14,20 +15,11 @@ export async function initProject(rootDir: string): Promise<void> {
   mkdirSync(memoryDir, { recursive: true });
   mkdirSync(cacheDir, { recursive: true });
 
-  const defaultConfig = {
-    default: {
-      provider: 'openai-compatible',
-      baseURL: 'https://api.deepseek.com/v1',
-      apiKey: '',
-      model: 'deepseek-chat',
-    }
-  };
-
-  writeFileSync(
-    join(flowcabalDir, 'llm-configs.json'),
-    JSON.stringify(defaultConfig, null, 2)
-  );
+  // 全局配置：已有则跳过
+  const existing = readLlmConfigs();
+  if (Object.keys(existing).length === 0) {
+    console.log('尚未配置 LLM，请运行: flowcabal llm add');
+  }
 
   console.log('项目初始化完成');
-  console.log('请编辑 .flowcabal/llm-configs.json 配置 LLM');
 }

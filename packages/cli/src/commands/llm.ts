@@ -1,110 +1,110 @@
-import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { join } from 'path';
-import type { LlmConfig } from '@flowcabal/engine';
+import { readLlmConfigs, writeLlmConfigs } from '@flowcabal/engine';
+import type { LlmConfig, LlmProvider } from '@flowcabal/engine';
 
-export function llmList(rootDir: string): void {
-  const configPath = join(rootDir, '.flowcabal', 'llm-configs.json');
-  
-  if (!existsSync(configPath)) {
-    console.log('No LLM configs found');
-    return;
-  }
+const ALL_PROVIDERS: LlmProvider[] = [
+  'openai', 'anthropic', 'google', 'mistral', 'xai', 'cohere', 'openai-compatible',
+];
 
-  const configs = JSON.parse(readFileSync(configPath, 'utf-8'));
+export function llmList(): void {
+  const configs = readLlmConfigs();
   const names = Object.keys(configs);
-  
+
   if (names.length === 0) {
-    console.log('No LLM configs found');
+    console.log('暂无 LLM 配置');
     return;
   }
 
-  console.log('LLM Configs:');
+  console.log('LLM 配置：');
   for (const name of names) {
-    const config = configs[name] as LlmConfig;
-    console.log(`  ${name}:`);
-    console.log(`    provider: ${config.provider}`);
-    console.log(`    model: ${config.model}`);
-    console.log(`    baseURL: ${config.baseURL || '(default)'}`);
-    console.log(`    apiKey: ${config.apiKey ? '***' : '(not set)'}`);
-    if (config.temperature) console.log(`    temperature: ${config.temperature}`);
-    if (config.maxTokens) console.log(`    maxTokens: ${config.maxTokens}`);
+    const c = configs[name];
+    const tag = name === 'default' ? ' (默认)' : '';
+    console.log(`  ${name}${tag}:`);
+    console.log(`    provider: ${c.provider}`);
+    console.log(`    model:    ${c.model}`);
+    if (c.baseURL) console.log(`    baseURL:  ${c.baseURL}`);
+    console.log(`    apiKey:   ${c.apiKey ? '***' : '(未设置)'}`);
+    if (c.temperature != null) console.log(`    temperature: ${c.temperature}`);
+    if (c.maxTokens != null) console.log(`    maxTokens:   ${c.maxTokens}`);
   }
 }
 
-export async function llmAdd(rootDir: string): Promise<void> {
+export async function llmAdd(): Promise<void> {
   const readline = await import('readline');
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const ask = (q: string): Promise<string> =>
+    new Promise((resolve) => rl.question(q, resolve));
 
-  const ask = (question: string): Promise<string> => {
-    return new Promise((resolve) => {
-      rl.question(question, (answer) => {
-        resolve(answer);
-      });
-    });
-  };
-
-  console.log('Add LLM Config');
+  console.log('添加 LLM 配置');
   console.log('==============');
-  
-  const name = await ask('Name: ');
-  if (!name.trim()) {
-    console.log('Cancelled');
+
+  const name = (await ask('名称: ')).trim();
+  if (!name) { console.log('已取消'); rl.close(); return; }
+
+  console.log(`可选 provider: ${ALL_PROVIDERS.join(', ')}`);
+  const providerInput = (await ask('Provider: ')).trim();
+  if (!ALL_PROVIDERS.includes(providerInput as LlmProvider)) {
+    console.error(`不支持的 provider: ${providerInput}`);
     rl.close();
     return;
   }
+  const provider = providerInput as LlmProvider;
 
-  const provider = await ask('Provider (openai/anthropic/google/openai-compatible): ');
-  const model = await ask('Model: ');
-  const baseURL = await ask('Base URL (optional): ');
-  const apiKey = await ask('API Key: ');
-  const temperature = await ask('Temperature (optional): ');
-  const maxTokens = await ask('Max Tokens (optional): ');
+  const model = (await ask('Model: ')).trim();
+  if (!model) { console.error('Model 不能为空'); rl.close(); return; }
 
-  const configPath = join(rootDir, '.flowcabal', 'llm-configs.json');
-  let configs: Record<string, LlmConfig> = {};
-  
-  if (existsSync(configPath)) {
-    configs = JSON.parse(readFileSync(configPath, 'utf-8'));
+  const apiKey = (await ask('API Key: ')).trim();
+  if (!apiKey) { console.error('API Key 不能为空'); rl.close(); return; }
+
+  const baseURL = (await ask('Base URL (可选): ')).trim();
+  const temperatureStr = (await ask('Temperature (可选): ')).trim();
+  const maxTokensStr = (await ask('Max Tokens (可选): ')).trim();
+  rl.close();
+
+  const config: LlmConfig = { provider, model, apiKey };
+  if (baseURL) config.baseURL = baseURL;
+  if (temperatureStr) {
+    const t = parseFloat(temperatureStr);
+    if (!isNaN(t)) config.temperature = t;
+  }
+  if (maxTokensStr) {
+    const m = parseInt(maxTokensStr);
+    if (!isNaN(m)) config.maxTokens = m;
   }
 
-  const config: LlmConfig = {
-    provider: provider as LlmConfig['provider'],
-    model: model.trim(),
-    apiKey: apiKey.trim(),
-  };
+  const configs = readLlmConfigs();
+  configs[name] = config;
+  writeLlmConfigs(configs);
 
-  if (baseURL.trim()) config.baseURL = baseURL.trim();
-  if (temperature.trim()) config.temperature = parseFloat(temperature.trim());
-  if (maxTokens.trim()) config.maxTokens = parseInt(maxTokens.trim());
-
-  configs[name.trim()] = config;
-  
-  writeFileSync(configPath, JSON.stringify(configs, null, 2));
-  
-  console.log(`Config "${name}" added`);
-  rl.close();
+  console.log(`配置 "${name}" 已添加`);
 }
 
-export function llmSetDefault(rootDir: string, name: string): void {
-  const configPath = join(rootDir, '.flowcabal', 'llm-configs.json');
-  
-  if (!existsSync(configPath)) {
-    console.error('No LLM configs found');
-    return;
-  }
+export function llmRemove(name: string): void {
+  const configs = readLlmConfigs();
 
-  const configs = JSON.parse(readFileSync(configPath, 'utf-8'));
-  
   if (!configs[name]) {
-    console.error(`Config "${name}" not found`);
+    console.error(`配置 "${name}" 不存在`);
     return;
   }
 
-  configs.default = configs[name];
-  writeFileSync(configPath, JSON.stringify(configs, null, 2));
-  
-  console.log(`Default set to: ${name}`);
+  delete configs[name];
+  writeLlmConfigs(configs);
+  console.log(`配置 "${name}" 已删除`);
+}
+
+export function llmSetDefault(name: string): void {
+  const configs = readLlmConfigs();
+
+  if (!configs[name]) {
+    console.error(`配置 "${name}" 不存在`);
+    return;
+  }
+
+  if (name === 'default') {
+    console.log('该配置已经是默认');
+    return;
+  }
+
+  configs['default'] = { ...configs[name] };
+  writeLlmConfigs(configs);
+  console.log(`已将 "${name}" 设为默认`);
 }

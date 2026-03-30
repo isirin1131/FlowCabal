@@ -131,11 +131,12 @@ const COMMAND_HELP: Record<string, string> = {
 - world/: 世界观
 - manuscripts/: 章节手稿`,
   
-  llm: `# LLM 配置管理
+  llm: `# LLM 配置管理（全局 ~/.config/flowcabal/llm-configs.json）
 
-- llm list           列出所有配置（隐藏 apikey）
-- llm add            交互式添加配置
-- llm set-default <name>  设置默认`,
+- llm list              列出所有配置（隐藏 apikey）
+- llm add               交互式添加配置
+- llm remove <name>     删除指定配置
+- llm set-default <name>  设为默认`,
 };
 
 function getWorkspaceId(args: string[]): string | null {
@@ -418,12 +419,22 @@ async function main() {
         switch (subcmd) {
           case 'list': {
             const { llmList } = await import('./commands/llm.js');
-            llmList(rootDir);
+            llmList();
             break;
           }
           case 'add': {
             const { llmAdd } = await import('./commands/llm.js');
-            await llmAdd(rootDir);
+            await llmAdd();
+            break;
+          }
+          case 'remove': {
+            const { llmRemove } = await import('./commands/llm.js');
+            const name = args[2];
+            if (!name) {
+              console.error('请指定配置名称');
+              process.exit(1);
+            }
+            llmRemove(name);
             break;
           }
           case 'set-default': {
@@ -433,7 +444,7 @@ async function main() {
               console.error('请指定配置名称');
               process.exit(1);
             }
-            llmSetDefault(rootDir, name);
+            llmSetDefault(name);
             break;
           }
           default:
