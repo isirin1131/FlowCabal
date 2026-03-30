@@ -1,8 +1,15 @@
 import { readLlmConfigs, writeLlmConfigs } from '@flowcabal/engine';
 import type { LlmConfig, LlmProvider } from '@flowcabal/engine';
+import * as p from '@clack/prompts';
 
-const ALL_PROVIDERS: LlmProvider[] = [
-  'openai', 'anthropic', 'google', 'mistral', 'xai', 'cohere', 'openai-compatible',
+const ALL_PROVIDERS: { value: LlmProvider; label: string }[] = [
+  { value: 'openai', label: 'OpenAI' },
+  { value: 'anthropic', label: 'Anthropic' },
+  { value: 'google', label: 'Google' },
+  { value: 'mistral', label: 'Mistral' },
+  { value: 'xai', label: 'xAI' },
+  { value: 'cohere', label: 'Cohere' },
+  { value: 'openai-compatible', label: 'OpenAI Compatible（DeepSeek 等）' },
 ];
 
 export function llmList(): void {
@@ -28,54 +35,46 @@ export function llmList(): void {
   }
 }
 
-export async function llmAdd(): Promise<void> {
-  const readline = await import('readline');
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  const ask = (q: string): Promise<string> =>
-    new Promise((resolve) => rl.question(q, resolve));
+export async function llmAdd(name: string): Promise<void> {
+  p.intro('添加 LLM 配置');
 
-  console.log('添加 LLM 配置');
-  console.log('==============');
+  const provider = await p.select({
+    message: '选择供应商',
+    options: ALL_PROVIDERS,
+  });
+  if (p.isCancel(provider)) { p.cancel('已取消'); return; }
 
-  const name = (await ask('名称: ')).trim();
-  if (!name) { console.log('已取消'); rl.close(); return; }
+  const model = await p.text({
+    message: 'Model',
+    placeholder: 'deepseek-chat',
+    validate: (v) => v?.trim() ? undefined : 'Model 不能为空',
+  });
+  if (p.isCancel(model)) { p.cancel('已取消'); return; }
 
-  console.log(`可选 provider: ${ALL_PROVIDERS.join(', ')}`);
-  const providerInput = (await ask('Provider: ')).trim();
-  if (!ALL_PROVIDERS.includes(providerInput as LlmProvider)) {
-    console.error(`不支持的 provider: ${providerInput}`);
-    rl.close();
-    return;
-  }
-  const provider = providerInput as LlmProvider;
+  const apiKey = await p.password({
+    message: 'API Key',
+    validate: (v) => v?.trim() ? undefined : 'API Key 不能为空',
+  });
+  if (p.isCancel(apiKey)) { p.cancel('已取消'); return; }
 
-  const model = (await ask('Model: ')).trim();
-  if (!model) { console.error('Model 不能为空'); rl.close(); return; }
+  const baseURL = await p.text({
+    message: 'Base URL',
+    placeholder: '留空使用默认',
+  });
+  if (p.isCancel(baseURL)) { p.cancel('已取消'); return; }
 
-  const apiKey = (await ask('API Key: ')).trim();
-  if (!apiKey) { console.error('API Key 不能为空'); rl.close(); return; }
-
-  const baseURL = (await ask('Base URL (可选): ')).trim();
-  const temperatureStr = (await ask('Temperature (可选): ')).trim();
-  const maxTokensStr = (await ask('Max Tokens (可选): ')).trim();
-  rl.close();
-
-  const config: LlmConfig = { provider, model, apiKey };
-  if (baseURL) config.baseURL = baseURL;
-  if (temperatureStr) {
-    const t = parseFloat(temperatureStr);
-    if (!isNaN(t)) config.temperature = t;
-  }
-  if (maxTokensStr) {
-    const m = parseInt(maxTokensStr);
-    if (!isNaN(m)) config.maxTokens = m;
-  }
+  const config: LlmConfig = {
+    provider: provider as LlmProvider,
+    model: model.trim(),
+    apiKey: apiKey.trim(),
+  };
+  if (baseURL.trim()) config.baseURL = baseURL.trim();
 
   const configs = readLlmConfigs();
   configs[name] = config;
   writeLlmConfigs(configs);
 
-  console.log(`配置 "${name}" 已添加`);
+  p.outro(`配置 "${name}" 已添加`);
 }
 
 export function llmRemove(name: string): void {

@@ -6,6 +6,7 @@
     "flowcabal": "./src/index.ts"
   },
   "dependencies": {
+    "@clack/prompts": "^1.1.0",
     "@flowcabal/engine": "workspace:*",
     "yargs": "^17.7.2"
   },
