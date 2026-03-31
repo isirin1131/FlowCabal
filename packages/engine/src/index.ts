@@ -6,5 +6,6 @@ export * from "./llm/provider.js";
 export * from "./llm/generate.js";
 export * from "./workspace/core/index.js";
 export * from "./workspace/utils.js";
-export * from "./workspace/workspace.js";
+export * from "./workspace/init.js";
+export * from "./workspace/export.js";
 export * from "./agent/memory-agent.js";

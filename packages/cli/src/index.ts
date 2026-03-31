@@ -1,9 +1,28 @@
 #!/usr/bin/env bun
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
-import { findProjectRoot, resolveWorkspace, loadLlmConfigs } from './config.js';
+import { existsSync, readdirSync, statSync } from 'fs';
+import { dirname, join } from 'path';
+import { getCacheDir, readLlmConfigs } from '@flowcabal/engine';
 
 // ── helpers ──────────────────────────────────────────────
+
+function findProjectRoot(cwd: string): string | null {
+  if (existsSync(getCacheDir(cwd))) return cwd;
+  return null;
+}
+
+function resolveWorkspace(rootDir: string, workspaceId?: string): string | null {
+  const cacheDir = getCacheDir(rootDir);
+  if (!existsSync(cacheDir)) return null;
+
+  const ids = readdirSync(cacheDir).filter(name =>
+    statSync(join(cacheDir, name)).isDirectory()
+  );
+  if (ids.length === 0) return null;
+  if (!workspaceId) return ids[0];
+  return ids.find(id => id.startsWith(workspaceId)) ?? null;
+}
 
 function requireRoot(): string {
   const root = findProjectRoot(process.cwd());
@@ -16,10 +35,10 @@ function requireRoot(): string {
 
 async function requireWorkspace(argv: Record<string, any>): Promise<{ rootDir: string; workspaceId: string }> {
   const rootDir = requireRoot();
-  const { getCurrentWorkspace } = await import('./commands/workspace-cmd.ts');
+  const { getCurrentWorkspace } = await import('./commands/workspace.js');
   const workspaceId = argv.workspace || getCurrentWorkspace(rootDir) || resolveWorkspace(rootDir);
   if (!workspaceId) {
-    console.error('请指定 workspace: --workspace=<id>，或先 workspace switch');
+    console.error('请先创建 workspace: flowcabal workspace create <name>');
     process.exit(1);
   }
   return { rootDir, workspaceId };
@@ -29,17 +48,12 @@ async function requireWorkspace(argv: Record<string, any>): Promise<{ rootDir: s
 
 yargs(hideBin(process.argv))
   .scriptName('flowcabal')
-  .usage('flowcabal — AI 辅助小说创作 DAG 工作流引擎')
+  .usage('flowcabal — AI 辅助小说创作 DAG 工作流引擎beta')
   .epilogue(`⚠️ Agent 注意事项：
 - "memory chat" 是交互式命令，需要 stdin 输入
 - "llm add" 需要终端交互（选择供应商、输入密码），不适合 agent 直接调用
 - 其他命令均为单次执行，输出纯文本，适合 agent 使用
 - node/run 命令需要 workspace，通过 --workspace=<id> 指定或先 workspace switch`)
-  .option('workspace', {
-    alias: 'w',
-    type: 'string',
-    describe: '指定 workspace ID（可选，支持前缀匹配）',
-  })
 
   // ── init ───────────────────────────────────────────────
   .command('init', '初始化项目（在当前目录创建 .flowcabal/）', {}, async () => {
@@ -47,17 +61,16 @@ yargs(hideBin(process.argv))
     await initProject(process.cwd());
   })
 
-  // ── create ─────────────────────────────────────────────
-  .command('create <name>', '创建新 workspace', (y) =>
-    y.positional('name', { type: 'string', demandOption: true, describe: 'workspace 名称' }),
-  async (argv) => {
-    const rootDir = requireRoot();
-    const { createWorkspace } = await import('./commands/create.js');
-    await createWorkspace(argv.name!, rootDir, loadLlmConfigs(rootDir));
-  })
-
   // ── workspace ──────────────────────────────────────────
   .command('workspace', 'workspace 管理', (y) => y
+    .command('create <name>', '创建新 workspace', (y) =>
+      y.positional('name', { type: 'string', demandOption: true, describe: 'workspace 名称' })
+        .option('from-workflow', { type: 'string', describe: '从 workflow 导入' }),
+    async (argv) => {
+      const rootDir = requireRoot();
+      const { createWorkspace } = await import('./commands/workspace.js');
+      await createWorkspace(argv.name!, rootDir, argv.fromWorkflow);
+    })
     .command('list', '列出所有 workspace', {}, async () => {
       const rootDir = requireRoot();
       const { listWorkspaces } = await import('./commands/workspace.js');
@@ -67,32 +80,23 @@ yargs(hideBin(process.argv))
       y.positional('id', { type: 'string', demandOption: true }),
     async (argv) => {
       const rootDir = requireRoot();
-      const { workspaceSwitch } = await import('./commands/workspace-cmd.ts');
+      const { workspaceSwitch } = await import('./commands/workspace.js');
       workspaceSwitch(rootDir, argv.id!);
     })
     .command('status [id]', '查看 workspace 状态', (y) =>
       y.positional('id', { type: 'string' }),
     async (argv) => {
       const rootDir = requireRoot();
-      const { workspaceStatus, getCurrentWorkspace } = await import('./commands/workspace-cmd.ts');
+      const { workspaceStatus, getCurrentWorkspace } = await import('./commands/workspace.js');
       const wsId = argv.id || getCurrentWorkspace(rootDir);
       if (!wsId) { console.error('请指定 workspace ID'); process.exit(1); }
       workspaceStatus(rootDir, wsId);
-    })
-    .command('show [id]', '查看 workspace 详情', (y) =>
-      y.positional('id', { type: 'string' }),
-    async (argv) => {
-      const rootDir = requireRoot();
-      const { workspaceShow, getCurrentWorkspace } = await import('./commands/workspace-cmd.ts');
-      const wsId = argv.id || getCurrentWorkspace(rootDir);
-      if (!wsId) { console.error('请指定 workspace ID'); process.exit(1); }
-      workspaceShow(rootDir, wsId);
     })
     .command('delete <id>', '删除 workspace', (y) =>
       y.positional('id', { type: 'string', demandOption: true }),
     async (argv) => {
       const rootDir = requireRoot();
-      const { workspaceDelete } = await import('./commands/workspace-cmd.ts');
+      const { workspaceDelete } = await import('./commands/workspace.js');
       workspaceDelete(rootDir, argv.id!);
     })
     .demandCommand(1, '请指定子命令，使用 --help 查看')
@@ -103,37 +107,10 @@ yargs(hideBin(process.argv))
     y.positional('id', { type: 'string' }),
   async (argv) => {
     const rootDir = requireRoot();
-    const { workspaceStatus, getCurrentWorkspace } = await import('./commands/workspace-cmd.ts');
+    const { workspaceStatus, getCurrentWorkspace } = await import('./commands/workspace.js');
     const wsId = argv.id || getCurrentWorkspace(rootDir);
     if (!wsId) { console.error('请指定 workspace ID'); process.exit(1); }
     workspaceStatus(rootDir, wsId);
-  })
-  .command('show [id]', '查看 workspace 详情（workspace show 的快捷方式）', (y) =>
-    y.positional('id', { type: 'string' }),
-  async (argv) => {
-    const rootDir = requireRoot();
-    const { workspaceShow, getCurrentWorkspace } = await import('./commands/workspace-cmd.ts');
-    const wsId = argv.id || getCurrentWorkspace(rootDir);
-    if (!wsId) { console.error('请指定 workspace ID'); process.exit(1); }
-    workspaceShow(rootDir, wsId);
-  })
-  .command('log [id]', '查看执行日志', (y) =>
-    y.positional('id', { type: 'string' }),
-  async (argv) => {
-    const rootDir = requireRoot();
-    const { workspaceLog, getCurrentWorkspace } = await import('./commands/workspace-cmd.ts');
-    const wsId = argv.id || getCurrentWorkspace(rootDir);
-    if (!wsId) { console.error('请指定 workspace ID'); process.exit(1); }
-    workspaceLog(rootDir, wsId);
-  })
-  .command('lock [id]', '锁定版本', (y) =>
-    y.positional('id', { type: 'string' }),
-  async (argv) => {
-    const rootDir = requireRoot();
-    const { workspaceLock, getCurrentWorkspace } = await import('./commands/workspace-cmd.ts');
-    const wsId = argv.id || getCurrentWorkspace(rootDir);
-    if (!wsId) { console.error('请指定 workspace ID'); process.exit(1); }
-    workspaceLock(rootDir, wsId);
   })
 
   // ── llm ────────────────────────────────────────────────
@@ -165,6 +142,11 @@ yargs(hideBin(process.argv))
 
   // ── node ───────────────────────────────────────────────
   .command('node', '节点编排（DAG 结构管理）', (y) => y
+    .option('workspace', {
+      alias: 'w',
+      type: 'string',
+      describe: '指定 workspace ID（可选，支持前缀匹配）',
+    })
     .command('add <label>', '创建节点', (y) =>
       y.positional('label', { type: 'string', demandOption: true, describe: '节点标签' }),
     async (argv) => {
@@ -259,6 +241,11 @@ yargs(hideBin(process.argv))
 
   // ── run ────────────────────────────────────────────────
   .command('run [mode]', '执行 DAG（默认全部 todo 节点）', (y) => y
+    .option('workspace', {
+      alias: 'w',
+      type: 'string',
+      describe: '指定 workspace ID（可选，支持前缀匹配）',
+    })
     .positional('mode', {
       type: 'string',
       choices: ['single', 'preview'] as const,

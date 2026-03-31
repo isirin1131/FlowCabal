@@ -1,7 +1,7 @@
 import { join } from "path";
 import { homedir } from "os";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
-import { LlmConfig, NodeDef, Workflow, Workspace } from "./types.js";
+import { LlmConfig, Workflow, Workspace } from "./types.js";
 import { LlmConfigsFileSchema, WorkflowSchema, WorkspaceSchema } from "./schema.js";
 
 // 全局配置目录
@@ -10,20 +10,37 @@ export const LLM_CONFIGS_FILE = join(GLOBAL_CONFIG_DIR, "llm-configs.json");
 export const WORKFLOWS_DIR = join(GLOBAL_CONFIG_DIR, "workflows");
 
 // 项目目录
+
 export function getMemoryDir(projectDir: string): string {
   return join(projectDir, "memory");
 }
 
 export function getCacheDir(projectDir: string): string {
-  return join(projectDir, ".cache");
+  return join(projectDir, ".flowcabal-project-cache");
 }
 
 export function getWorkspaceDir(projectDir: string, workspaceId: string): string {
   return join(getCacheDir(projectDir), workspaceId);
 }
 
-export function getWorkspaceNodesFile(projectDir: string, workspaceId: string): string {
-  return join(getWorkspaceDir(projectDir, workspaceId), "nodes.json");
+export function getWorkspaceFile(projectDir: string, workspaceId: string): string {
+  return join(getWorkspaceDir(projectDir, workspaceId), "workspace.json");
+}
+
+export function getCurrentWorkspaceFile(projectDir: string): string {
+  return join(getCacheDir(projectDir), "current", "workspace.json");
+}
+
+export function readCurrentWorkspace(projectDir: string): string | null {
+  const file = getCurrentWorkspaceFile(projectDir);
+  if (!existsSync(file)) return null;
+  return readFileSync(file, "utf-8").trim();
+}
+
+export function writeCurrentWorkspace(projectDir: string, workspaceId: string): void {
+  const file = getCurrentWorkspaceFile(projectDir);
+  ensureDir(join(file, ".."));
+  writeFileSync(file, workspaceId, "utf-8");
 }
 
 export function getNodeOutputFile(projectDir: string, workspaceId: string, nodeId: string): string {
@@ -102,7 +119,7 @@ function jsonToWorkspace(data: any): Workspace {
 }
 
 export function readWorkspace(projectDir: string, workspaceId: string): Workspace | null {
-  const nodesFile = getWorkspaceNodesFile(projectDir, workspaceId);
+  const nodesFile = getWorkspaceFile(projectDir, workspaceId);
   if (!existsSync(nodesFile)) return null;
   
   const content = readFileSync(nodesFile, "utf-8");
@@ -110,7 +127,7 @@ export function readWorkspace(projectDir: string, workspaceId: string): Workspac
 }
 
 export function writeWorkspace(projectDir: string, workspaceId: string, workspace: Workspace): void {
-  const nodesFile = getWorkspaceNodesFile(projectDir, workspaceId);
+  const nodesFile = getWorkspaceFile(projectDir, workspaceId);
   ensureDir(join(nodesFile, ".."));
   const content = JSON.stringify(workspaceToJson(workspace), null, 2);
   writeFileSync(nodesFile, content, "utf-8");

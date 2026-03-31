@@ -20,7 +20,7 @@ export async function initProject(rootDir: string): Promise<void> {
     mkdirSync(join(memoryDir, dir), { recursive: true });
   }
 
-  for (const file of MEMORY_SEED_FILES) {
+  for (const file of [...MEMORY_SEED_FILES, "index.md"]) {
     const filePath = join(memoryDir, file);
     if (!existsSync(filePath)) {
       writeFileSync(filePath, '', 'utf-8');
