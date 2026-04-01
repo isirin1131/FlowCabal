@@ -140,14 +140,14 @@ yargs(hideBin(process.argv))
     async (argv) => {
       const { rootDir, workspaceId } = await requireWorkspace(argv);
       const { nodeAdd } = await import('./commands/node.js');
-      await nodeAdd(argv.label!, rootDir, workspaceId);
+      nodeAdd(argv.label!, rootDir, workspaceId);
     })
     .command('rm <id>', '删除节点', (y) =>
       y.positional('id', { type: 'string', demandOption: true }),
     async (argv) => {
       const { rootDir, workspaceId } = await requireWorkspace(argv);
       const { nodeRm } = await import('./commands/node.js');
-      await nodeRm(argv.id!, rootDir, workspaceId);
+      nodeRm(argv.id!, rootDir, workspaceId);
     })
     .command('rename <id> <label>', '重命名节点', (y) => y
       .positional('id', { type: 'string', demandOption: true })
@@ -155,74 +155,72 @@ yargs(hideBin(process.argv))
     async (argv) => {
       const { rootDir, workspaceId } = await requireWorkspace(argv);
       const { nodeRename } = await import('./commands/node.js');
-      await nodeRename(argv.id!, argv.label!, rootDir, workspaceId);
+      nodeRename(argv.id!, argv.label!, rootDir, workspaceId);
     })
     .command('list', '列出所有节点', {}, async (argv) => {
       const { rootDir, workspaceId } = await requireWorkspace(argv);
       const { nodeList } = await import('./commands/node.js');
       nodeList(rootDir, workspaceId);
     })
-    .command('show <id>', '显示节点详情（blocks、upstream、输出）', (y) =>
+    .command('cat <id>', '显示节点详情（blocks + output）', (y) =>
       y.positional('id', { type: 'string', demandOption: true }),
     async (argv) => {
       const { rootDir, workspaceId } = await requireWorkspace(argv);
-      const { nodeShow } = await import('./commands/node.js');
-      nodeShow(argv.id!, rootDir, workspaceId);
+      const { nodeCat } = await import('./commands/node.js');
+      nodeCat(argv.id!, rootDir, workspaceId);
     })
-    .command('status <id>', '查看节点状态（done/stale/pending）', (y) =>
-      y.positional('id', { type: 'string', demandOption: true }),
-    async (argv) => {
-      const { rootDir, workspaceId } = await requireWorkspace(argv);
-      const { nodeStatus } = await import('./commands/node.js');
-      nodeStatus(argv.id!, rootDir, workspaceId);
-    })
-    .command('add-ref <id> <upstream>', '添加上游引用（建立 DAG 连接）', (y) => y
+    .command('ins-ref <id> <upstream>', '插入 ref block（建立 DAG 连接）', (y) => y
       .positional('id', { type: 'string', demandOption: true, describe: '目标节点' })
-      .positional('upstream', { type: 'string', demandOption: true, describe: '上游节点' }),
+      .positional('upstream', { type: 'string', demandOption: true, describe: '上游节点' })
+      .option('system', { type: 'boolean', describe: '插入到 systemPrompt（默认 userPrompt）' })
+      .option('index', { type: 'number', describe: '插入位置（默认追加到末尾）' }),
     async (argv) => {
       const { rootDir, workspaceId } = await requireWorkspace(argv);
-      const { nodeAddRef } = await import('./commands/node.js');
-      await nodeAddRef(argv.id!, argv.upstream!, rootDir, workspaceId);
+      const { nodeInsRef } = await import('./commands/node.js');
+      nodeInsRef(argv.id!, argv.upstream!, rootDir, workspaceId, argv.system, argv.index);
     })
-    .command('add-literal <id> <content..>', '添加 literal block（静态文本）', (y) => y
-      .positional('id', { type: 'string', demandOption: true })
-      .positional('content', { type: 'string', demandOption: true }),
+    .command('ins-literal <id>', '插入 literal block（静态文本）', (y) => y
+      .positional('id', { type: 'string', demandOption: true, describe: '目标节点' })
+      .option('content', { type: 'string', demandOption: true, describe: '文本内容' })
+      .option('system', { type: 'boolean', describe: '插入到 systemPrompt（默认 userPrompt）' })
+      .option('index', { type: 'number', describe: '插入位置（默认追加到末尾）' }),
     async (argv) => {
       const { rootDir, workspaceId } = await requireWorkspace(argv);
-      const { nodeAddLiteral } = await import('./commands/node.js');
-      const content = Array.isArray(argv.content) ? argv.content.join(' ') : argv.content!;
-      await nodeAddLiteral(argv.id!, content, rootDir, workspaceId);
+      const { nodeInsText } = await import('./commands/node.js');
+      nodeInsText(argv.id!, argv.content!, rootDir, workspaceId, argv.system, argv.index);
     })
-    .command('add-inject <id> <hint..>', '添加 agent-inject block（Agent 按 hint 注入内容）', (y) => y
-      .positional('id', { type: 'string', demandOption: true })
-      .positional('hint', { type: 'string', demandOption: true }),
+    .command('ins-inject <id>', '插入 inject block（Agent 按 hint 注入内容）', (y) => y
+      .positional('id', { type: 'string', demandOption: true, describe: '目标节点' })
+      .option('hint', { type: 'string', demandOption: true, describe: '注入提示' })
+      .option('system', { type: 'boolean', describe: '插入到 systemPrompt（默认 userPrompt）' })
+      .option('index', { type: 'number', describe: '插入位置（默认追加到末尾）' }),
     async (argv) => {
       const { rootDir, workspaceId } = await requireWorkspace(argv);
-      const { nodeAddInject } = await import('./commands/node.js');
-      const hint = Array.isArray(argv.hint) ? argv.hint.join(' ') : argv.hint!;
-      await nodeAddInject(argv.id!, hint, rootDir, workspaceId);
+      const { nodeInsInject } = await import('./commands/node.js');
+      nodeInsInject(argv.id!, argv.hint!, rootDir, workspaceId, argv.system, argv.index);
     })
     .command('rm-block <id> <index>', '删除指定位置的 block', (y) => y
       .positional('id', { type: 'string', demandOption: true })
-      .positional('index', { type: 'number', demandOption: true }),
+      .positional('index', { type: 'number', demandOption: true })
+      .option('system', { type: 'boolean', describe: '从 systemPrompt 删除（默认 userPrompt）' }),
     async (argv) => {
       const { rootDir, workspaceId } = await requireWorkspace(argv);
       const { nodeRmBlock } = await import('./commands/node.js');
-      await nodeRmBlock(argv.id!, argv.index!, rootDir, workspaceId);
+      nodeRmBlock(argv.id!, rootDir, workspaceId, argv.system, argv.index!);
     })
     .command('target <id>', '将节点加入执行目标', (y) =>
       y.positional('id', { type: 'string', demandOption: true }),
     async (argv) => {
       const { rootDir, workspaceId } = await requireWorkspace(argv);
       const { nodeTarget } = await import('./commands/node.js');
-      await nodeTarget(argv.id!, rootDir, workspaceId, true);
+      nodeTarget(argv.id!, rootDir, workspaceId);
     })
     .command('untarget <id>', '将节点移出执行目标', (y) =>
       y.positional('id', { type: 'string', demandOption: true }),
     async (argv) => {
       const { rootDir, workspaceId } = await requireWorkspace(argv);
-      const { nodeTarget } = await import('./commands/node.js');
-      await nodeTarget(argv.id!, rootDir, workspaceId, false);
+      const { nodeUntarget } = await import('./commands/node.js');
+      nodeUntarget(argv.id!, rootDir, workspaceId);
     })
     .demandCommand(1, '请指定子命令，使用 --help 查看')
   , () => {})

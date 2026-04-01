@@ -1,9 +1,4 @@
-import {
-  loadWorkspace,
-  saveWorkspace,
-  loadPreferences,
-  loadLlmConfig,
-} from '@flowcabal/engine';
+import { readWorkspace, writeWorkspace } from '@flowcabal/engine';
 import {
   addNode,
   removeNode,
@@ -14,28 +9,28 @@ import {
 } from '@flowcabal/engine';
 import type { TextBlock } from '@flowcabal/engine';
 
-export async function nodeAdd(
+export function nodeAdd(
   label: string,
   rootDir: string,
   workspaceId: string
-): Promise<void> {
-  const ws = loadWorkspace(rootDir, workspaceId);
+): void {
+  const ws = readWorkspace(rootDir, workspaceId);
   if (!ws) {
     console.error('Workspace not found');
     return;
   }
 
   const node = addNode(ws, label);
-  saveWorkspace(rootDir, ws);
+  writeWorkspace(rootDir, ws.id, ws);
   console.log(`Node created: ${node.id} (${label})`);
 }
 
-export async function nodeRm(
+export function nodeRm(
   nodeId: string,
   rootDir: string,
   workspaceId: string
-): Promise<void> {
-  const ws = loadWorkspace(rootDir, workspaceId);
+): void {
+  const ws = readWorkspace(rootDir, workspaceId);
   if (!ws) {
     console.error('Workspace not found');
     return;
@@ -47,17 +42,17 @@ export async function nodeRm(
     return;
   }
 
-  saveWorkspace(rootDir, ws);
+  writeWorkspace(rootDir, ws.id, ws);
   console.log(`Node removed: ${nodeId}`);
 }
 
-export async function nodeRename(
+export function nodeRename(
   nodeId: string,
   newLabel: string,
   rootDir: string,
   workspaceId: string
-): Promise<void> {
-  const ws = loadWorkspace(rootDir, workspaceId);
+): void {
+  const ws = readWorkspace(rootDir, workspaceId);
   if (!ws) {
     console.error('Workspace not found');
     return;
@@ -69,12 +64,12 @@ export async function nodeRename(
     return;
   }
 
-  saveWorkspace(rootDir, ws);
+  writeWorkspace(rootDir, ws.id, ws);
   console.log(`Node renamed: ${nodeId} -> ${newLabel}`);
 }
 
 export function nodeList(rootDir: string, workspaceId: string): void {
-  const ws = loadWorkspace(rootDir, workspaceId);
+  const ws = readWorkspace(rootDir, workspaceId);
   if (!ws) {
     console.error('Workspace not found');
     return;
@@ -85,18 +80,13 @@ export function nodeList(rootDir: string, workspaceId: string): void {
     return;
   }
 
-  console.log('Nodes:');
   for (const node of ws.nodes) {
-    const isTarget = ws.target_nodes.includes(node.id);
-    const hasOutput = ws.outputs.has(node.id);
-    const isStale = ws.stale_nodes.includes(node.id);
-    const status = hasOutput ? (isStale ? '[stale]' : '[done]') : '[pending]';
-    console.log(`  ${node.id} ${status} — ${node.label}`);
+    console.log(`${node.id} ${node.label}`);
   }
 }
 
-export function nodeShow(nodeId: string, rootDir: string, workspaceId: string): void {
-  const ws = loadWorkspace(rootDir, workspaceId);
+export function nodeCat(nodeId: string, rootDir: string, workspaceId: string): void {
+  const ws = readWorkspace(rootDir, workspaceId);
   if (!ws) {
     console.error('Workspace not found');
     return;
@@ -108,33 +98,38 @@ export function nodeShow(nodeId: string, rootDir: string, workspaceId: string): 
     return;
   }
 
-  console.log(`# ${node.label} (${node.id})`);
+  console.log(`# ${node.label} (${nodeId})`);
   console.log('');
-  console.log('## systemPrompt');
-  if (node.systemPrompt.length === 0) {
+  console.log('## Blocks');
+
+  const allBlocks = [
+    ...node.systemPrompt.map((b, i) => ({ block: b, section: 'system', index: i })),
+    ...node.userPrompt.map((b, i) => ({ block: b, section: 'user', index: i })),
+  ];
+
+  if (allBlocks.length === 0) {
     console.log('  (empty)');
   } else {
-    for (let i = 0; i < node.systemPrompt.length; i++) {
-      const block = node.systemPrompt[i];
-      console.log(`  [${i}] ${formatBlock(block)}`);
+    for (const { block, section, index } of allBlocks) {
+      console.log(`  [${section}:${index}] ${formatBlock(block)}`);
     }
   }
+
   console.log('');
-  console.log('## userPrompt');
-  if (node.userPrompt.length === 0) {
-    console.log('  (empty)');
+  console.log('## Output');
+
+  if (ws.outputs.has(nodeId)) {
+    const output = ws.outputs.get(nodeId);
+    console.log(JSON.stringify(output, null, 2));
   } else {
-    for (let i = 0; i < node.userPrompt.length; i++) {
-      const block = node.userPrompt[i];
-      console.log(`  [${i}] ${formatBlock(block)}`);
-    }
+    console.log('  (no output)');
   }
 }
 
 function formatBlock(block: TextBlock): string {
   switch (block.kind) {
     case 'literal':
-      return `literal: ${block.content.slice(0, 50)}${block.content.length > 50 ? '...' : ''}`;
+      return `text: "${block.content.slice(0, 50)}${block.content.length > 50 ? '...' : ''}"`;
     case 'ref':
       return `ref: →${block.nodeId}`;
     case 'agent-inject':
@@ -142,65 +137,40 @@ function formatBlock(block: TextBlock): string {
   }
 }
 
-export function nodeStatus(nodeId: string, rootDir: string, workspaceId: string): void {
-  const ws = loadWorkspace(rootDir, workspaceId);
-  if (!ws) {
-    console.error('Workspace not found');
-    return;
-  }
-
-  const node = getNode(ws, nodeId);
-  if (!node) {
-    console.error('Node not found');
-    return;
-  }
-
-  const hasOutput = ws.outputs.has(nodeId);
-  const isTarget = ws.target_nodes.includes(nodeId);
-  const isStale = ws.stale_nodes.includes(nodeId);
-  const upstream = ws.upstream.get(nodeId) || [];
-  const downstream = ws.downstream.get(nodeId) || [];
-
-  console.log(`Node: ${node.label} (${nodeId})`);
-  console.log(`  Status: ${hasOutput ? (isStale ? 'stale' : 'done') : 'pending'}`);
-  console.log(`  Target: ${isTarget ? 'yes' : 'no'}`);
-  console.log(`  Upstream: ${upstream.length > 0 ? upstream.join(', ') : '(none)'}`);
-  console.log(`  Downstream: ${downstream.length > 0 ? downstream.join(', ') : '(none)'}`);
-  console.log(`  Blocks: ${node.systemPrompt.length + node.userPrompt.length}`);
-}
-
-export async function nodeAddRef(
+export function nodeInsRef(
   nodeId: string,
   upstreamId: string,
   rootDir: string,
-  workspaceId: string
-): Promise<void> {
-  const ws = loadWorkspace(rootDir, workspaceId);
+  workspaceId: string,
+  isSystem: boolean = false,
+  index?: number
+): void {
+  const ws = readWorkspace(rootDir, workspaceId);
   if (!ws) {
     console.error('Workspace not found');
     return;
   }
 
   const block: TextBlock = { kind: 'ref', nodeId: upstreamId };
-  const result = insertBlock(ws, nodeId, block, false);
+  const result = insertBlock(ws, nodeId, block, isSystem, index);
   if (!result) {
     console.error('Node not found');
     return;
   }
 
-  saveWorkspace(rootDir, ws);
+  writeWorkspace(rootDir, ws.id, ws);
   console.log(`Added ref: ${nodeId} -> ${upstreamId}`);
 }
 
-export async function nodeAddLiteral(
+export function nodeInsText(
   nodeId: string,
   content: string,
   rootDir: string,
   workspaceId: string,
   isSystem: boolean = false,
   index?: number
-): Promise<void> {
-  const ws = loadWorkspace(rootDir, workspaceId);
+): void {
+  const ws = readWorkspace(rootDir, workspaceId);
   if (!ws) {
     console.error('Workspace not found');
     return;
@@ -213,19 +183,19 @@ export async function nodeAddLiteral(
     return;
   }
 
-  saveWorkspace(rootDir, ws);
-  console.log(`Added literal block to node ${nodeId}`);
+  writeWorkspace(rootDir, ws.id, ws);
+  console.log(`Added text to node ${nodeId}`);
 }
 
-export async function nodeAddInject(
+export function nodeInsInject(
   nodeId: string,
   hint: string,
   rootDir: string,
   workspaceId: string,
   isSystem: boolean = false,
   index?: number
-): Promise<void> {
-  const ws = loadWorkspace(rootDir, workspaceId);
+): void {
+  const ws = readWorkspace(rootDir, workspaceId);
   if (!ws) {
     console.error('Workspace not found');
     return;
@@ -238,40 +208,39 @@ export async function nodeAddInject(
     return;
   }
 
-  saveWorkspace(rootDir, ws);
-  console.log(`Added inject block to node ${nodeId}`);
+  writeWorkspace(rootDir, ws.id, ws);
+  console.log(`Added inject to node ${nodeId}`);
 }
 
-export async function nodeRmBlock(
+export function nodeRmBlock(
   nodeId: string,
-  blockIndex: number,
   rootDir: string,
   workspaceId: string,
-  isSystem: boolean = false
-): Promise<void> {
-  const ws = loadWorkspace(rootDir, workspaceId);
+  isSystem: boolean = false,
+  index: number
+): void {
+  const ws = readWorkspace(rootDir, workspaceId);
   if (!ws) {
     console.error('Workspace not found');
     return;
   }
 
-  const result = removeBlock(ws, nodeId, isSystem, blockIndex);
+  const result = removeBlock(ws, nodeId, isSystem, index);
   if (!result) {
     console.error('Node or block not found');
     return;
   }
 
-  saveWorkspace(rootDir, ws);
-  console.log(`Removed block [${blockIndex}] from node ${nodeId}`);
+  writeWorkspace(rootDir, ws.id, ws);
+  console.log(`Removed block [${isSystem ? 'system' : 'user'}:${index}] from node ${nodeId}`);
 }
 
-export async function nodeTarget(
+export function nodeTarget(
   nodeId: string,
   rootDir: string,
-  workspaceId: string,
-  add: boolean = true
-): Promise<void> {
-  const ws = loadWorkspace(rootDir, workspaceId);
+  workspaceId: string
+): void {
+  const ws = readWorkspace(rootDir, workspaceId);
   if (!ws) {
     console.error('Workspace not found');
     return;
@@ -283,14 +252,33 @@ export async function nodeTarget(
     return;
   }
 
-  if (add) {
-    if (!ws.target_nodes.includes(nodeId)) {
-      ws.target_nodes.push(nodeId);
-    }
-  } else {
-    ws.target_nodes = ws.target_nodes.filter(id => id !== nodeId);
+  if (!ws.target_nodes.includes(nodeId)) {
+    ws.target_nodes.push(nodeId);
   }
 
-  saveWorkspace(rootDir, ws);
-  console.log(`Node ${nodeId} ${add ? 'added to' : 'removed from'} targets`);
+  writeWorkspace(rootDir, ws.id, ws);
+  console.log(`Node ${nodeId} added to targets`);
+}
+
+export function nodeUntarget(
+  nodeId: string,
+  rootDir: string,
+  workspaceId: string
+): void {
+  const ws = readWorkspace(rootDir, workspaceId);
+  if (!ws) {
+    console.error('Workspace not found');
+    return;
+  }
+
+  const node = getNode(ws, nodeId);
+  if (!node) {
+    console.error('Node not found');
+    return;
+  }
+
+  ws.target_nodes = ws.target_nodes.filter(id => id !== nodeId);
+
+  writeWorkspace(rootDir, ws.id, ws);
+  console.log(`Node ${nodeId} removed from targets`);
 }
