@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, rmSync, statSync } from 'fs';
 import { join } from 'path';
-import { newId, getCacheDir, getWorkspaceDir, readCurrentWorkspace, writeCurrentWorkspace, readWorkspace, writeWorkspace, calcStale } from '@flowcabal/engine';
+import { newId, getCacheDir, getWorkspaceDir, getCurrentWorkspaceFile, readCurrentWorkspace, writeCurrentWorkspace, readWorkspace, writeWorkspace, calcStale } from '@flowcabal/engine';
 import type { Workspace } from '@flowcabal/engine';
 
 import { initFromEmpty, initFromWorkflow, workspaceToWorkflow } from '@flowcabal/engine';
@@ -38,7 +38,7 @@ export function listWorkspaces(rootDir: string): void {
 
   const ids = readdirSync(cacheDir).filter(name => {
     const stat = statSync(join(cacheDir, name));
-    return stat.isDirectory();
+    return stat.isDirectory() && name !== 'current';
   });
 
   if (ids.length === 0) {
@@ -102,6 +102,15 @@ export function workspaceDelete(rootDir: string, workspaceId: string): void {
   }
 
   rmSync(wsDir, { recursive: true });
+
+  const current = readCurrentWorkspace(rootDir);
+  if (current === workspaceId) {
+    const currentDir = join(getCacheDir(rootDir), 'current');
+    if (existsSync(currentDir)) {
+      rmSync(currentDir, { recursive: true });
+    }
+  }
+
   console.log(`Deleted workspace: ${workspaceId}`);
 }
 

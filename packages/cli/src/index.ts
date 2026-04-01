@@ -88,8 +88,8 @@ yargs(hideBin(process.argv))
     async (argv) => {
       const rootDir = requireRoot();
       const { workspaceStatus, getCurrentWorkspace } = await import('./commands/workspace.js');
-      const wsId = argv.id || getCurrentWorkspace(rootDir);
-      if (!wsId) { console.error('请指定 workspace ID'); process.exit(1); }
+      const wsId = argv.id || getCurrentWorkspace(rootDir) || resolveWorkspace(rootDir);
+      if (!wsId) { console.error('没有可用的 workspace，请先创建'); process.exit(1); }
       workspaceStatus(rootDir, wsId);
     })
     .command('delete <id>', '删除 workspace', (y) =>
@@ -101,18 +101,6 @@ yargs(hideBin(process.argv))
     })
     .demandCommand(1, '请指定子命令，使用 --help 查看')
   , () => {})
-
-  // ── 快捷方式：status / show / log / lock ───────────────
-  .command('status [id]', '查看 workspace 状态（workspace status 的快捷方式）', (y) =>
-    y.positional('id', { type: 'string' }),
-  async (argv) => {
-    const rootDir = requireRoot();
-    const { workspaceStatus, getCurrentWorkspace } = await import('./commands/workspace.js');
-    const wsId = argv.id || getCurrentWorkspace(rootDir);
-    if (!wsId) { console.error('请指定 workspace ID'); process.exit(1); }
-    workspaceStatus(rootDir, wsId);
-  })
-
   // ── llm ────────────────────────────────────────────────
   .command('llm', 'LLM 配置管理（全局 ~/.config/flowcabal/llm-configs.json）', (y) => y
     .command('list', '列出所有配置（隐藏 apikey）', {}, async () => {
