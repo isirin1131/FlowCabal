@@ -12,6 +12,29 @@ stale_nodes 仅作为提醒，这些节点输出结果可能不是最新的。
 
 ps：请关注 [LINUX DO](https://linux.do/) 社区 owo
 
+## 技术栈
+
+### 核心依赖
+
+- **[ai](https://github.com/vercel/ai)** - AI SDK，用于调用各类 LLM API
+- **[yargs](https://github.com/yargs/yargs)** - CLI 参数解析
+- **[zod](https://github.com/colinhacks/zod)** - TypeScript 数据校验
+- **[nanoid](https://github.com/adjust/nanoid)** - 唯一 ID 生成
+
+### LLM Provider
+
+- `@ai-sdk/openai` - OpenAI 兼容
+- `@ai-sdk/anthropic` - Anthropic (Claude)
+- `@ai-sdk/google` - Google (Gemini)
+- `@ai-sdk/mistral` - Mistral
+- `@ai-sdk/xai` - xAI (Grok)
+- `@ai-sdk/cohere` - Cohere
+
+### 工具
+
+- **[@clack/prompts](https://github.com/nickcis/clack)** - 终端交互提示
+- **[Bun](https://bun.sh)** - 运行时
+
 ---
 
 ## 安装
