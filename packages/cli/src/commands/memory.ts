@@ -1,11 +1,12 @@
-import { loadLlmConfig } from '@flowcabal/engine';
-import { runMemoryAgent } from '@flowcabal/engine';
+import { readLlmConfigs, conversationalMemoryAgent } from '@flowcabal/engine';
+import type { CoreMessage } from 'ai';
 
 export async function memoryChat(
   rootDir: string,
   llmConfigName: string = 'default'
 ): Promise<void> {
-  const config = loadLlmConfig(rootDir, llmConfigName);
+  const configs = readLlmConfigs();
+  const config = configs[llmConfigName];
   if (!config) {
     console.error(`LLM config not found: ${llmConfigName}`);
     return;
@@ -20,7 +21,7 @@ export async function memoryChat(
     output: process.stdout,
   });
 
-  const messages: { role: 'user' | 'assistant'; content: string }[] = [];
+  const messages: CoreMessage[] = [];
 
   const ask = () => {
     rl.question('> ', async (input) => {
@@ -32,18 +33,22 @@ export async function memoryChat(
       messages.push({ role: 'user', content: input });
       
       try {
-        const response = await runMemoryAgent(
+        const stream = conversationalMemoryAgent(
           rootDir,
           config,
-          input,
+          messages,
           { readonly: false }
         );
         
         console.log('');
-        console.log(response);
+        let full = '';
+        for await (const chunk of stream) {
+          process.stdout.write(chunk);
+          full += chunk;
+        }
         console.log('');
         
-        messages.push({ role: 'assistant', content: response });
+        messages.push({ role: 'assistant', content: full });
       } catch (e) {
         console.error('Error:', e);
       }

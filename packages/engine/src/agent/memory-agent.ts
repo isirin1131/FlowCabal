@@ -70,12 +70,27 @@ export async function* conversationalMemoryAgent(
   const result = streamText({
     ...prepared,
     messages,
+    maxSteps: 20,
   });
 
   let full = "";
-  for await (const chunk of result.textStream) {
-    full += chunk;
-    yield chunk;
+  
+  for await (const part of result.fullStream) {
+    if (part.type === 'text-delta') {
+      full += part.textDelta;
+      yield part.textDelta;
+    } else if (part.type === 'tool-call') {
+      const toolPart = part as { type: 'tool-call'; toolCallId: string; toolName: string; args: unknown };
+      const toolInfo = `\n[调用工具: ${toolPart.toolName}]\n${JSON.stringify(toolPart.args, null, 2)}\n`;
+      full += toolInfo;
+      yield toolInfo;
+    } else if ((part as { type: string }).type === 'tool-result') {
+      const toolResultPart = part as unknown as { type: 'tool-result'; toolCallId: string; toolName: string; result: unknown };
+      const resultInfo = `[工具结果: ${toolResultPart.toolName}]\n${JSON.stringify(toolResultPart.result, null, 2)}\n`;
+      full += resultInfo;
+      yield resultInfo;
+    }
   }
+
   return full;
 }

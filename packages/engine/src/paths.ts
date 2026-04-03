@@ -142,5 +142,5 @@ export function memoryIndexPath(projectDir: string): string {
   return join(memoryPath(projectDir), "index.md");
 }
 
-export const MEMORY_SEED_FILES = ["voice.md"];
-export const MEMORY_SEED_DIRS = ["characters", "world", "manuscripts"];
+export const MEMORY_SEED_FILES = [];
+export const MEMORY_SEED_DIRS = ["manuscripts"];

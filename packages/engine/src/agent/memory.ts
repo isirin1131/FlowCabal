@@ -8,41 +8,17 @@ import {
   MEMORY_SEED_DIRS,
 } from "../paths.js";
 
-// ── Types ──
+// ── Types ─────────────────────────────────────────────
 
 interface MemoryEntry {
-  /** 相对于 memoryPath 的路径，如 "characters/张三.md" */
   relativePath: string;
   content: string;
 }
 
-// ── Init ──
+// ── CRUD: 非手稿文件 ─────────────────────────────────────
 
 /**
- * 创建项目的 memory 种子文件和目录。
- * 幂等：已存在的文件/目录不覆盖。
- */
-export async function initMemory(rootDir: string): Promise<void> {
-  const base = memoryPath(rootDir);
-  await mkdir(base, { recursive: true });
-
-  for (const dir of MEMORY_SEED_DIRS) {
-    await mkdir(join(base, dir), { recursive: true });
-  }
-
-  for (const file of MEMORY_SEED_FILES) {
-    const filePath = join(base, file);
-    if (!existsSync(filePath)) {
-      await mkdir(dirname(filePath), { recursive: true });
-      await writeFile(filePath, "", "utf-8");
-    }
-  }
-}
-
-// ── CRUD ──
-
-/**
- * 遍历 memory 目录下所有 .md 文件，排除 index.md。
+ * 遍历 memory 目录下所有 .md 文件，排除 index.md 和 manuscripts/。
  * 返回相对于 memoryPath 的路径列表。
  */
 export async function listMemoryFiles(rootDir: string): Promise<string[]> {
@@ -52,16 +28,20 @@ export async function listMemoryFiles(rootDir: string): Promise<string[]> {
   const results: string[] = [];
 
   async function walk(dir: string) {
+    const relDir = relative(base, dir);
+    if (relDir && relDir.startsWith('manuscripts')) return;
+
     const entries = await readdir(dir, { withFileTypes: true });
     for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue;
+      if (entry.name === 'index.md') continue;
+
       const full = join(dir, entry.name);
       if (entry.isDirectory()) {
         await walk(full);
       } else if (entry.isFile() && extname(entry.name) === ".md") {
         const rel = relative(base, full);
-        if (rel !== "index.md") {
-          results.push(rel);
-        }
+        results.push(rel);
       }
     }
   }
@@ -71,12 +51,46 @@ export async function listMemoryFiles(rootDir: string): Promise<string[]> {
 }
 
 /**
- * 读取指定 memory 文件。
+ * 遍历 manuscripts/ 目录下所有 .md 文件。
+ * 返回相对于 memoryPath 的路径列表。
+ */
+export async function listManuscriptsFiles(rootDir: string): Promise<string[]> {
+  const base = memoryPath(rootDir);
+  const manuscriptsDir = join(base, 'manuscripts');
+  if (!existsSync(manuscriptsDir)) return [];
+
+  const results: string[] = [];
+
+  async function walk(dir: string) {
+    const entries = await readdir(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.name.startsWith('.')) continue;
+      if (entry.name === 'index.md') continue;
+
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        await walk(full);
+      } else if (entry.isFile() && extname(entry.name) === '.md') {
+        const rel = relative(base, full);
+        results.push(rel);
+      }
+    }
+  }
+
+  await walk(manuscriptsDir);
+  return results.sort();
+}
+
+/**
+ * 读取非手稿文件。禁止读取 manuscripts/ 目录。
  */
 export async function readMemoryFile(
   rootDir: string,
   relativePath: string,
 ): Promise<MemoryEntry | null> {
+  if (relativePath.startsWith('manuscripts/') || relativePath === 'index.md') {
+    return null;
+  }
   const filePath = join(memoryPath(rootDir), relativePath);
   if (!existsSync(filePath)) return null;
   const content = await readFile(filePath, "utf-8");
@@ -84,25 +98,47 @@ export async function readMemoryFile(
 }
 
 /**
- * 写入/更新 memory 文件。自动创建父目录。
+ * 读取手稿文件（manuscripts/*.md）。
+ */
+export async function readManuscriptFile(
+  rootDir: string,
+  relativePath: string,
+): Promise<MemoryEntry | null> {
+  if (!relativePath.startsWith('manuscripts/')) {
+    return null;
+  }
+  const filePath = join(memoryPath(rootDir), relativePath);
+  if (!existsSync(filePath)) return null;
+  const content = await readFile(filePath, "utf-8");
+  return { relativePath, content };
+}
+
+/**
+ * 写入/更新非手稿文件。禁止写入 manuscripts/ 目录。
  */
 export async function writeMemoryFile(
   rootDir: string,
   relativePath: string,
   content: string,
 ): Promise<void> {
+  if (relativePath.startsWith('manuscripts/') || relativePath === 'index.md') {
+    throw new Error('禁止写入 manuscripts/ 目录或 index.md');
+  }
   const filePath = join(memoryPath(rootDir), relativePath);
   await mkdir(dirname(filePath), { recursive: true });
   await writeFile(filePath, content, "utf-8");
 }
 
 /**
- * 删除 memory 文件。
+ * 删除非手稿文件。禁止删除 manuscripts/ 目录下的文件。
  */
 export async function deleteMemoryFile(
   rootDir: string,
   relativePath: string,
 ): Promise<void> {
+  if (relativePath.startsWith('manuscripts/') || relativePath === 'index.md') {
+    throw new Error('禁止删除 manuscripts/ 目录或 index.md');
+  }
   const filePath = join(memoryPath(rootDir), relativePath);
   if (existsSync(filePath)) {
     await unlink(filePath);
