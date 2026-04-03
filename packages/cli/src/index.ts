@@ -255,6 +255,13 @@ yargs(hideBin(process.argv))
       const { memoryChat } = await import('./commands/memory.js');
       await memoryChat(rootDir);
     })
+    .command('add-manuscript <path>', '将 .md 文件复制到 memory/manuscripts', (y) =>
+      y.positional('path', { type: 'string', demandOption: true, describe: '.md 文件路径' }),
+    async (argv) => {
+      const rootDir = requireRoot();
+      const { addManuscript } = await import('./commands/memory.js');
+      await addManuscript(rootDir, argv.path!);
+    })
     .demandCommand(1, '请指定子命令，使用 --help 查看')
   , () => {})
 

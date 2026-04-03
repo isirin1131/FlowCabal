@@ -1,4 +1,6 @@
-import { readLlmConfigs, conversationalMemoryAgent } from '@flowcabal/engine';
+import { readLlmConfigs, conversationalMemoryAgent, getMemoryDir } from '@flowcabal/engine';
+import { copyFileSync, existsSync, mkdirSync } from 'fs';
+import { basename, join } from 'path';
 import type { CoreMessage } from 'ai';
 
 export async function memoryChat(
@@ -58,4 +60,30 @@ export async function memoryChat(
   };
 
   ask();
+}
+
+export async function addManuscript(
+  rootDir: string,
+  mdFilePath: string
+): Promise<void> {
+  if (!mdFilePath.endsWith('.md')) {
+    console.error('错误：只支持 .md 文件');
+    return;
+  }
+
+  if (!existsSync(mdFilePath)) {
+    console.error(`错误：文件不存在: ${mdFilePath}`);
+    return;
+  }
+
+  const memoryDir = getMemoryDir(rootDir);
+  const manuscriptsDir = join(memoryDir, 'manuscripts');
+  
+  if (!existsSync(manuscriptsDir)) {
+    mkdirSync(manuscriptsDir, { recursive: true });
+  }
+
+  const destPath = join(manuscriptsDir, basename(mdFilePath));
+  copyFileSync(mdFilePath, destPath);
+  console.log(`已复制到: ${destPath}`);
 }
