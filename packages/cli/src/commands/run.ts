@@ -1,31 +1,22 @@
-import {
-  loadWorkspace,
-  saveWorkspace,
-  loadPreferences,
-  loadLlmConfig,
-} from '@flowcabal/engine';
+import { readWorkspace, writeWorkspace, readLlmConfigs } from '@flowcabal/engine';
 import { runAll, runSingle, todoList, calcStale } from '@flowcabal/engine';
 
 export async function run(
   rootDir: string,
   workspaceId: string,
-  single: boolean = false
+  single: boolean = false,
+  llmConfigName: string = 'default'
 ): Promise<void> {
-  const ws = loadWorkspace(rootDir, workspaceId);
+  const ws = readWorkspace(rootDir, workspaceId);
   if (!ws) {
     console.error('Workspace not found');
     return;
   }
 
-  const prefs = loadPreferences(rootDir, workspaceId);
-  if (!prefs) {
-    console.error('No preferences found');
-    return;
-  }
-
-  const config = loadLlmConfig(rootDir, prefs.llmConfigName);
+  const configs = readLlmConfigs();
+  const config = configs[llmConfigName];
   if (!config) {
-    console.error(`LLM config not found: ${prefs.llmConfigName}`);
+    console.error(`LLM config not found: ${llmConfigName}`);
     return;
   }
 
@@ -34,20 +25,20 @@ export async function run(
   if (single) {
     const nodeId = await runSingle(ws, config, rootDir);
     if (nodeId) {
-      saveWorkspace(rootDir, ws);
+      writeWorkspace(rootDir, workspaceId, ws);
       console.log(`Executed: ${nodeId}`);
     } else {
       console.log('Nothing to run');
     }
   } else {
     const executed = await runAll(ws, config, rootDir);
-    saveWorkspace(rootDir, ws);
+    writeWorkspace(rootDir, workspaceId, ws);
     console.log(`Executed ${executed.length} nodes: ${executed.join(', ')}`);
   }
 }
 
 export function runPreview(rootDir: string, workspaceId: string): void {
-  const ws = loadWorkspace(rootDir, workspaceId);
+  const ws = readWorkspace(rootDir, workspaceId);
   if (!ws) {
     console.error('Workspace not found');
     return;
