@@ -2,7 +2,15 @@
 
 AI 辅助小说创作 DAG 工作流引擎
 
-核心功能：用 agent 管理记忆文件，向 agent 提问的结果注入工作流用作提示词。
+核心功能：用 agent 管理手稿和在其基础上生成的各类自定义记忆文件，用 DAG 式的工作流基于自定义内容和向 agent 的提问注入项拼接提示词，调用 LLM api 以生成新内容。
+
+可以将想要运行的节点加入 target_nodes，软件会自动解析依赖的上游节点。
+
+stale_nodes 仅作为提醒，这些节点输出结果可能不是最新的。
+
+目前软件为 beta 版本，主要目的为验证软件定义的 AI 辅助创作范式的效果是否达到预期，GUI 和多 agent 功能的支持尚在路上。
+
+ps：请关注 [LINUX DO](https://linux.do/) 社区 owo
 
 ---
 
@@ -173,7 +181,7 @@ LLM 配置管理（全局 `~/.config/flowcabal/llm-configs.json`）。
 ## 选项
 
 ```bash
-# 指定 workspace（支持前缀匹配）
+# 指定 workspace
 ./flowcabal run --workspace <id>
 ./flowcabal node list -w <id>
 ```
