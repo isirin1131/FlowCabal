@@ -62,10 +62,10 @@ jobs:
         run: |
           $version = "${{ github.ref_name }}".TrimStart("v")
           
-          @"
+          $wxs = @'
 <?xml version="1.0" encoding="UTF-8"?>
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <Product Id="*" Name="FlowCabal" Language="1033" Version="$version" Manufacturer="FlowCabal" UpgradeCode="A1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D">
+  <Product Id="*" Name="FlowCabal" Language="1033" Version="VERSION_PLACEHOLDER" Manufacturer="FlowCabal" UpgradeCode="A1B2C3D4-E5F6-4A7B-8C9D-0E1F2A3B4C5D">
     <Package InstallerVersion="500" InstallScope="perMachine" Description="DAG-based AI-assisted novel writing workflow engine" />
     <MajorUpgrade DowngradeErrorMessage="A newer version of FlowCabal is already installed." />
     <MediaTemplate EmbedCab="yes" />
@@ -88,7 +88,9 @@ jobs:
     </ComponentGroup>
   </Fragment>
 </Wix>
-"@ | Out-File -FilePath flowcabal.wxs -Encoding UTF8
+'@
+          $wxs = $wxs -replace "VERSION_PLACEHOLDER", $version
+          $wxs | Out-File -FilePath flowcabal.wxs -Encoding UTF8
           
           candle -nologo -ext WixUIExtension -ext WixUtilExtension flowcabal.wxs -out flowcabal-windows-x64.msi
 
