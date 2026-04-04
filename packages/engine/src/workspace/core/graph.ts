@@ -49,7 +49,7 @@ export function todoList(ws: Workspace): string[] {
 
         const deps = ws.upstream.get(nodeId) || [];
         for (const depId of deps) {
-            if (ws.outputs.has(nodeId)) continue;
+            if (ws.outputs.has(depId)) continue;
             collectDeps(depId);
         }
     }
