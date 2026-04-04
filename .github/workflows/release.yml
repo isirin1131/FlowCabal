@@ -17,20 +17,24 @@ jobs:
           - os: ubuntu-latest
             artifact: flowcabal-linux-x64
             cross: ""
+            pkg: deb
           - os: macos-latest
             artifact: flowcabal-darwin-arm64
             cross: ""
+            pkg: ""
           - os: windows-latest
             artifact: flowcabal-windows-x64
             cross: ""
-            build_msi: true
+            pkg: msi
           # Cross-compiled builds (best-effort)
           - os: ubuntu-latest
             artifact: flowcabal-linux-arm64
             cross: "--target=bun-linux-arm64"
+            pkg: deb
           - os: macos-latest
             artifact: flowcabal-darwin-x64
             cross: "--target=bun-darwin-x64"
+            pkg: ""
 
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.cross != '' }}
@@ -48,16 +52,16 @@ jobs:
         run: |
           EXT=""
           if [ "${{ matrix.os }}" = "windows-latest" ]; then EXT=".exe"; fi
-          bun build --compile packages/cli/src/index.ts --outfile ${{ matrix.artifact }}${EXT} ${{ matrix.cross }}
+          bun build --compile packages/cli/src/index.ts --outfile "${{ matrix.artifact }}${EXT}" ${{ matrix.cross }}
 
       - name: Setup WiX
-        if: matrix.build_msi
+        if: matrix.pkg == 'msi'
         uses: firegiant/gha-setup-wix@v5
         with:
           version: v5.0.0
 
       - name: Build MSI installer
-        if: matrix.build_msi
+        if: matrix.pkg == 'msi'
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}".TrimStart("v")
@@ -94,15 +98,74 @@ jobs:
           
           candle -nologo -ext WixUIExtension -ext WixUtilExtension flowcabal.wxs -out flowcabal-windows-x64.msi
 
+      - name: Package Linux deb
+        if: matrix.pkg == 'deb'
+        run: |
+          mkdir -p pkg/DEBIAN
+          mkdir -p pkg/usr/bin
+          mkdir -p pkg/usr/lib/flowcabal
+          
+          cp "${{ matrix.artifact }}" pkg/usr/bin/flowcabal
+          chmod +x pkg/usr/bin/flowcabal
+          
+          cat > pkg/DEBIAN/control <<EOF
+Package: flowcabal
+Version: ${{ github.ref_name }}
+Section: utils
+Priority: optional
+Architecture: ${{ matrix.artifact == 'flowcabal-linux-x64' && 'amd64' || 'arm64' }}
+Depends: libc6
+Maintainer: FlowCabal
+Description: DAG-based AI-assisted novel writing workflow engine
+EOF
+          
+          cat > pkg/DEBIAN/postinst <<EOF
+#!/bin/sh
+update-alternatives --install /usr/bin/flowcabal flowcabal /usr/bin/flowcabal 100 || true
+EOF
+          chmod +x pkg/DEBIAN/postinst
+          
+          dpkg-deb --build pkg "${{ matrix.artifact }}.deb"
+
+      - name: Package macOS app
+        if: matrix.os == 'macos-latest'
+        run: |
+          mkdir -p FlowCabal.app/Contents/MacOS
+          mkdir -p FlowCabal.app/Contents/Resources
+          
+          cp "${{ matrix.artifact }}" FlowCabal.app/Contents/MacOS/flowcabal
+          chmod +x FlowCabal.app/Contents/MacOS/flowcabal
+          
+          echo '<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleExecutable</key>
+  <string>flowcabal</string>
+  <key>CFBundleIdentifier</key>
+  <string>com.flowcabal.cli</string>
+  <key>CFBundleName</key>
+  <string>FlowCabal</string>
+  <key>CFBundleVersion</key>
+  <string>${{ github.ref_name }}</string>
+</dict>
+</plist>' > FlowCabal.app/Contents/Info.plist
+          
+          zip -r "${{ matrix.artifact }}.app.zip" FlowCabal.app
+        
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: ${{ matrix.artifact }}${{ matrix.os == 'windows-latest' && '.exe' || '' }}
+          path: |
+            ${{ matrix.artifact }}
+            ${{ matrix.artifact }}.exe
+            ${{ matrix.artifact }}.deb
+            ${{ matrix.artifact }}.app.zip
           retention-days: 5
 
       - name: Upload MSI artifact
-        if: matrix.build_msi
+        if: matrix.pkg == 'msi'
         uses: actions/upload-artifact@v4
         with:
           name: flowcabal-windows-x64-msi
