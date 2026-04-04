@@ -48,6 +48,7 @@ export async function runMemoryAgent(
   const result = await generateText({
     ...prepared,
     prompt: userMessage,
+    maxSteps: 20,
   });
 
   return result.text;
