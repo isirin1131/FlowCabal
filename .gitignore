@@ -16,3 +16,6 @@ dist/
 # env
 .env
 .env.*
+
+# .agent
+.agents/
