@@ -18,14 +18,13 @@ bun run typecheck    # 验证代码
 
 | 文档 | 用途 |
 |------|------|
-| `docs/GUI_DEVELOPMENT.md` | 英文版开发指南 |
-| `docs/GUI_DEVELOPMENT_ZH.md` | 中文版开发指南 |
+| `docs/GUI_DEVELOPMENT_ZH.md` | 开发指南（中文，含完整代码和模式） |
 
 **必读章节**：
-- [Tech Stack](#docs/GUI_DEVELOPMENT.md#1-项目初始化) — 技术栈和安装
-- [shadcn 关键规则](#docs/GUI_DEVELOPMENT.md#3-ui-组件) — 样式、表单、组件
-- [xyflow 集成](#docs/GUI_DEVELOPMENT.md#4-xyflow-集成) — Canvas 和自定义节点
-- [状态管理](#docs/GUI_DEVELOPMENT.md#7-状态管理) — Zustand class-based actions
+- [项目初始化](#docs/GUI_DEVELOPMENT_ZH.md#1-项目初始化) — 技术栈和安装
+- [shadcn 关键规则](#docs/GUI_DEVELOPMENT_ZH.md#3-ui-组件) — 样式、表单、组件
+- [xyflow 集成](#docs/GUI_DEVELOPMENT_ZH.md#4-xyflow-集成) — Canvas 和自定义节点
+- [状态管理](#docs/GUI_DEVELOPMENT_ZH.md#7-状态管理) — Zustand class-based actions
 
 ---
 

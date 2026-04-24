@@ -22,6 +22,8 @@
 12. [代码模式](#12-代码模式)
 13. [视图过渡](#13-视图过渡)
 14. [网页设计指南](#14-网页设计指南)
+15. [实施计划](#15-实施计划)
+16. [未来扩展](#16-未来扩展)
 
 ---
 
@@ -38,67 +40,47 @@
 ### 安装步骤
 
 ```bash
-# 使用 shadcn 初始化 Next.js
 bunx --bun create-next-app@latest flowcabal-gui --typescript --tailwind --eslint
 cd flowcabal-gui
-
-# 初始化 shadcn（根据 packageManager 选择 npx/pnpm/bunx）
 npx --bun shadcn@latest init --preset nova
-
-# 添加 shadcn 组件
 npx --bun shadcn@latest add button card dialog dropdown-menu textarea separator scroll-area badge
-
-# 安装依赖
 bun add @xyflow/react zustand nanoid zod dagre
-
-# 添加图标库（使用项目中 shadcn info 的 iconLibrary）
 bun add lucide-react
 ```
 
 ### Tailwind CSS v4 主题配置
 
 ```css
-/* src/app/globals.css - Tailwind v4 CSS-first 配置 */
+/* src/app/globals.css */
 @import "tailwindcss";
 
 @theme {
-  /* 语义化颜色令牌 */
   --color-background: oklch(100% 0 0);
   --color-foreground: oklch(14.5% 0.025 264);
-
   --color-primary: oklch(14.5% 0.025 264);
   --color-primary-foreground: oklch(98% 0.01 264);
-
   --color-secondary: oklch(96% 0.01 264);
   --color-secondary-foreground: oklch(14.5% 0.025 264);
-
   --color-muted: oklch(96% 0.01 264);
   --color-muted-foreground: oklch(46% 0.02 264);
-
   --color-accent: oklch(96% 0.01 264);
   --color-accent-foreground: oklch(14.5% 0.025 264);
-
   --color-destructive: oklch(53% 0.22 27);
   --color-destructive-foreground: oklch(98% 0.01 264);
-
   --color-border: oklch(91% 0.01 264);
   --color-ring: oklch(14.5% 0.025 264);
-
   --color-card: oklch(100% 0 0);
   --color-card-foreground: oklch(14.5% 0.025 264);
 
-  /* 节点状态颜色 */
   --color-status-pending: oklch(55% 0.02 264);
   --color-status-stale: oklch(72% 0.15 40);
   --color-status-completed: oklch(72% 0.15 170);
   --color-status-error: oklch(62% 0.18 27);
 
-  /* 圆角令牌 */
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
 
-  /* 动画令牌 */
   --animate-fade-in: fade-in 0.2s ease-out;
   --animate-slide-in: slide-in 0.3s ease-out;
 
@@ -106,7 +88,6 @@ bun add lucide-react
     from { opacity: 0; }
     to { opacity: 1; }
   }
-
   @keyframes slide-in {
     from { transform: translateY(-0.5rem); opacity: 0; }
     to { transform: translateY(0); opacity: 1; }
@@ -118,7 +99,6 @@ bun add lucide-react
 .dark {
   --color-background: oklch(14.5% 0.025 264);
   --color-foreground: oklch(98% 0.01 264);
-  /* ... 深色模式变量 */
 }
 
 @layer base {
@@ -135,15 +115,15 @@ bun add lucide-react
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│          Header                                           │
+│          Header                                             │
 │  [Logo] [workspace ▼] [+ New] [Outputs] [Memory] [Manuscripts]  │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
-│                   xyflow Canvas                            │
-│                               ┌──────────────────┐         │
+│                   xyflow Canvas                             │
+│                               ┌──────────────────┐          │
 │                               │  ▶ Run (floating) │          │
-│                               └──────────────────┘         │
-│                    [Floating Panel]                        │
+│                               └──────────────────┘          │
+│                    [Floating Panel]                          │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -153,15 +133,15 @@ bun add lucide-react
 src/
 ├── app/
 │   ├── layout.tsx              # 根布局，包含 providers
-│   ├── page.tsx                # 主画布（启用 ViewTransition）
+│   ├── page.tsx                # 主画布（ViewTransition enabled）
 │   ├── outputs/page.tsx        # 固定输出页面
 │   ├── memory/page.tsx         # 记忆聊天页面
 │   └── manuscripts/page.tsx    # 手稿管理
 ├── components/
 │   ├── ui/                     # shadcn 组件
 │   ├── Header.tsx
-│   ├── Canvas.tsx              # xyflow 包装器（已 memo）
-│   ├── FlowNode.tsx            # 自定义节点（已 memo，包含 areEqual）
+│   ├── Canvas.tsx              # xyflow 包装器（memoized）
+│   ├── FlowNode.tsx            # 自定义节点（memoized with areEqual）
 │   ├── FloatingPanel.tsx       # 编辑器/输出/配置面板（Dialog）
 │   └── RunButton.tsx           # 浮动运行按钮
 ├── store/
@@ -175,9 +155,9 @@ src/
 
 | 包 | 用途 | 备注 |
 |---------|---------|------|
-| `@xyflow/react` | 图形 UI | 使用 `import '@xyflow/react/dist/style.css'` |
+| `@xyflow/react` | 图形 UI | `import '@xyflow/react/dist/style.css'` |
 | `zustand` | 状态管理 | Class-based actions 模式 |
-| `shadcn` | UI 组件 | 运行 `npx shadcn@latest info` 获取项目配置 |
+| `shadcn` | UI 组件 | `npx shadcn@latest info` 获取项目配置 |
 | `tailwindcss` | 样式 | v4 使用 CSS-first `@theme` |
 | `dagre` | 自动布局 | 用于节点定位 |
 
@@ -202,319 +182,221 @@ src/
 
 ### 表单验证模式
 
+使用 shadcn 的 `FieldGroup` + `Field` 组合来处理表单验证：
+
 ```tsx
-// 无效状态
-<Field data-invalid>
-  <FieldLabel htmlFor="email">Email</FieldLabel>
-  <Input id="email" aria-invalid />
-  <FieldDescription>无效的邮箱地址。</FieldDescription>
-</Field>
+import { FieldGroup, Field, FieldError, Label } from '@/components/ui/field'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
-// 禁用状态
-<Field data-disabled>
-  <FieldLabel htmlFor="name">姓名</FieldLabel>
-  <Input id="name" disabled />
-</Field>
-
-// 带搜索按钮的 InputGroup（正确写法）
-<InputGroup>
-  <InputGroupInput placeholder="搜索..." />
-  <InputGroupAddon>
-    <Button size="icon">
-      <SearchIcon data-icon="inline-start" />
-    </Button>
-  </InputGroupAddon>
-</InputGroup>
-
-// FieldSet 用于分组的复选框
-<FieldSet>
-  <FieldLegend variant="label">偏好设置</FieldLegend>
-  <FieldGroup className="gap-3">
-    <Field orientation="horizontal">
-      <Checkbox id="dark" />
-      <FieldLabel htmlFor="dark" className="font-normal">深色模式</FieldLabel>
-    </Field>
-  </FieldGroup>
-</FieldSet>
+<FieldGroup>
+  <Field data-invalid={!!errors.name}>
+    <Label>名称</Label>
+    <Input
+      value={name}
+      onChange={(e) => setName(e.target.value)}
+      aria-invalid={!!errors.name}
+      aria-describedby={errors.name ? 'name-error' : undefined}
+    />
+    {errors.name && (
+      <FieldError id="name-error" role="alert">{errors.name}</FieldError>
+    )}
+  </Field>
+</FieldGroup>
 ```
 
-### ToggleGroup 用于选项集
+### Button 加载状态组合
 
 ```tsx
-// 使用 ToggleGroup，不用 Button 循环
-<ToggleGroup spacing={2}>
-  <ToggleGroupItem value="daily">每日</ToggleGroupItem>
-  <ToggleGroupItem value="weekly">每周</ToggleGroupItem>
-  <ToggleGroupItem value="monthly">每月</ToggleGroupItem>
-</ToggleGroup>
-```
-
-### Button 组件（CVA）
-
-```tsx
-import { Slot } from '@radix-ui/react-slot'
-import { cva, type VariantProps } from 'class-variance-authority'
-import { cn } from '@/lib/utils'
+import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 
-const buttonVariants = cva(
-  'inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
-  {
-    variants: {
-      variant: {
-        default: 'bg-primary text-primary-foreground hover:bg-primary/90',
-        destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
-        outline: 'border border-border bg-background hover:bg-accent hover:text-accent-foreground',
-        secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
-        ghost: 'hover:bg-accent hover:text-accent-foreground',
-        link: 'text-primary underline-offset-4 hover:underline',
-        run: 'bg-emerald-600 text-white hover:bg-emerald-700 rounded-full size-12',
-      },
-      size: {
-        default: 'h-10 px-4 py-2',
-        sm: 'h-9 rounded-md px-3',
-        lg: 'h-11 rounded-md px-8',
-        icon: 'size-10',
-      },
-    },
-    defaultVariants: { variant: 'default', size: 'default' },
-  }
-)
-
-export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
-  asChild?: boolean
-}
-
-// React 19: ref 是普通 prop
-export function Button({
-  className,
-  variant,
-  size,
-  asChild = false,
-  ref,
-  ...props
-}: ButtonProps & { ref?: React.Ref<HTMLButtonElement> }) {
-  const Comp = asChild ? Slot : 'button'
-  return (
-    <Comp
-      className={cn(buttonVariants({ variant, size, className }))}
-      ref={ref}
-      {...props}
-    />
-  )
-}
-
-// 加载状态：用 Spinner 组合，不用 isPending prop
-export function LoadingButton({ isLoading, children, ...props }: ButtonProps & { isLoading?: boolean }) {
-  return (
-    <Button disabled={isLoading || props.disabled} {...props}>
-      {isLoading && <Spinner data-icon="inline-start" />}
-      {children}
-    </Button>
-  )
-}
+<Button disabled={isLoading}>
+  {isLoading && <Spinner data-icon="inline-start" />}
+  {isLoading ? '保存中...' : '保存'}
+</Button>
 ```
 
-### Card 组合
+### Card 完整组合
 
 ```tsx
-// 完整组合 - 使用所有子组件
 <Card>
   <CardHeader>
     <CardTitle>标题</CardTitle>
-    <CardDescription>描述</CardDescription>
+    <CardDescription>描述文字</CardDescription>
   </CardHeader>
-  <CardContent>
-    <form>...</form>
-  </CardContent>
-  <CardFooter className="flex justify-end">
-    <Button>保存</Button>
+  <CardContent>内容区域</CardContent>
+  <CardFooter>
+    <Button>操作</Button>
   </CardFooter>
 </Card>
-
-// 不要把所有内容都放在 CardContent 里
 ```
 
-### Dialog 结构
+### Dialog 完整结构
 
 ```tsx
-<Dialog>
-  <DialogHeader>
-    <DialogTitle>确认操作</DialogTitle>    // 必须有！
-    <DialogDescription>确定要继续吗？</DialogDescription>
-  </DialogHeader>
-  {/* 内容 */}
-  <DialogFooter>
-    <Button variant="outline">取消</Button>
-    <Button>确认</Button>
-  </DialogFooter>
+<Dialog open={open} onOpenChange={onOpenChange}>
+  <DialogTrigger asChild>
+    <Button>打开</Button>
+  </DialogTrigger>
+  <DialogContent>
+    <DialogTitle>对话框标题</DialogTitle>
+    <DialogDescription>可选的描述</DialogDescription>
+    {/* 内容 */}
+    <DialogFooter>
+      <Button>确认</Button>
+    </DialogFooter>
+  </DialogContent>
 </Dialog>
+```
+
+### ToggleGroup 用法
+
+```tsx
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+
+<ToggleGroup value={view} onValueChange={setView}>
+  <ToggleGroupItem value="editor">编辑器</ToggleGroupItem>
+  <ToggleGroupItem value="outputs">输出</ToggleGroupItem>
+  <ToggleGroupItem value="config">配置</ToggleGroupItem>
+</ToggleGroup>
 ```
 
 ---
 
 ## 4. xyflow 集成
 
-### Canvas 组件（已 Memo）
+### Canvas 组件
+
+Canvas 组件使用 `memo()` 包装，采用细粒度 selector 订阅 xyflow 状态，避免全量 store 订阅。MiniMap 使用语义化颜色 token（`--color-status-*`）显示节点状态。
 
 ```tsx
 // components/Canvas.tsx
 'use client'
-
-import { useCallback, memo } from 'react'
+import { memo, useCallback } from 'react'
 import {
   ReactFlow,
   Background,
   Controls,
   MiniMap,
-  type Node,
-  type Edge,
-  type OnConnect,
-  type NodeChange,
-  type EdgeChange,
-  applyNodeChanges,
-  applyEdgeChanges,
+  BackgroundVariant,
+  type NodeTypes,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-
+import { useStore } from '@/store/useStore'
 import { FlowNode } from './FlowNode'
 
-const nodeTypes = { flowNode: FlowNode }
+const nodeTypes: NodeTypes = { flowNode: FlowNode }
 
-interface CanvasProps {
-  nodes: Node[]
-  edges: Edge[]
-  onNodesChange: (changes: NodeChange[]) => void
-  onEdgesChange: (changes: EdgeChange[]) => void
-  onConnect: OnConnect
-  onNodeClick: (event: React.MouseEvent, node: Node) => void
-}
+function Canvas() {
+  const nodes = useStore((s) => s.nodes)
+  const edges = useStore((s) => s.edges)
+  const onNodesChange = useStore((s) => s.onNodesChange)
+  const onEdgesChange = useStore((s) => s.onEdgesChange)
+  const onConnect = useStore((s) => s.onConnect)
+  const selectNode = useStore((s) => s.selectNode)
 
-const _Canvas = ({ nodes, edges, onNodesChange, onEdgesChange, onConnect, onNodeClick }: CanvasProps) => {
-  const handleNodesChange = useCallback((changes: NodeChange[]) => onNodesChange(changes), [onNodesChange])
-  const handleEdgesChange = useCallback((changes: EdgeChange[]) => onEdgesChange(changes), [onEdgesChange])
+  const onNodeClick = useCallback((_event: any, node: any) => {
+    selectNode(node.id)
+  }, [selectNode])
 
   return (
     <ReactFlow
       nodes={nodes}
       edges={edges}
-      onNodesChange={handleNodesChange}
-      onEdgesChange={handleEdgesChange}
+      onNodesChange={onNodesChange}
+      onEdgesChange={onEdgesChange}
       onConnect={onConnect}
       onNodeClick={onNodeClick}
       nodeTypes={nodeTypes}
       fitView
-      snapToGrid
-      snapGrid={[16, 16]}
-      proOptions={{ hideAttribution: true }}
     >
-      <Background gap={16} size={1} />
-      <Controls className="bg-background border border-border rounded-lg" />
+      <Background variant={BackgroundVariant.Dots} />
+      <Controls />
       <MiniMap
         nodeColor={(node) => {
           const status = node.data?.status
           if (status === 'completed') return 'var(--color-status-completed)'
-          if (status === 'stale') return 'var(--color-status-stale)'
           if (status === 'error') return 'var(--color-status-error)'
+          if (status === 'stale') return 'var(--color-status-stale)'
           return 'var(--color-status-pending)'
         }}
-        maskColor="oklch(0.98 0 264 / 0.8)"
-        className="bg-background"
       />
     </ReactFlow>
   )
 }
 
-export const Canvas = memo(_Canvas)
+export default memo(Canvas)
 ```
-
-> **性能**: 始终用 `memo()` 包裹 Canvas。使用细粒度 selector 订阅 xyflow 状态，避免全量 store 订阅。
 
 ---
 
 ## 5. 自定义节点组件
 
-### FlowNode（带自定义比较的 Memo）
+### FlowNode
+
+FlowNode 是自定义 xyflow 节点，包含双目标 Handle（system 在 25% 高度, user 在 75% 高度）和单个 source Handle。显示 label、各区域 block 数量、状态指示点。
 
 ```tsx
 // components/FlowNode.tsx
 'use client'
-
 import { memo } from 'react'
 import { Handle, Position, type NodeProps } from '@xyflow/react'
-import { cn } from '@/lib/utils'
 
-type FlowNodeData = {
-  label: string
-  systemPrompt: TextBlock[]
-  userPrompt: TextBlock[]
-  status: 'pending' | 'stale' | 'completed' | 'error'
-  output?: string
+type TextBlock =
+  | { kind: 'literal'; content: string }
+  | { kind: 'ref'; nodeId: string }
+  | { kind: 'agent-inject'; hint: string }
+
+function FlowNode({ data, selected }: NodeProps) {
+  const statusColor: Record<string, string> = {
+    pending: 'bg-status-pending',
+    stale: 'bg-status-stale',
+    completed: 'bg-status-completed',
+    error: 'bg-status-error',
+  }
+
+  return (
+    <div className={`px-4 py-3 bg-card border-2 rounded-lg shadow-sm min-w-[200px] ${selected ? 'border-ring' : 'border-border'}`}>
+      <Handle type="target" position={Position.Left} id="system" style={{ top: '25%' }} />
+      <Handle type="target" position={Position.Left} id="user" style={{ top: '75%' }} />
+      <div className="flex items-center gap-2 mb-2">
+        <span className={`w-2 h-2 rounded-full ${statusColor[data.status] || 'bg-status-pending'}`} />
+        <span className="font-medium text-sm">{data.label}</span>
+      </div>
+      <div className="text-xs text-muted-foreground space-y-1">
+        <div>系统: {data.systemPrompt?.length || 0} blocks</div>
+        <div>用户: {data.userPrompt?.length || 0} blocks</div>
+      </div>
+      <Handle type="source" position={Position.Right} id="output" />
+    </div>
+  )
 }
 
-const statusColors = {
-  pending: 'var(--color-status-pending)',
-  stale: 'var(--color-status-stale)',
-  completed: 'var(--color-status-completed)',
-  error: 'var(--color-status-error)',
-}
-
-// 自定义比较 - 只在这些变化时重新渲染
-const areEqual = (prev: NodeProps<FlowNodeData>, next: NodeProps<FlowNodeData>) => {
+function areEqual(prev: NodeProps, next: NodeProps) {
   return (
     prev.data.label === next.data.label &&
-    prev.data.systemPrompt.length === next.data.systemPrompt.length &&
-    prev.data.userPrompt.length === next.data.userPrompt.length &&
+    prev.data.systemPrompt?.length === next.data.systemPrompt?.length &&
+    prev.data.userPrompt?.length === next.data.userPrompt?.length &&
     prev.data.status === next.data.status &&
     prev.data.output === next.data.output &&
     prev.selected === next.selected
   )
 }
 
-export const FlowNode = memo(
-  ({ data, selected }: NodeProps<FlowNodeData>) => {
-    const statusColor = statusColors[data.status] || statusColors.pending
-
-    return (
-      <>
-        <Handle type="target" position={Position.Top} id="system" style={{ left: '25%' }} />
-        <Handle type="target" position={Position.Top} id="user" style={{ left: '75%' }} />
-
-        <div className={cn(
-          'px-4 py-3 rounded-xl border-2 bg-card min-w-[180px]',
-          'transition-shadow duration-200',
-          selected ? 'border-primary ring-2 ring-primary ring-offset-2 shadow-lg' : 'border-border shadow-sm'
-        )}>
-          <div className="flex items-center justify-between mb-2">
-            <span className="font-semibold text-sm">{data.label}</span>
-            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: statusColor }} />
-          </div>
-          <div className="text-xs text-muted-foreground">
-            <div>system: {data.systemPrompt.length} blocks</div>
-            <div>user: {data.userPrompt.length} blocks</div>
-          </div>
-        </div>
-
-        <Handle type="source" position={Position.Bottom} id="output" />
-      </>
-    )
-  },
-  areEqual
-)
-
-FlowNode.displayName = 'FlowNode'
+export default memo(FlowNode, areEqual)
 ```
 
-### TextBlock 类型（来自 @flowcabal/engine）
+### 右键菜单
 
-```typescript
-type TextBlock =
-  | { kind: 'literal'; content: string }
-  | { kind: 'ref'; ref: string }
-  | { kind: 'agent-inject'; hint: string }
-```
+**节点右键菜单（在节点上右键）：**
+- 添加子节点
+- 删除节点
+- 复制节点
+
+**画布右键菜单（空白区域右键）：**
+- 双击：添加节点
+- 右键：快捷菜单
 
 ---
 
@@ -538,8 +420,11 @@ export function FloatingPanel({ nodeId, open, onOpenChange }: any) {
       <DialogContent className="max-w-3xl max-h-[70vh] p-0 gap-0">
         <div className="px-4 py-2 border-b">
           <Tabs value={tab} onValueChange={(v) => setTab(v as any)}>
-            <TabsList><TabsTrigger value="editor">编辑器</TabsTrigger>
-              <TabsTrigger value="outputs">输出</TabsTrigger><TabsTrigger value="config">配置</TabsTrigger></TabsList>
+            <TabsList>
+              <TabsTrigger value="editor">编辑器</TabsTrigger>
+              <TabsTrigger value="outputs">输出</TabsTrigger>
+              <TabsTrigger value="config">配置</TabsTrigger>
+            </TabsList>
           </Tabs>
         </div>
         <div className="flex-1 overflow-auto p-4">
@@ -580,8 +465,21 @@ export function EditorPanel({ nodeId }: { nodeId: string }) {
               <Trash2 className="w-4 h-4" />
             </Button>
           </div>
-          {block.kind === 'literal' && <Textarea defaultValue={block.content} onBlur={(e) => updateBlock(nodeId, isSystem, i, { kind: 'literal', content: e.target.value })} className="min-h-[80px]" />}
-          {block.kind === 'agent-inject' && <Textarea defaultValue={block.hint} placeholder="提示..." onBlur={(e) => updateBlock(nodeId, isSystem, i, { kind: 'agent-inject', hint: e.target.value })} className="min-h-[60px]" />}
+          {block.kind === 'literal' && (
+            <Textarea
+              defaultValue={block.content}
+              onBlur={(e) => updateBlock(nodeId, isSystem, i, { kind: 'literal', content: e.target.value })}
+              className="min-h-[80px]"
+            />
+          )}
+          {block.kind === 'agent-inject' && (
+            <Textarea
+              defaultValue={block.hint}
+              placeholder="提示..."
+              onBlur={(e) => updateBlock(nodeId, isSystem, i, { kind: 'agent-inject', hint: e.target.value })}
+              className="min-h-[60px]"
+            />
+          )}
         </div>
       ))}
     </div>
@@ -590,13 +488,21 @@ export function EditorPanel({ nodeId }: { nodeId: string }) {
   return (
     <div className="space-y-6">
       <div>
-        <div className="flex justify-between mb-3"><h3 className="font-semibold">系统提示</h3>
-          <Button variant="outline" size="sm" onClick={() => addBlock(nodeId, { kind: 'literal', content: '' }, true)}><Plus className="w-4 h-4" /> 添加</Button></div>
+        <div className="flex justify-between mb-3">
+          <h3 className="font-semibold">系统提示</h3>
+          <Button variant="outline" size="sm" onClick={() => addBlock(nodeId, { kind: 'literal', content: '' }, true)}>
+            <Plus className="w-4 h-4" /> 添加
+          </Button>
+        </div>
         {renderBlocks(node.systemPrompt, true)}
       </div>
       <div>
-        <div className="flex justify-between mb-3"><h3 className="font-semibold">用户提示</h3>
-          <Button variant="outline" size="sm" onClick={() => addBlock(nodeId, { kind: 'literal', content: '' }, false)}><Plus className="w-4 h-4" /> 添加</Button></div>
+        <div className="flex justify-between mb-3">
+          <h3 className="font-semibold">用户提示</h3>
+          <Button variant="outline" size="sm" onClick={() => addBlock(nodeId, { kind: 'literal', content: '' }, false)}>
+            <Plus className="w-4 h-4" /> 添加
+          </Button>
+        </div>
         {renderBlocks(node.userPrompt, false)}
       </div>
     </div>
@@ -625,7 +531,6 @@ type GuiState = {
   selectedNodeId: string | null
   floatingPanelOpen: boolean
   pinnedOutputs: string[]
-  // ... 其他状态
 }
 
 class WorkspaceActions {
@@ -636,17 +541,16 @@ class WorkspaceActions {
   internal_switchWorkspace = (id: string) => {
     const ws = this.#get().workspaces.find((w: any) => w.id === id)
     if (!ws) return
-
     const nodes = ws.nodes.map((n: any) => ({
       id: n.id, type: 'flowNode', position: { x: 0, y: 0 },
       data: { label: n.label, systemPrompt: n.systemPrompt, userPrompt: n.userPrompt,
         status: ws.outputs.has(n.id) ? 'completed' : 'pending', output: ws.outputs.get(n.id) },
     }))
-
     const edges: any[] = []
     for (const [targetId, sources] of ws.upstream) {
       for (const sourceId of sources) {
-        edges.push({ id: `e-${sourceId}-${targetId}`, source: sourceId, target: targetId, type: 'smoothstep', animated: ws.outputs.has(sourceId) })
+        edges.push({ id: `e-${sourceId}-${targetId}`, source: sourceId, target: targetId,
+          type: 'smoothstep', animated: ws.outputs.has(sourceId) })
       }
     }
     this.#set({ activeWorkspace: ws, nodes, edges })
@@ -655,18 +559,17 @@ class WorkspaceActions {
   internal_runAll = async () => {
     const ws = this.#get().activeWorkspace
     if (!ws) return
-
-    // 1. 乐观更新 - 标记所有为 pending
     this.#set((s: any) => ({ nodes: s.nodes.map((n: any) => ({ ...n, data: { ...n.data, status: 'pending' } })) }))
-
     try {
-      const { outputs } = await fetch('/api/engine/run-all', { method: 'POST', body: JSON.stringify({ workspace: ws }) }).then(r => r.json())
-      // 2. 成功 - 用实际输出更新
+      const { outputs } = await fetch('/api/engine/run-all', {
+        method: 'POST', body: JSON.stringify({ workspace: ws }),
+      }).then(r => r.json())
       this.#set((s: any) => ({
-        nodes: s.nodes.map((n: any) => ({ ...n, data: { ...n.data, status: outputs[n.id] ? 'completed' : 'pending', output: outputs[n.id] } })),
+        nodes: s.nodes.map((n: any) => ({
+          ...n, data: { ...n.data, status: outputs[n.id] ? 'completed' : 'pending', output: outputs[n.id] },
+        })),
       }))
     } catch {
-      // 3. 错误 - 标记为 error
       this.#set((s: any) => ({ nodes: s.nodes.map((n: any) => ({ ...n, data: { ...n.data, status: 'error' } })) }))
     }
   }
@@ -678,10 +581,8 @@ export const useStore = create<GuiState>()(
     return {
       workspaces: [], activeWorkspace: null, nodes: [], edges: [],
       selectedNodeId: null, floatingPanelOpen: false, pinnedOutputs: [],
-      // 公开 actions（无前缀）调用内部 actions
       switchWorkspace: (id: string) => actions.internal_switchWorkspace(id),
       runAll: () => actions.internal_runAll(),
-      // 直接 actions
       onNodesChange: (c) => set((s: any) => ({ nodes: applyNodeChanges(c, s.nodes) })),
       onEdgesChange: (c) => set((s: any) => ({ edges: applyEdgeChanges(c, s.edges) })),
       onConnect: (c) => set((s: any) => ({ edges: addEdge({ ...c, type: 'smoothstep', animated: true }, s.edges) })),
@@ -700,25 +601,20 @@ export const useStore = create<GuiState>()(
 ### 乐观更新模式
 
 ```typescript
-// 创建操作 - 使用临时 ID 进行乐观更新
+// 创建操作 - 使用临时 ID 乐观更新
 internal_createNode: async (params) => {
   const tmpId = `temp-${Date.now()}`
-  // 1. 立即添加到状态
   this.#set((s: any) => ({ nodes: [...s.nodes, { id: tmpId, ...params, status: 'pending' }] }))
   try {
-    // 2. 调用后端
     const result = await api.createNode(params)
-    // 3. 刷新以与服务器状态同步
     await this.internal_refreshNodes()
     return result.id
   } catch {
-    // 4. 失败时移除临时项
     this.#set((s: any) => ({ nodes: s.nodes.filter((n: any) => n.id !== tmpId) }))
   }
 }
 
-// 删除操作 - 不要使用乐观更新（破坏性操作，难以恢复）
-// 改为显示加载状态并刷新
+// 删除操作 - 不使用乐观更新（破坏性操作，难以恢复），而是显示加载状态
 internal_deleteNode: async (id) => {
   this.#set((s: any) => ({ nodes: s.nodes.map((n: any) => n.id === id ? { ...n, _deleting: true } : n) }))
   try {
@@ -730,50 +626,33 @@ internal_deleteNode: async (id) => {
 }
 ```
 
-### 使用 flattenActions 的 Class-based Actions
+### 细粒度 Selector
 
-使用 `flattenActions` 合并类实例——不要展开类对象：
+避免全量 store 订阅，只订阅需要的字段：
 
 ```typescript
-import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-import { flattenActions } from '@/store/utils'
+// ✓ 正确：只订阅 nodes
+const nodes = useStore((s) => s.nodes)
 
-// 带私有字段的 Slice 类
-class NodeSlice {
-  #set: any
-  #get: any
-  constructor(set: any, get: any) { this.#set = set; this.#get = get }
-  internal_addNode = (params: any) => { /* ... */ }
-}
-
-export const useStore = create()(
-  persist((set, get) => ({
-    ...flattenActions<NodeSlice>([
-      new NodeSlice(set, get),
-      // 按需添加更多 slices
-    ]),
-  }), { name: 'storage' })
-)
+// ✗ 错误：全量订阅会导致不必要的重渲染
+const store = useStore()
 ```
 
-### 细粒度 Store Selectors（性能关键）
+### 多 Workspace 架构
 
-```tsx
-// 不好 - 任何 store 变化都会重新渲染
-const { nodes, addNode } = useStore()
-
-// 好 - 只在特定状态变化时重新渲染
-const nodes = useStore((state) => state.nodes)
-const addNode = useStore((state) => state.addNode)
-
-// 最佳 - 需要多个值时使用 useShallow
-import { useShallow } from 'zustand/react/shallow'
-const { nodes, edges } = useStore(useShallow((state) => ({
-  nodes: state.nodes,
-  edges: state.edges,
-})))
 ```
+┌────────────────────────────────────────────┐
+│ Zustand: workspaces Workspace[]           │
+│           activeWorkspace: Workspace|null   │
+├────────────────────────────────────────────┤
+│ 多个 workspace 独立加载                     │
+│ 运行时隔离防止状态污染                      │
+└────────────────────────────────────────────┘
+```
+
+**切换逻辑：**
+1. 切换时：同步当前 WS 状态 → 从 API 加载新 WS
+2. 用户固定输出时，更新时高亮
 
 ---
 
@@ -805,6 +684,20 @@ export async function POST(request: Request) {
 }
 ```
 
+### LLM 配置 API
+
+```
+GET  /api/llm-configs
+     Response: { configs: LlmConfig[] }
+
+POST /api/llm-configs
+     Body: LlmConfig
+     Response: { success: boolean }
+
+DELETE /api/llm-configs/:name
+     Response: { success: boolean }
+```
+
 ---
 
 ## 9. 记忆与手稿
@@ -830,7 +723,10 @@ export default function MemoryPage() {
     const userMsg = { role: 'user', content: input }
     setMessages((prev) => [...prev, userMsg])
     setInput('')
-    const { response } = await fetch('/api/memory/chat', { method: 'POST', body: JSON.stringify({ messages: [...messages, userMsg] }) }).then((r) => r.json())
+    const { response } = await fetch('/api/memory/chat', {
+      method: 'POST',
+      body: JSON.stringify({ messages: [...messages, userMsg] }),
+    }).then((r) => r.json())
     setMessages((prev) => [...prev, { role: 'assistant', content: response }])
   }
 
@@ -839,12 +735,20 @@ export default function MemoryPage() {
       <ScrollArea className="flex-1 p-4">
         <div className="space-y-4">
           {messages.map((msg, i) => (
-            <div key={i} className={cn('p-3 rounded-lg max-w-[80%]', msg.role === 'user' ? 'bg-primary text-primary-foreground ml-auto' : 'bg-muted')}>{msg.content}</div>
+            <div key={i} className={cn(
+              'p-3 rounded-lg max-w-[80%]',
+              msg.role === 'user' ? 'bg-primary text-primary-foreground ml-auto' : 'bg-muted',
+            )}>{msg.content}</div>
           ))}
         </div>
       </ScrollArea>
       <div className="p-4 border-t flex gap-2">
-        <Textarea value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()} className="min-h-[44px]" />
+        <Textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && sendMessage()}
+          className="min-h-[44px]"
+        />
         <Button size="icon" onClick={sendMessage}><Send className="w-4 h-4" /></Button>
       </div>
     </div>
@@ -880,11 +784,18 @@ export default function PinnedOutputsPage() {
             <Card key={nodeId}>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-base">{node?.label}</CardTitle>
-                <Button variant="ghost" size="icon" onClick={() => unpinOutput(nodeId)}><X className="w-4 h-4" /></Button>
+                <Button variant="ghost" size="icon" onClick={() => unpinOutput(nodeId)}>
+                  <X className="w-4 h-4" />
+                </Button>
               </CardHeader>
               <CardContent>
-                <pre className="whitespace-pre-wrap text-sm font-mono bg-muted p-3 rounded-lg max-h-[300px]">{output || '（无输出）'}</pre>
-                <Button variant="outline" size="sm" className="mt-2" onClick={() => navigator.clipboard.writeText(output || '')}><Copy className="w-4 h-4" /> 复制</Button>
+                <pre className="whitespace-pre-wrap text-sm font-mono bg-muted p-3 rounded-lg max-h-[300px]">
+                  {output || '（无输出）'}
+                </pre>
+                <Button variant="outline" size="sm" className="mt-2"
+                  onClick={() => navigator.clipboard.writeText(output || '')}>
+                  <Copy className="w-4 h-4" /> 复制
+                </Button>
               </CardContent>
             </Card>
           )
@@ -912,19 +823,19 @@ export default function PinnedOutputsPage() {
 ### 消除瀑布流
 
 ```typescript
-// 不好 - 顺序 await（瀑布流）
+// 错误 - 顺序 await（瀑布流）
 const user = await fetchUser()
 const posts = await fetchPosts(user.id)
 const comments = await fetchComments(posts[0].id)
 
-// 好 - 独立操作并行执行
+// 正确 - 独立操作并行执行
 const [user, posts, comments] = await Promise.all([
   fetchUser(),
   fetchPosts(),
   fetchComments()
 ])
 
-// 部分依赖时的更好做法 - 尽早开始 promises
+// 更好 - 部分依赖时尽早启动 Promise
 const userPromise = fetchUser()
 const postsPromise = userPromise.then(u => fetchPosts(u.id))
 const commentsPromise = postsPromise.then(p => fetchComments(p[0].id))
@@ -933,7 +844,6 @@ const commentsPromise = postsPromise.then(p => fetchComments(p[0].id))
 ### localStorage 模式
 
 ```typescript
-// 始终添加版本号并处理错误
 const VERSION = 'v1'
 
 function saveData(key: string, data: any) {
@@ -951,13 +861,11 @@ function loadData(key: string) {
   }
 }
 
-// 数据迁移示例
 function migrateData(raw: string | null, fromVersion: number): any | null {
   if (!raw) return null
   try {
     const data = JSON.parse(raw)
     if (data._version < fromVersion) {
-      // 应用迁移
       return { ...data, _version: fromVersion }
     }
     return data
@@ -970,35 +878,38 @@ function migrateData(raw: string | null, fromVersion: number): any | null {
 ### 动态导入
 
 ```tsx
-// 对于重型组件如 Canvas
-const Canvas = dynamic(() => import('./Canvas'), { ssr: false })
+import dynamic from 'next/dynamic'
 
-// 条件导入
-if (isEditorOpen) {
-  import('./Editor').then(m => setEditor(m.Editor))
-}
+const HeavyComponent = dynamic(() => import('./HeavyComponent'), {
+  loading: () => <Skeleton />,
+})
 ```
 
 ### 渲染规则
 
 ```tsx
-// 使用三元运算符，不用 && 做条件判断（避免 0/false 显示为内容）
+// 使用三元表达式而非 &&（防止 0/false 显示为内容）
 {isLoading ? <Skeleton /> : <Content />}
 
-// startTransition 处理非紧急更新
+// startTransition 用于非紧急更新
 startTransition(() => setFilter(filterValue))
 
-// useDeferredValue 处理昂贵渲染
+// useDeferredValue 用于昂贵渲染
 const deferredFilter = useDeferredValue(filterValue)
 
 // 避免内联组件定义
-// 不好：每次父组件渲染都创建新函数
+// 错误：每次父组件渲染都创建新函数
 const Parent = () => <Child onClick={() => handleClick()} />
 
-// 好：在外部定义或使用 useCallback
+// 正确：在外部定义或使用 useCallback
 const handleClick = useCallback(() => {}, [])
 const Parent = () => <Child onClick={handleClick} />
 ```
+
+### 持久化策略
+
+**本地开发：** localStorage 缓存当前活跃 workspace。支持 JSON 导出/导入。
+**生产环境：** 文件系统存储（`workspaces/*.json`）。
 
 ---
 
@@ -1028,45 +939,43 @@ function getLayoutedElements(nodes: any[], edges: any[]) {
 }
 ```
 
-### React 组合模式
+### React 19 组合模式
 
 ```tsx
-// 复合组件 - 避免 boolean props
-<Dialog>
-  <DialogHeader><TabsList><TabsTrigger value="editor"/><TabsTrigger value="outputs"/></TabsList></DialogHeader>
-  <DialogContent><TabsContent value="editor"/><TabsContent value="outputs"/></DialogContent>
-</Dialog>
-
-// React 19: ref 作为普通 prop，用 use() 替代 useContext()
-function Button({ ref, ...props }: ButtonProps & { ref?: Ref<HTMLButtonElement> }) { return <button ref={ref} {...props} /> }
-const value = use(MyContext)
-
-// 避免 boolean prop 泛滥
-// 不好: <Panel open={true} closable={false} collapsible={true} />
-// 好: 使用复合组件或 variant 组件
-```
-
-### React 19 API
-
-```tsx
-// 不需要 forwardRef - ref 是普通 prop
+// 不再需要 forwardRef - ref 是普通 prop
 export function Button({ ref, className, ...props }: ButtonProps & { ref?: React.Ref<HTMLButtonElement> }) {
   return <button ref={ref} className={className} {...props} />
 }
 
-// 用 use() 替代 useContext()（React 19+）
+// use() 替代 useContext()（React 19+）
 const theme = use(ThemeContext)
 
-// startTransition 处理非紧急更新
+// startTransition 用于非紧急更新
 startTransition(() => { setState(newState) })
 
-// useCallback 稳定回调
+// useCallback 用于稳定的回调
 const handleClick = useCallback(() => {
   doSomething(value)
 }, [value])
 
-// useDeferredValue 处理昂贵渲染
+// useDeferredValue 用于昂贵渲染
 const deferredFilter = useDeferredValue(filterValue)
+```
+
+### 其他 React 组合模式
+
+```tsx
+// Compound Component 模式
+<Select>
+  <SelectGroup>
+    <SelectItem value="1">选项 1</SelectItem>
+    <SelectItem value="2">选项 2</SelectItem>
+  </SelectGroup>
+</Select>
+
+// 避免 Boolean Props 泛滥
+// 错误：<Button primary secondary large small />
+// 正确：<Button variant="primary" size="large" />
 ```
 
 ---
@@ -1082,57 +991,6 @@ const nextConfig = { experimental: { viewTransition: true } }
 
 > **注意:** 不要安装 `react@canary`——Next.js App Router 内部已经捆绑了它。
 
-### CSS 动画配方
-
-添加到全局 CSS（globals.css）：
-
-```css
-:root {
-  --duration-exit: 150ms;
-  --duration-enter: 210ms;
-  --duration-move: 400ms;
-}
-
-@keyframes fade {
-  from { filter: blur(3px); opacity: 0; }
-  to { filter: blur(0); opacity: 1; }
-}
-
-@keyframes slide {
-  from { translate: var(--slide-offset); }
-  to { translate: 0; }
-}
-
-/* 淡入淡出 */
-::view-transition-old(.fade-out) { animation: var(--duration-exit) ease-in fade reverse; }
-::view-transition-new(.fade-in) { animation: var(--duration-enter) ease-out var(--duration-exit) both fade; }
-
-/* 方向性导航 */
-::view-transition-old(.nav-forward) {
-  --slide-offset: -60px;
-  animation: var(--duration-exit) ease-in both fade reverse, var(--duration-move) ease-in-out both slide reverse;
-}
-::view-transition-new(.nav-forward) {
-  --slide-offset: 60px;
-  animation: var(--duration-enter) ease-out var(--duration-exit) both fade, var(--duration-move) ease-in-out both slide;
-}
-::view-transition-old(.nav-back) {
-  --slide-offset: 60px;
-  animation: var(--duration-exit) ease-in both fade reverse, var(--duration-move) ease-in-out both slide reverse;
-}
-::view-transition-new(.nav-back) {
-  --slide-offset: -60px;
-  animation: var(--duration-enter) ease-out var(--duration-exit) both fade, var(--duration-move) ease-in-out both slide;
-}
-
-/* 减少动画 */
-@media (prefers-reduced-motion: reduce) {
-  ::view-transition-old(*), ::view-transition-new(*), ::view-transition-group(*) {
-    animation-duration: 0s !important;
-  }
-}
-```
-
 ### 核心 API（来自 'react'）
 
 ```tsx
@@ -1145,90 +1003,98 @@ import { ViewTransition, startTransition, addTransitionType } from 'react'
 | `startTransition` | 包装状态变化以触发动画 |
 | `addTransitionType` | 用上下文标记过渡（'nav-forward', 'nav-back'） |
 
-### 使用模式
+### CSS 动画配方
 
-```tsx
-// 方向性页面过渡 - 用 addTransitionType 标记
-startTransition(() => {
-  addTransitionType('nav-forward')
-  router.push(path)
-})
+```css
+/* 从右滑入 */
+::view-transition-old(root) {
+  animation: 0.3s ease-out both slide-out-right;
+}
+::view-transition-new(root) {
+  animation: 0.3s ease-out both slide-in-right;
+}
 
-// 用类型键控的 VT 包装页面内容
-<ViewTransition
-  enter={{ 'nav-forward': 'nav-forward', 'nav-back': 'nav-back', default: 'none' }}
-  exit={{ 'nav-forward': 'nav-forward', 'nav-back': 'nav-back', default: 'none' }}
-  default="none"
->
-  <Canvas />
-</ViewTransition>
-
-// Suspense 揭示带滑动动画
-<Suspense fallback={<ViewTransition exit="slide-down"><Skeleton /></ViewTransition>}>
-  <ViewTransition enter="fade-in" default="none"><Content /></ViewTransition>
-</Suspense>
-
-// 共享元素变形（两个视图上使用相同 name）
-<ViewTransition name={`node-${nodeId}`} share="morph">
-  <NodeCard />
-</ViewTransition>
+@keyframes slide-in-right {
+  from { transform: translateX(30px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes slide-out-right {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(-30px); opacity: 0; }
+}
 ```
 
 ### 关键规则
 
 | 规则 | 原因 |
 |------|--------|
-| **始终使用 `default="none"`** | 防止每次过渡都交叉淡入（Suspense 解决、重新验证等） |
-| **VT 放在 DOM 节点之前** | `<ViewTransition><div>` 有效，`<div><ViewTransition>` 无效 |
-| **`router.back()` 不触发 VT** | 使用带明确 URL 的 `router.push()` |
-| **`enter` 和 `exit` 配对** | 始终双向动画化 |
-| **方向性 VT 放在页面而非布局** | 布局持久化，enter/exit 不会触发 |
+| **始终使用 `default="none"`** | 防止每次过渡都出现交叉淡入淡出（Suspense 解析、重新验证） |
+| **VT 放在 DOM 节点前** | `<ViewTransition><div>` 有效，`<div><ViewTransition>` 无效 |
+| **`router.back()` 不触发 VT** | 使用 `router.push()` 加显式 URL 替代 |
+| **`enter` 与 `exit` 成对出现** | 始终动画化两个方向 |
+| **方向性 VT 放在页面中而非布局中** | 布局会持久化，enter/exit 不会触发 |
 | **命名 VT 必须唯一** | 使用 `name={`item-${id}`}` 避免冲突 |
 
 ### 动画优先级（按顺序实现）
 
 | 优先级 | 模式 | 传达的信息 |
-|----------|---------|---------------------|
-| 1 | 共享元素（`name`） | "同一个东西——深入了" |
-| 2 | Suspense 揭示 | "数据加载完成" |
-| 3 | 列表身份（per-item `key`） | "相同项，新排列" |
-| 4 | 路由变化（布局级别） | "去新地方了" |
+|----------|---------|---------|
+| 1 | 共享元素（`name`） | "同一个东西——进入更深层" |
+| 2 | Suspense 揭示 | "数据已加载" |
+| 3 | 列表标识（每个项目的 `key`） | "相同的项目，新的排列" |
+| 4 | 路由变更（布局级别） | "前往新地方" |
 
 ---
 
 ## 14. 网页设计指南
 
-### 获取最新指南
-
-```bash
-# 从源获取最新版本
-https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/command.md
-```
-
 ### 核心原则
 
-| 原则 | 实现 |
+| 原则 | 实现方式 |
 |-----------|---------------|
-| **可见的可用性暗示** | 交互元素显示状态（hover、active、disabled、focus） |
-| **键盘导航** | 完全键盘支持，可见焦点指示器（`focus-visible:ring`） |
+| **可见的暗示** | 交互元素显示其状态（悬停、激活、禁用、聚焦） |
+| **键盘导航** | 完整键盘支持，可见的焦点指示器（`focus-visible:ring`） |
 | **触摸目标** | 移动端最小 44x44px |
 | **对比度** | 文本 4.5:1，UI 元素 3:1 |
 | **错误预防** | 确认破坏性操作，提交前验证 |
-| **动画** | 尊重 `prefers-reduced-motion` |
-| **颜色独立** | 不要仅依赖颜色传达信息 |
+| **运动** | 尊重 `prefers-reduced-motion` |
+| **颜色独立** | 不单纯依赖颜色传达信息 |
 | **输入方式** | 同等支持鼠标、触摸和键盘 |
 | **延迟处理** | 显示加载状态，使用乐观更新 |
-| **信任与安全** | 确认不可逆操作，提供撤销可能 |
+| **信任与安全** | 确认不可逆操作，尽量提供撤销功能 |
 
 ### 可访问性检查清单
 
-- [ ] 所有交互元素可通过键盘访问
-- [ ] 焦点顺序逻辑且可见
+- [ ] 所有交互元素都可通过键盘访问
+- [ ] 焦点顺序符合逻辑且可见
 - [ ] 触摸目标 ≥ 44x44px
 - [ ] 颜色对比度符合 WCAG AA（文本 4.5:1，UI 3:1）
-- [ ] 错误消息向屏幕阅读器宣布（`role="alert"`）
-- [ ] 可通过 `prefers-reduced-motion` 禁用动画
+- [ ] 错误消息通过屏幕阅读器播报（`role="alert"`）
+- [ ] 动画可通过 `prefers-reduced-motion` 禁用
 - [ ] 表单验证错误与输入关联（`aria-describedby`）
+
+---
+
+## 15. 实施计划
+
+| 阶段 | 任务 | 优先级 |
+|-------|------|----------|
+| 1 | Next.js + shadcn/ui 基础搭建 | P0 |
+| 2 | API 路由（Engine + Workspace） | P0 |
+| 3 | Zustand store（多 Workspace） | P0 |
+| 4 | xyflow 集成 + 自定义节点 | P0 |
+| 5 | 节点 CRUD 操作 | P0 |
+| 6 | 浮动面板（编辑器/输出/配置） | P0 |
+| 7 | 多 Workspace 切换 + 并行运行 | P0 |
+| 8 | 自动布局（dagre） | P2 |
+| 9 | Workspace 持久化 | P1 |
+
+## 16. 未来扩展
+
+- 节点模板预设
+- 历史记录（撤销/重做）
+- 导出为 Markdown/PDF
+- 多用户协作（保留接口）
 
 ---
 
@@ -1258,13 +1124,8 @@ https://raw.githubusercontent.com/vercel-labs/web-interface-guidelines/main/comm
 ### 重要命令
 
 ```bash
-# shadcn
 npx shadcn@latest info --json        # 获取项目配置
 npx shadcn@latest docs <component>   # 获取组件文档
 npx shadcn@latest add <component>    # 添加组件
-
-# xyflow
-npm info @xyflow/react              # 查看最新版本
+npm info @xyflow/react               # 查看最新版本
 ```
-
-（文档结束 - 共 1268 行）
