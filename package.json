@@ -1,7 +1,7 @@
 {
   "name": "flowcabal",
   "private": true,
-  "workspaces": ["packages/*"],
+  "workspaces": ["packages/*", "packages/apps/*"],
   "scripts": {
     "flowcabal": "bun packages/cli/src/index.ts",
     "typecheck": "bunx tsc --noEmit -p packages/engine/tsconfig.json && bunx tsc --noEmit -p packages/cli/tsconfig.json"

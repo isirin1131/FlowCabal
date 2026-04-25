@@ -46,7 +46,6 @@ export const NodeDefSchema = z.object({
 });
 
 export const WorkflowSchema = z.object({
-  id: z.string(),
   name: z.string(),
   nodes: z.array(NodeDefSchema),
 });

@@ -1,0 +1,70 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme {
+  --color-background: oklch(100% 0 0);
+  --color-foreground: oklch(14.5% 0.025 264);
+  --color-primary: oklch(14.5% 0.025 264);
+  --color-primary-foreground: oklch(98% 0.01 264);
+  --color-secondary: oklch(96% 0.01 264);
+  --color-secondary-foreground: oklch(14.5% 0.025 264);
+  --color-muted: oklch(96% 0.01 264);
+  --color-muted-foreground: oklch(46% 0.02 264);
+  --color-accent: oklch(96% 0.01 264);
+  --color-accent-foreground: oklch(14.5% 0.025 264);
+  --color-destructive: oklch(53% 0.22 27);
+  --color-destructive-foreground: oklch(98% 0.01 264);
+  --color-border: oklch(91% 0.01 264);
+  --color-ring: oklch(14.5% 0.025 264);
+  --color-card: oklch(100% 0 0);
+  --color-card-foreground: oklch(14.5% 0.025 264);
+
+  --color-status-pending: oklch(55% 0.02 264);
+  --color-status-stale: oklch(72% 0.15 40);
+  --color-status-completed: oklch(72% 0.15 170);
+  --color-status-error: oklch(62% 0.18 27);
+
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+
+  --animate-fade-in: fade-in 0.2s ease-out;
+  --animate-slide-in: slide-in 0.3s ease-out;
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes slide-in {
+    from { transform: translateY(-0.5rem); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+}
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+.dark {
+  --color-background: oklch(14.5% 0.025 264);
+  --color-foreground: oklch(98% 0.01 264);
+}
+
+@layer base {
+  * { @apply border-border; }
+  body { @apply bg-background text-foreground antialiased; }
+}
+
+::view-transition-old(root) {
+  animation: 0.2s ease-out both slide-out-right;
+}
+::view-transition-new(root) {
+  animation: 0.2s ease-out both slide-in-right;
+}
+
+@keyframes slide-in-right {
+  from { transform: translateX(30px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes slide-out-right {
+  from { transform: translateX(0); opacity: 1; }
+  to { transform: translateX(-30px); opacity: 0; }
+}
