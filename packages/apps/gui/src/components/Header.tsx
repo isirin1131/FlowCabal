@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Plus, Brain, FileText, List, Settings } from 'lucide-react'
-import { EditorSettingsDialog } from '@/components/EditorSettingsDialog'
+import { SettingsDialog } from '@/components/SettingsDialog'
 
 export function Header() {
   const workspaces = useStore((s) => s.workspaces)
@@ -81,7 +81,7 @@ export function Header() {
         <Settings className="w-4 h-4" />
       </Button>
 
-      <EditorSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </header>
   )
 }
