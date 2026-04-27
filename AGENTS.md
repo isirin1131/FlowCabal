@@ -7,7 +7,9 @@
 ## Quick Start
 
 ```bash
-bun run typecheck    # 验证代码
+bun dev              # 启动 GUI 开发服务器 (http://localhost:3000)
+bun run typecheck    # 验证 engine + cli 代码
+bun run typecheck:gui # 验证 GUI 代码
 ```
 
 ---

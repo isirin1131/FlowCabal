@@ -4,6 +4,8 @@
   "workspaces": ["packages/*", "packages/apps/*"],
   "scripts": {
     "flowcabal": "bun packages/cli/src/index.ts",
-    "typecheck": "bunx tsc --noEmit -p packages/engine/tsconfig.json && bunx tsc --noEmit -p packages/cli/tsconfig.json"
+    "dev": "cd packages/apps/gui && bun run dev",
+    "typecheck": "bunx tsc --noEmit -p packages/engine/tsconfig.json && bunx tsc --noEmit -p packages/cli/tsconfig.json",
+    "typecheck:gui": "cd packages/apps/gui && tsc --noEmit"
   }
 }

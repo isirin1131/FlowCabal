@@ -1,5 +1,5 @@
 'use client'
-import { useCallback } from 'react'
+import { useCallback, useState } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { useStore } from '@/store/useStore'
@@ -10,13 +10,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Plus, Brain, FileText, List } from 'lucide-react'
+import { Plus, Brain, FileText, List, Settings } from 'lucide-react'
+import { EditorSettingsDialog } from '@/components/EditorSettingsDialog'
 
 export function Header() {
   const workspaces = useStore((s) => s.workspaces)
   const activeWorkspace = useStore((s) => s.activeWorkspace)
   const switchWorkspace = useStore((s) => s.switchWorkspace)
   const createWorkspace = useStore((s) => s.createWorkspace)
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const handleCreateWorkspace = useCallback(() => {
     const name = `Workspace ${workspaces.length + 1}`
@@ -70,6 +72,16 @@ export function Header() {
           </Link>
         </Button>
       </nav>
+
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => setSettingsOpen(true)}
+      >
+        <Settings className="w-4 h-4" />
+      </Button>
+
+      <EditorSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
     </header>
   )
 }

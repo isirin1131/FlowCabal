@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Spinner } from '@/components/ui/spinner'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Send, Square, Wrench, Brain, ChevronDown, ChevronRight } from 'lucide-react'
+import { Send, Square, Wrench, Brain, ChevronDown, ChevronRight, ExternalLink, FolderOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { MemoryStreamChunk } from '@flowcabal/engine'
 
@@ -145,6 +145,35 @@ export default function MemoryPage() {
   const abortRef = useRef<AbortController | null>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const [editorName, setEditorName] = useState('')
+  const [openingEditor, setOpeningEditor] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/editor/config')
+      .then(r => r.json())
+      .then(d => {
+        const id = d.config?.default || 'vscode'
+        const all = [...d.builtins, ...(d.config?.custom || [])]
+        const editor = all.find((e: { id: string }) => e.id === id)
+        if (editor) setEditorName(editor.name)
+      })
+      .catch(() => {})
+  }, [])
+
+  const openMemoryDir = async () => {
+    setOpeningEditor(true)
+    try {
+      await fetch('/api/editor/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: 'memory' }),
+      })
+    } catch {
+      // ignore
+    } finally {
+      setOpeningEditor(false)
+    }
+  }
 
   const scrollToBottom = useCallback(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -299,6 +328,26 @@ export default function MemoryPage() {
 
   return (
     <div className="flex flex-col h-full">
+      <div className="border-b px-4 py-2 flex items-center justify-between shrink-0 bg-card/50">
+        <div className="flex items-center gap-2 min-w-0">
+          <FolderOpen className="w-4 h-4 text-muted-foreground shrink-0" />
+          <span className="text-sm text-muted-foreground truncate">memory/</span>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={openMemoryDir}
+          disabled={openingEditor}
+        >
+          <ExternalLink className="w-3.5 h-3.5" />
+          {openingEditor
+            ? '正在打开...'
+            : editorName
+              ? `在 ${editorName} 中打开`
+              : '在编辑器中打开'}
+        </Button>
+      </div>
+
       <ScrollArea className="flex-1 min-h-0 overflow-hidden">
         <div ref={scrollRef} className="flex flex-col gap-3 p-4">
           {messages.map(msg => {

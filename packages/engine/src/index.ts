@@ -8,4 +8,5 @@ export * from "./workspace/core/index.js";
 export * from "./workspace/utils.js";
 export * from "./workspace/init.js";
 export * from "./workspace/export.js";
+export * from "./agent/memory.js";
 export * from "./agent/memory-agent.js";
