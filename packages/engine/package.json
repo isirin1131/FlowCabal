@@ -10,6 +10,7 @@
     "@ai-sdk/google": "^1.0.0",
     "@ai-sdk/mistral": "^1.0.0",
     "@ai-sdk/openai": "^1.0.0",
+    "@ai-sdk/openai-compatible": "0.2.16",
     "@ai-sdk/xai": "^1.0.0",
     "ai": "^4.0.0",
     "nanoid": "^5.1.6",

@@ -1,5 +1,6 @@
 import type { LlmConfig } from "../types.js";
 import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { createMistral } from "@ai-sdk/mistral";
@@ -15,7 +16,7 @@ export function getProvider(config: LlmConfig) {
     case "openai":
       return createOpenAI({ apiKey: config.apiKey });
     case "openai-compatible":
-      return createOpenAI({ apiKey: config.apiKey, baseURL: config.baseURL, });
+      return createOpenAICompatible({ name: "deepseek", apiKey: config.apiKey, baseURL: config.baseURL ?? '', });
     case "anthropic":
       return createAnthropic({ apiKey: config.apiKey });
     case "google":

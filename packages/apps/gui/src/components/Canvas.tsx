@@ -6,14 +6,17 @@ import {
   Controls,
   MiniMap,
   BackgroundVariant,
+  Panel,
   type NodeTypes,
   type Node,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useStore } from '@/store/useStore'
 import FlowNode from './FlowNode'
-import { Copy, Trash2, Plus, Workflow } from 'lucide-react'
+import { Copy, Trash2, Plus, Workflow, Layout } from 'lucide-react'
 import { nanoid } from 'nanoid'
+import { Button } from '@/components/ui/button'
+import { getLayoutedElements } from '@/lib/engine-to-flow'
 
 const nodeTypes: NodeTypes = { flowNode: FlowNode }
 
@@ -52,13 +55,13 @@ function ContextMenuPanel({ x, y, nodeId, onClose }: {
   return (
     <div
       ref={ref}
-      className="fixed z-50 w-48 bg-popover border rounded-lg shadow-lg p-1"
+      className="fixed z-50 w-48 bg-popover border rounded-lg shadow-lg p-1 animate-slide-in"
       style={{ left: x, top: y }}
     >
       {items.map((item, i) => (
         <button
           key={i}
-          className={`w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-accent cursor-pointer ${item.destructive ? 'text-destructive hover:text-destructive' : ''}`}
+          className={`w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-accent cursor-pointer transition-colors ${item.destructive ? 'text-destructive hover:text-destructive' : ''}`}
           onClick={item.onClick}
         >
           <item.icon className="w-4 h-4 shrink-0" />
@@ -100,8 +103,13 @@ function Canvas() {
     setContextMenu({ x: e.clientX - 10, y: e.clientY - 10, nodeId: null })
   }, [])
 
+  const handleLayout = useCallback(() => {
+    const { nodes: layouted, edges: layoutedEdges } = getLayoutedElements(nodes, edges)
+    useStore.setState({ nodes: layouted, edges: layoutedEdges })
+  }, [nodes, edges])
+
   return (
-    <div className="w-full h-full relative">
+    <div className="w-full h-full relative select-none">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -114,6 +122,13 @@ function Canvas() {
         onPaneContextMenu={onPaneContextMenu}
         nodeTypes={nodeTypes}
         fitView
+        connectionLineStyle={{ stroke: 'var(--color-ring)', strokeWidth: 2 }}
+        defaultEdgeOptions={{
+          type: 'smoothstep',
+          animated: false,
+          style: { strokeWidth: 2 },
+        }}
+        deleteKeyCode={['Backspace', 'Delete']}
       >
         <Background variant={BackgroundVariant.Dots} />
         <Controls />
@@ -125,7 +140,33 @@ function Canvas() {
             if (status === 'stale') return 'var(--color-status-stale)'
             return 'var(--color-status-pending)'
           }}
+          maskColor="var(--color-background)"
         />
+
+        <Panel position="top-left" className="ml-2 mt-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleLayout}
+            className="bg-card/90 shadow-sm"
+          >
+            <Layout className="w-4 h-4" /> 自动布局
+          </Button>
+        </Panel>
+
+        {nodes.length === 0 && (
+          <Panel position="top-center" className="mt-16">
+            <div className="flex flex-col items-center gap-3 text-muted-foreground pointer-events-none">
+              <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
+                <Workflow className="w-8 h-8" />
+              </div>
+              <div className="text-center">
+                <p className="text-base font-medium text-foreground/70">画布为空</p>
+                <p className="text-sm mt-1">右键点击画布添加节点，或从工具栏创建</p>
+              </div>
+            </div>
+          </Panel>
+        )}
       </ReactFlow>
       {contextMenu && (
         <ContextMenuPanel

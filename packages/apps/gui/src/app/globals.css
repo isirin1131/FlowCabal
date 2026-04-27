@@ -18,11 +18,16 @@
   --color-ring: oklch(14.5% 0.025 264);
   --color-card: oklch(100% 0 0);
   --color-card-foreground: oklch(14.5% 0.025 264);
+  --color-popover: oklch(100% 0 0);
+  --color-popover-foreground: oklch(14.5% 0.025 264);
 
   --color-status-pending: oklch(55% 0.02 264);
   --color-status-stale: oklch(72% 0.15 40);
   --color-status-completed: oklch(72% 0.15 170);
   --color-status-error: oklch(62% 0.18 27);
+
+  --color-canvas-bg: oklch(97% 0.005 264);
+  --color-canvas-dots: oklch(80% 0.01 264);
 
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
@@ -30,6 +35,8 @@
 
   --animate-fade-in: fade-in 0.2s ease-out;
   --animate-slide-in: slide-in 0.3s ease-out;
+  --animate-node-enter: node-enter 0.35s ease-out;
+  --animate-pulse-glow: pulse-glow 2.5s ease-in-out infinite;
 
   @keyframes fade-in {
     from { opacity: 0; }
@@ -39,6 +46,24 @@
     from { transform: translateY(-0.5rem); opacity: 0; }
     to { transform: translateY(0); opacity: 1; }
   }
+  @keyframes node-enter {
+    from {
+      opacity: 0;
+      transform: scale(0.85);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  @keyframes pulse-glow {
+    0%, 100% {
+      box-shadow: 0 0 0 0 oklch(14.5% 0.025 264 / 0);
+    }
+    50% {
+      box-shadow: 0 0 20px 4px oklch(14.5% 0.025 264 / 0.12);
+    }
+  }
 }
 
 @custom-variant dark (&:where(.dark, .dark *));
@@ -46,6 +71,30 @@
 .dark {
   --color-background: oklch(14.5% 0.025 264);
   --color-foreground: oklch(98% 0.01 264);
+  --color-primary: oklch(75% 0.08 264);
+  --color-primary-foreground: oklch(14.5% 0.025 264);
+  --color-secondary: oklch(22% 0.025 264);
+  --color-secondary-foreground: oklch(85% 0.02 264);
+  --color-muted: oklch(22% 0.025 264);
+  --color-muted-foreground: oklch(60% 0.03 264);
+  --color-accent: oklch(22% 0.025 264);
+  --color-accent-foreground: oklch(85% 0.02 264);
+  --color-border: oklch(28% 0.025 264);
+  --color-ring: oklch(75% 0.08 264);
+  --color-card: oklch(18% 0.025 264);
+  --color-card-foreground: oklch(98% 0.01 264);
+  --color-popover: oklch(18% 0.025 264);
+  --color-popover-foreground: oklch(98% 0.01 264);
+  --color-destructive: oklch(62% 0.25 27);
+  --color-destructive-foreground: oklch(98% 0.01 264);
+
+  --color-status-pending: oklch(45% 0.03 264);
+  --color-status-stale: oklch(80% 0.16 45);
+  --color-status-completed: oklch(80% 0.16 170);
+  --color-status-error: oklch(70% 0.22 27);
+
+  --color-canvas-bg: oklch(17% 0.02 264);
+  --color-canvas-dots: oklch(30% 0.02 264);
 }
 
 @layer base {
@@ -67,4 +116,92 @@
 @keyframes slide-out-right {
   from { transform: translateX(0); opacity: 1; }
   to { transform: translateX(-30px); opacity: 0; }
+}
+
+/* ── XYFlow Handle styles ── */
+.react-flow__handle {
+  transition: width 0.2s ease, height 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
+  width: 10px !important;
+  height: 10px !important;
+  border: 2px solid var(--color-border) !important;
+  background-color: var(--color-background) !important;
+}
+
+.react-flow__handle:hover {
+  width: 14px !important;
+  height: 14px !important;
+  border-color: var(--color-ring) !important;
+  background-color: var(--color-ring) !important;
+}
+
+.react-flow__handle-connecting {
+  border-color: var(--color-ring) !important;
+  background-color: var(--color-ring) !important;
+}
+
+.react-flow__handle-valid {
+  border-color: var(--color-status-completed) !important;
+  background-color: var(--color-status-completed) !important;
+}
+
+/* ── XYFlow Connection line ── */
+.react-flow__connection-line {
+  stroke: var(--color-ring) !important;
+  stroke-width: 2px !important;
+}
+
+/* ── XYFlow Edge styles ── */
+.react-flow__edge-path {
+  stroke: var(--color-border) !important;
+  stroke-width: 2px !important;
+  transition: stroke 0.3s ease;
+}
+
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--color-ring) !important;
+  stroke-width: 2.5px !important;
+}
+
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: var(--color-muted-foreground) !important;
+}
+
+/* ── XYFlow Controls ── */
+.react-flow__controls {
+  border-radius: var(--radius-lg) !important;
+  overflow: hidden !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
+}
+
+.react-flow__controls-button {
+  border-bottom: 1px solid var(--color-border) !important;
+  background-color: var(--color-card) !important;
+  fill: var(--color-foreground) !important;
+}
+
+.react-flow__controls-button:hover {
+  background-color: var(--color-accent) !important;
+}
+
+/* ── XYFlow MiniMap ── */
+.react-flow__minimap {
+  border-radius: var(--radius-md) !important;
+  border: 1px solid var(--color-border) !important;
+  overflow: hidden !important;
+  background-color: var(--color-card) !important;
+}
+
+/* ── XYFlow Background ── */
+.react-flow__background {
+  background-color: var(--color-canvas-bg) !important;
+}
+
+/* ── Edge delete button ── */
+.react-flow__edgeupdater {
+  stroke: var(--color-ring) !important;
+}
+
+/* ── Node selected glow ── */
+.react-flow__node.selected > div {
+  box-shadow: 0 0 0 1px var(--color-ring), 0 0 20px 2px oklch(14.5% 0.025 264 / 0.08);
 }

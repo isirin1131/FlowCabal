@@ -3,6 +3,8 @@ import { persist } from 'zustand/middleware'
 import { applyNodeChanges, applyEdgeChanges, addEdge, type Node, type Edge } from '@xyflow/react'
 import type { Workspace, NodeDef, TextBlock } from '@flowcabal/engine'
 import { recordToWorkspace, workspaceToRecord } from '@/lib/serialization'
+import { getLayoutedElements } from '@/lib/engine-to-flow'
+import { toast } from 'sonner'
 
 type GuiState = {
   workspaces: Workspace[]
@@ -33,7 +35,7 @@ type GuiState = {
 }
 
 function workspaceToFlowData(ws: Workspace) {
-  const nodes: Node[] = ws.nodes.map((n: NodeDef) => ({
+  const rawNodes: Node[] = ws.nodes.map((n: NodeDef) => ({
     id: n.id, type: 'flowNode', position: { x: 0, y: 0 },
     data: {
       label: n.label,
@@ -55,7 +57,10 @@ function workspaceToFlowData(ws: Workspace) {
       })
     }
   }
-  return { nodes, edges }
+  if (rawNodes.length > 0) {
+    return getLayoutedElements(rawNodes, edges)
+  }
+  return { nodes: rawNodes, edges }
 }
 
 function syncNodeDataFromWorkspace(node: Node, ws: Workspace): Node {
@@ -125,7 +130,10 @@ class WorkspaceActions {
         body: JSON.stringify({ workspaceId: ws.id }),
       })
       const data = await res.json()
-      if (!data.workspace) return
+      if (!data.workspace) {
+        toast.warning('引擎未返回结果')
+        return
+      }
       const updatedWs = recordToWorkspace(data.workspace)
       this.#set((s: any) => ({
         workspaces: s.workspaces.map((w: Workspace) => w.id === updatedWs.id ? updatedWs : w),
@@ -143,6 +151,7 @@ class WorkspaceActions {
       this.#set((s: any) => ({
         nodes: s.nodes.map((n: any) => ({ ...n, data: { ...n.data, status: 'error' } }))
       }))
+      toast.error('运行失败')
     }
   }
 
@@ -163,21 +172,26 @@ class WorkspaceActions {
       if (data.workspace) {
         const updatedWs = recordToWorkspace(data.workspace)
         const existing = this.#get().workspaces
+        const flow = workspaceToFlowData(updatedWs)
         this.#set((s: any) => ({
           workspaces: existing.map((w: Workspace) => w.id === updatedWs.id ? updatedWs : w),
           activeWorkspace: updatedWs,
-          nodes: workspaceToFlowData(updatedWs).nodes,
-          edges: workspaceToFlowData(updatedWs).edges,
+          nodes: flow.nodes,
+          edges: flow.edges,
         }))
+        toast.success(`节点 "${label}" 已创建`)
       }
     } catch {
       this.#set((s: any) => ({ nodes: s.nodes.filter((n: any) => n.id !== tmpId) }))
+      toast.error('创建节点失败')
     }
   }
 
   internal_deleteNode = async (nodeId: string) => {
     const ws = this.#get().activeWorkspace
     if (!ws) return
+    const node = this.#get().nodes.find((n: any) => n.id === nodeId)
+    const nodeLabel = node?.data?.label || nodeId
     this.#set((s: any) => ({
       nodes: s.nodes.map((n: any) =>
         n.id === nodeId ? { ...n, data: { ...n.data, _deleting: true } } : n
@@ -191,12 +205,14 @@ class WorkspaceActions {
       const data = await res.json()
       if (data.workspace) {
         const updatedWs = recordToWorkspace(data.workspace)
+        const flow = workspaceToFlowData(updatedWs)
         this.#set((s: any) => ({
           workspaces: s.workspaces.map((w: Workspace) => w.id === updatedWs.id ? updatedWs : w),
           activeWorkspace: updatedWs,
-          nodes: workspaceToFlowData(updatedWs).nodes,
-          edges: workspaceToFlowData(updatedWs).edges,
+          nodes: flow.nodes,
+          edges: flow.edges,
         }))
+        toast.success(`节点 "${nodeLabel}" 已删除`)
       }
     } catch {
       this.#set((s: any) => ({
@@ -204,6 +220,7 @@ class WorkspaceActions {
           n.id === nodeId ? { ...n, data: { ...n.data, _deleting: false } } : n
         ),
       }))
+      toast.error('删除节点失败')
     }
   }
 
@@ -220,6 +237,9 @@ class WorkspaceActions {
         workspaces: [...s.workspaces, workspace],
       }))
       this.internal_switchWorkspace(workspace.id)
+      toast.success(`工作区 "${name}" 已创建`)
+    } catch {
+      toast.error('创建工作区失败')
     } finally {
       this.#set({ isLoading: false })
     }
@@ -331,6 +351,7 @@ export const useStore = create<GuiState>()(
           }
         }).catch(() => {
           set((s: any) => ({ edges: s.edges.filter((e: any) => e.id !== `e-${c.source}-${c.target}`) }))
+          toast.error('连接失败')
         })
       },
       selectNode: (id: string | null) => set({ selectedNodeId: id, floatingPanelOpen: id !== null }),
