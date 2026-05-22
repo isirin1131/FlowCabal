@@ -34,8 +34,31 @@ type GuiState = {
   togglePinOutput: (id: string) => void
 }
 
+const ROMAN: [number, string][] = [
+  [1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'],
+  [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'],
+  [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I'],
+]
+function toRoman(n: number): string {
+  let result = ''
+  for (const [value, numeral] of ROMAN) {
+    while (n >= value) { result += numeral; n -= value }
+  }
+  return result
+}
+
+function refLabelsForNode(ws: Workspace, nodeId: string): string[] {
+  const sources = ws.upstream.get(nodeId) || []
+  if (sources.length === 0) return []
+  const indexMap = new Map<string, number>()
+  ws.nodes.forEach((n, i) => indexMap.set(n.id, i + 1))
+  return sources
+    .map(sid => indexMap.has(sid) ? toRoman(indexMap.get(sid)!) : null)
+    .filter((x): x is string => x !== null)
+}
+
 function workspaceToFlowData(ws: Workspace) {
-  const rawNodes: Node[] = ws.nodes.map((n: NodeDef) => ({
+  const rawNodes: Node[] = ws.nodes.map((n: NodeDef, i: number) => ({
     id: n.id, type: 'flowNode', position: { x: 0, y: 0 },
     data: {
       label: n.label,
@@ -43,6 +66,8 @@ function workspaceToFlowData(ws: Workspace) {
       userPrompt: n.userPrompt,
       status: ws.outputs.has(n.id) ? ('completed' as const) : ('pending' as const),
       output: ws.outputs.get(n.id) ?? null,
+      roman: toRoman(i + 1),
+      refRomans: refLabelsForNode(ws, n.id),
     },
   }))
   const edges: Edge[] = []
@@ -52,8 +77,8 @@ function workspaceToFlowData(ws: Workspace) {
         id: `e-${sourceId}-${targetId}`,
         source: sourceId,
         target: targetId,
-        type: 'smoothstep',
-        animated: ws.outputs.has(sourceId),
+        type: 'default',
+        animated: false,
       })
     }
   }
@@ -66,6 +91,7 @@ function workspaceToFlowData(ws: Workspace) {
 function syncNodeDataFromWorkspace(node: Node, ws: Workspace): Node {
   const wsn = ws.nodes.find((n: NodeDef) => n.id === node.id)
   if (!wsn) return node
+  const idx = ws.nodes.indexOf(wsn)
   return {
     ...node,
     data: {
@@ -75,6 +101,8 @@ function syncNodeDataFromWorkspace(node: Node, ws: Workspace): Node {
       userPrompt: wsn.userPrompt,
       status: ws.outputs.has(node.id) ? 'completed' : 'pending',
       output: ws.outputs.get(node.id) ?? null,
+      roman: toRoman(idx + 1),
+      refRomans: refLabelsForNode(ws, node.id),
     },
   }
 }
@@ -332,7 +360,7 @@ export const useStore = create<GuiState>()(
       onNodesChange: (c: any) => set((s: any) => ({ nodes: applyNodeChanges(c, s.nodes) })),
       onEdgesChange: (c: any) => set((s: any) => ({ edges: applyEdgeChanges(c, s.edges) })),
       onConnect: (c: any) => {
-        set((s: any) => ({ edges: addEdge({ ...c, type: 'smoothstep', animated: true }, s.edges) }))
+        set((s: any) => ({ edges: addEdge({ ...c, type: 'default', animated: false }, s.edges) }))
         const ws = get().activeWorkspace
         if (!ws) return
         fetch(`/api/workspaces/${ws.id}/blocks`, {

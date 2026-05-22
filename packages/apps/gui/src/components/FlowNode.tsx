@@ -9,84 +9,158 @@ type FlowNodeData = {
   userPrompt: TextBlock[]
   status: 'pending' | 'stale' | 'completed' | 'error'
   output: string | null
+  roman: string
+  refRomans: string[]
   _deleting?: boolean
 }
 
 type FlowNodeType = Node<FlowNodeData, 'flowNode'>
 
-const statusConfig: Record<string, { bg: string; border: string; pulse: boolean }> = {
-  pending:  { bg: 'bg-status-pending',   border: 'border-status-pending/40',   pulse: true },
-  stale:    { bg: 'bg-status-stale',     border: 'border-status-stale/40',     pulse: false },
-  completed:{ bg: 'bg-status-completed', border: 'border-status-completed/40', pulse: false },
-  error:    { bg: 'bg-status-error',     border: 'border-status-error/40',     pulse: false },
+const STATUS_LABEL: Record<string, string> = {
+  pending:   'pending',
+  stale:     '需校对',
+  completed: 'completed',
+  error:     '拒稿',
 }
 
 function FlowNode({ data, selected }: NodeProps<FlowNodeType>) {
-  const config = statusConfig[data.status] || statusConfig.pending
   const isDeleting = (data as unknown as Record<string, unknown>)._deleting === true
+  const status = data.status
+
+  const sysCount = data.systemPrompt?.length ?? 0
+  const usrCount = data.userPrompt?.length ?? 0
+  const refs = data.refRomans ?? []
+
+  const wordCount = data.output ? estimateWords(data.output) : null
 
   return (
-    <div
-      className={`
-        bg-card border-2 rounded-lg shadow-sm min-w-[200px]
-        transition-all duration-300 ease-out
-        animate-node-enter
-        ${selected ? 'border-ring' : config.border}
-        ${isDeleting ? 'opacity-40 scale-95' : 'opacity-100 scale-100'}
-      `}
+    <article
+      className={[
+        'relative bg-paper-deep border rounded-md',
+        'min-w-[220px] max-w-[260px]',
+        'transition-[border-color,box-shadow,opacity,transform] duration-200 ease-out',
+        'animate-node-enter',
+        selected ? 'border-clay shadow-paper' : 'border-rule shadow-paper hover:border-[#C9BFAA]',
+        status === 'completed' ? 'border-t-clay' : '',
+        status === 'error' ? 'border-error' : '',
+        isDeleting ? 'opacity-40 scale-[0.97]' : 'opacity-100 scale-100',
+      ].filter(Boolean).join(' ')}
     >
-      <div className={`h-1 rounded-t-md ${config.bg}`} />
+      <Handle
+        type="target"
+        position={Position.Top}
+        id="system"
+        className="!left-[35%]"
+      />
+      <Handle
+        type="target"
+        position={Position.Top}
+        id="user"
+        className="!left-[65%]"
+      />
 
-      <div className="px-4 py-2.5">
-        <Handle
-          type="target"
-          position={Position.Left}
-          id="system"
-          className="top-[30%]"
-        />
-        <Handle
-          type="target"
-          position={Position.Left}
-          id="user"
-          className="top-[70%]"
-        />
+      <div className="px-[22px] pt-[16px] pb-[14px]">
+        {/* Roman numeral */}
+        <div
+          className={[
+            'font-display font-medium leading-none',
+            'text-[28px]',
+            status === 'error' ? 'text-error' :
+            status === 'stale' ? 'text-clay-deep italic border-b border-dashed border-clay inline-block pb-px' :
+            'text-clay',
+          ].join(' ')}
+        >
+          {data.roman || '—'}
+        </div>
 
-        <div className="flex items-center gap-2 mb-2">
-          <span
-            className={`
-              relative flex h-2.5 w-2.5
-              ${config.pulse ? 'before:absolute before:inset-0 before:rounded-full before:bg-status-pending before:animate-pulse before:opacity-60' : ''}
-            `}
-          >
-            <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${config.bg}`} />
+        {/* Title */}
+        <h3 className="font-display text-[16px] font-medium text-ink leading-tight mt-[8px] tracking-[-0.01em]">
+          {data.label}
+        </h3>
+
+        {/* Meta */}
+        <div className="mt-[12px] font-body text-[11px] text-ink-faint leading-[1.7] tabular-nums">
+          <div className="flex items-baseline gap-2">
+            <span className="font-display italic text-[12px] text-ink-soft">系统</span>
+            <span>
+              {sysCount} 段
+              {refs.length > 0 && (
+                <> · 引自 {refs.join(', ')}</>
+              )}
+            </span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <span className="font-display italic text-[12px] text-ink-soft">用户</span>
+            <span>{usrCount} 段</span>
+          </div>
+        </div>
+
+        {/* Foot */}
+        <div
+          className={[
+            'mt-[14px] pt-[10px] flex items-center justify-between',
+            'font-body text-[10.5px] tracking-wide lowercase',
+            'border-t',
+            status === 'completed' ? 'border-clay' : 'border-rule-soft',
+          ].join(' ')}
+        >
+          <span className="flex items-center gap-[6px] text-ink-faint">
+            <StatusDot status={status} />
+            <span className={
+              status === 'error' ? 'text-error' :
+              status === 'completed' ? 'text-ink-soft' :
+              'text-ink-faint'
+            }>{STATUS_LABEL[status] || status}</span>
           </span>
-          <span className="font-medium text-sm text-card-foreground">{data.label}</span>
+          <span className="text-ink-faint tabular-nums">
+            {wordCount !== null ? `${wordCount.toLocaleString()} 字` : '—'}
+          </span>
         </div>
-
-        <div className="text-xs text-muted-foreground flex flex-col gap-0.5">
-          <div className="flex items-center gap-1.5">
-            <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-secondary text-[10px] font-medium text-secondary-foreground">
-              S
-            </span>
-            {data.systemPrompt?.length || 0} blocks
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="inline-flex items-center justify-center w-4 h-4 rounded bg-secondary text-[10px] font-medium text-secondary-foreground">
-              U
-            </span>
-            {data.userPrompt?.length || 0} blocks
-          </div>
-        </div>
-
-        <Handle
-          type="source"
-          position={Position.Right}
-          id="output"
-          className="top-1/2"
-        />
       </div>
-    </div>
+
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        id="output"
+        className="!left-1/2"
+      />
+    </article>
   )
+}
+
+function StatusDot({ status }: { status: string }) {
+  const base = 'inline-block rounded-full'
+  if (status === 'pending') {
+    return <span className={`${base} w-[5px] h-[5px] border border-ink-faint`} aria-hidden="true" />
+  }
+  if (status === 'completed') {
+    return <span className={`${base} w-[5px] h-[5px] bg-ink`} aria-hidden="true" />
+  }
+  if (status === 'stale') {
+    return <span className={`${base} w-[5px] h-[5px] bg-clay`} aria-hidden="true" />
+  }
+  if (status === 'error') {
+    return <span className={`${base} w-[5px] h-[5px] bg-error`} aria-hidden="true" />
+  }
+  return <span className={`${base} w-[5px] h-[5px] bg-ink-faint`} aria-hidden="true" />
+}
+
+function estimateWords(text: string): number {
+  // 中英混合粗估：中文字符按 1，连续英文单词按 1
+  let count = 0
+  let inWord = false
+  for (const ch of text) {
+    const code = ch.charCodeAt(0)
+    if (code > 0x3000) {
+      count++
+      inWord = false
+    } else if (/\w/.test(ch)) {
+      if (!inWord) { count++; inWord = true }
+    } else {
+      inWord = false
+    }
+  }
+  return count
 }
 
 function areEqual(prev: NodeProps<FlowNodeType>, next: NodeProps<FlowNodeType>) {
@@ -96,6 +170,8 @@ function areEqual(prev: NodeProps<FlowNodeType>, next: NodeProps<FlowNodeType>) 
     prev.data.userPrompt?.length === next.data.userPrompt?.length &&
     prev.data.status === next.data.status &&
     prev.data.output === next.data.output &&
+    prev.data.roman === next.data.roman &&
+    (prev.data.refRomans?.join(',') ?? '') === (next.data.refRomans?.join(',') ?? '') &&
     prev.selected === next.selected &&
     (prev.data as unknown as Record<string, unknown>)._deleting ===
     (next.data as unknown as Record<string, unknown>)._deleting

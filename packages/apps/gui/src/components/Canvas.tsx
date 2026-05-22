@@ -2,20 +2,17 @@
 import { memo, useCallback, useState, useRef, useEffect } from 'react'
 import {
   ReactFlow,
-  Background,
-  Controls,
-  MiniMap,
-  BackgroundVariant,
+  ReactFlowProvider,
   Panel,
+  useViewport,
+  useReactFlow,
   type NodeTypes,
   type Node,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useStore } from '@/store/useStore'
 import FlowNode from './FlowNode'
-import { Copy, Trash2, Plus, Workflow, Layout } from 'lucide-react'
 import { nanoid } from 'nanoid'
-import { Button } from '@/components/ui/button'
 import { getLayoutedElements } from '@/lib/engine-to-flow'
 
 const nodeTypes: NodeTypes = { flowNode: FlowNode }
@@ -42,29 +39,33 @@ function ContextMenuPanel({ x, y, nodeId, onClose }: {
     }
   }, [onClose])
 
-  const items = nodeId
+  type Item = { label: string; onClick: () => void; danger?: boolean }
+  const items: Item[] = nodeId
     ? [
-        { label: '添加子节点', icon: Plus, onClick: () => { createNode(`Child of ${nodeId}`); onClose() } },
-        { label: '复制节点', icon: Copy, onClick: () => { createNode(`Copy of ${nodeId}`); onClose() } },
-        { label: '删除节点', icon: Trash2, onClick: () => { deleteNode(nodeId); onClose() }, destructive: true as const },
+        { label: '添加子节点', onClick: () => { createNode(`Child of ${nodeId}`); onClose() } },
+        { label: '复制节点', onClick: () => { createNode(`Copy of ${nodeId}`); onClose() } },
+        { label: '删除节点', onClick: () => { deleteNode(nodeId); onClose() }, danger: true },
       ]
     : [
-        { label: '添加节点', icon: Workflow, onClick: () => { createNode(`Node ${nanoid(4)}`); onClose() } },
+        { label: '添加节点', onClick: () => { createNode(`节点 ${nanoid(4)}`); onClose() } },
       ]
 
   return (
     <div
       ref={ref}
-      className="fixed z-50 w-48 bg-popover border rounded-lg shadow-lg p-1 animate-slide-in"
+      className="fixed z-50 min-w-[180px] bg-paper border border-rule rounded-md shadow-lift py-1 animate-slide-in font-body text-[13px]"
       style={{ left: x, top: y }}
     >
       {items.map((item, i) => (
         <button
           key={i}
-          className={`w-full flex items-center gap-2 px-2 py-1.5 text-sm rounded-md hover:bg-accent cursor-pointer transition-colors ${item.destructive ? 'text-destructive hover:text-destructive' : ''}`}
+          className={[
+            'w-full text-left px-3 py-1.5 cursor-pointer transition-colors duration-150',
+            'hover:bg-clay-faint',
+            item.danger ? 'text-error hover:!text-error' : 'text-ink hover:text-clay-deep',
+          ].join(' ')}
           onClick={item.onClick}
         >
-          <item.icon className="w-4 h-4 shrink-0" />
           {item.label}
         </button>
       ))}
@@ -72,13 +73,72 @@ function ContextMenuPanel({ x, y, nodeId, onClose }: {
   )
 }
 
-function Canvas() {
+function ZoomReadout() {
+  const { zoom } = useViewport()
+  const { fitView } = useReactFlow()
+  const pct = Math.round(zoom * 100)
+  return (
+    <Panel position="bottom-right" className="!m-0">
+      <div className="font-mono text-[10.5px] text-ink-faint tracking-wide px-4 py-3 pointer-events-auto select-none">
+        <span className="tabular-nums">zoom {pct}%</span>
+        <span className="text-rule mx-3">·</span>
+        <button
+          type="button"
+          onClick={() => fitView({ duration: 240 })}
+          className="hover:text-ink transition-colors cursor-pointer"
+        >
+          <kbd className="font-mono not-italic">⌘0</kbd> fit
+        </button>
+      </div>
+    </Panel>
+  )
+}
+
+function LayoutButton() {
+  const nodes = useStore((s) => s.nodes)
+  const edges = useStore((s) => s.edges)
+  const handleLayout = useCallback(() => {
+    if (nodes.length === 0) return
+    const { nodes: laid, edges: laidE } = getLayoutedElements(nodes, edges)
+    useStore.setState({ nodes: laid, edges: laidE })
+  }, [nodes, edges])
+
+  return (
+    <Panel position="top-left" className="!m-0">
+      <button
+        type="button"
+        onClick={handleLayout}
+        className="font-display italic text-[13px] text-ink-soft hover:text-clay transition-colors px-4 py-3 pointer-events-auto cursor-pointer"
+      >
+        — 自动排版
+      </button>
+    </Panel>
+  )
+}
+
+function EmptyState() {
+  return (
+    <Panel position="top-center" className="!mt-24">
+      <div className="text-center pointer-events-none select-none">
+        <div className="font-display italic text-ink-soft text-[18px] mb-1">
+          画布为空
+        </div>
+        <div className="font-body text-[13px] text-ink-faint">
+          双击画布添加节点，或在空白处右键
+        </div>
+      </div>
+    </Panel>
+  )
+}
+
+function CanvasInner() {
   const nodes = useStore((s) => s.nodes)
   const edges = useStore((s) => s.edges)
   const onNodesChange = useStore((s) => s.onNodesChange)
   const onEdgesChange = useStore((s) => s.onEdgesChange)
   const onConnect = useStore((s) => s.onConnect)
   const selectNode = useStore((s) => s.selectNode)
+  const createNode = useStore((s) => s.createNode)
 
   const [contextMenu, setContextMenu] = useState<{
     x: number; y: number; nodeId: string | null
@@ -103,13 +163,12 @@ function Canvas() {
     setContextMenu({ x: e.clientX - 10, y: e.clientY - 10, nodeId: null })
   }, [])
 
-  const handleLayout = useCallback(() => {
-    const { nodes: layouted, edges: layoutedEdges } = getLayoutedElements(nodes, edges)
-    useStore.setState({ nodes: layouted, edges: layoutedEdges })
-  }, [nodes, edges])
+  const onPaneDoubleClick = useCallback(() => {
+    createNode(`节点 ${nanoid(4)}`)
+  }, [createNode])
 
   return (
-    <div className="w-full h-full relative select-none">
+    <div className="w-full h-full relative select-none bg-paper">
       <ReactFlow
         nodes={nodes}
         edges={edges}
@@ -120,53 +179,22 @@ function Canvas() {
         onPaneClick={onPaneClick}
         onNodeContextMenu={onNodeContextMenu}
         onPaneContextMenu={onPaneContextMenu}
+        onDoubleClick={onPaneDoubleClick}
         nodeTypes={nodeTypes}
         fitView
-        connectionLineStyle={{ stroke: 'var(--color-ring)', strokeWidth: 2 }}
+        fitViewOptions={{ padding: 0.25, duration: 0 }}
+        connectionLineStyle={{ stroke: 'var(--color-clay)', strokeWidth: 1.5 }}
         defaultEdgeOptions={{
-          type: 'smoothstep',
+          type: 'default',
           animated: false,
-          style: { strokeWidth: 2 },
+          style: { strokeWidth: 1 },
         }}
         deleteKeyCode={['Backspace', 'Delete']}
+        proOptions={{ hideAttribution: true }}
       >
-        <Background variant={BackgroundVariant.Dots} />
-        <Controls />
-        <MiniMap
-          nodeColor={(node: Node) => {
-            const status = (node.data as Record<string, unknown>)?.status as string
-            if (status === 'completed') return 'var(--color-status-completed)'
-            if (status === 'error') return 'var(--color-status-error)'
-            if (status === 'stale') return 'var(--color-status-stale)'
-            return 'var(--color-status-pending)'
-          }}
-          maskColor="var(--color-background)"
-        />
-
-        <Panel position="top-left" className="ml-2 mt-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleLayout}
-            className="bg-card/90 shadow-sm"
-          >
-            <Layout className="w-4 h-4" /> 自动布局
-          </Button>
-        </Panel>
-
-        {nodes.length === 0 && (
-          <Panel position="top-center" className="mt-16">
-            <div className="flex flex-col items-center gap-3 text-muted-foreground pointer-events-none">
-              <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
-                <Workflow className="w-8 h-8" />
-              </div>
-              <div className="text-center">
-                <p className="text-base font-medium text-foreground/70">画布为空</p>
-                <p className="text-sm mt-1">右键点击画布添加节点，或从工具栏创建</p>
-              </div>
-            </div>
-          </Panel>
-        )}
+        <LayoutButton />
+        <ZoomReadout />
+        {nodes.length === 0 && <EmptyState />}
       </ReactFlow>
       {contextMenu && (
         <ContextMenuPanel
@@ -177,6 +205,14 @@ function Canvas() {
         />
       )}
     </div>
+  )
+}
+
+function Canvas() {
+  return (
+    <ReactFlowProvider>
+      <CanvasInner />
+    </ReactFlowProvider>
   )
 }
 

@@ -1,207 +1,355 @@
 @import "tailwindcss";
-@import "tw-animate-css";
 
+/* ───────────────────────────────────────────────────────────────
+   FlowCabal · Anthropic 视觉令牌
+   颜色 / 字体 / 圆角 / 阴影 全部走 CSS 变量
+   ─────────────────────────────────────────────────────────────── */
 @theme {
-  --color-background: oklch(100% 0 0);
-  --color-foreground: oklch(14.5% 0.025 264);
-  --color-primary: oklch(14.5% 0.025 264);
-  --color-primary-foreground: oklch(98% 0.01 264);
-  --color-secondary: oklch(96% 0.01 264);
-  --color-secondary-foreground: oklch(14.5% 0.025 264);
-  --color-muted: oklch(96% 0.01 264);
-  --color-muted-foreground: oklch(46% 0.02 264);
-  --color-accent: oklch(96% 0.01 264);
-  --color-accent-foreground: oklch(14.5% 0.025 264);
-  --color-destructive: oklch(53% 0.22 27);
-  --color-destructive-foreground: oklch(98% 0.01 264);
-  --color-border: oklch(91% 0.01 264);
-  --color-ring: oklch(14.5% 0.025 264);
-  --color-card: oklch(100% 0 0);
-  --color-card-foreground: oklch(14.5% 0.025 264);
-  --color-popover: oklch(100% 0 0);
-  --color-popover-foreground: oklch(14.5% 0.025 264);
+  /* fonts — 变量值由 src/app/layout.tsx 注入（next/font） */
+  --font-display: var(--ff-display), 'Noto Serif SC', 'Songti SC', 'STSong', serif;
+  --font-body:    var(--ff-body), 'PingFang SC', 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono:    var(--ff-mono), 'PingFang SC', ui-monospace, SFMono-Regular, monospace;
+  --font-sans:    var(--font-body);
 
-  --color-status-pending: oklch(55% 0.02 264);
-  --color-status-stale: oklch(72% 0.15 40);
-  --color-status-completed: oklch(72% 0.15 170);
-  --color-status-error: oklch(62% 0.18 27);
+  /* ── 调色板（全部暖偏） ── */
+  --color-paper:       #F4F0E8;
+  --color-paper-deep:  #ECE6D8;
+  --color-paper-deep2: #E4DCC9;
+  --color-ink:         #2B2724;
+  --color-ink-soft:    #5A524A;
+  --color-ink-faint:   #8C8478;
+  --color-rule:        #D7CFC0;
+  --color-rule-soft:   #E5DDCD;
+  --color-clay:        #CC785C;
+  --color-clay-deep:   #A85B44;
+  --color-clay-faint:  #F0E2D8;
+  --color-error:       #A8392B;
+  --color-error-faint: #ECD6CE;
 
-  --color-canvas-bg: oklch(97% 0.005 264);
-  --color-canvas-dots: oklch(80% 0.01 264);
+  /* ── shadcn 兼容映射（避免修改 components/ui/*.tsx） ── */
+  --color-background: var(--color-paper);
+  --color-foreground: var(--color-ink);
+  --color-card: var(--color-paper-deep);
+  --color-card-foreground: var(--color-ink);
+  --color-popover: var(--color-paper);
+  --color-popover-foreground: var(--color-ink);
+  --color-primary: var(--color-clay);
+  --color-primary-foreground: var(--color-paper);
+  --color-secondary: var(--color-paper-deep);
+  --color-secondary-foreground: var(--color-ink);
+  --color-muted: var(--color-paper-deep);
+  --color-muted-foreground: var(--color-ink-soft);
+  --color-accent: var(--color-clay-faint);
+  --color-accent-foreground: var(--color-clay-deep);
+  --color-destructive: var(--color-error);
+  --color-destructive-foreground: var(--color-paper);
+  --color-border: var(--color-rule);
+  --color-input: var(--color-rule);
+  --color-ring: var(--color-clay);
 
-  --radius-sm: 0.25rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
+  /* ── 节点状态（不再红绿灯） ── */
+  --color-status-pending:   var(--color-ink-faint);
+  --color-status-stale:     var(--color-clay);
+  --color-status-completed: var(--color-ink);
+  --color-status-error:     var(--color-error);
 
-  --animate-fade-in: fade-in 0.2s ease-out;
-  --animate-slide-in: slide-in 0.3s ease-out;
-  --animate-node-enter: node-enter 0.35s ease-out;
-  --animate-pulse-glow: pulse-glow 2.5s ease-in-out infinite;
+  /* ── 圆角 ── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius:    var(--radius-md);
+
+  /* ── 阴影（暖色低饱和） ── */
+  --shadow-paper: 0 1px 2px rgba(43,39,36,.04), 0 2px 8px rgba(43,39,36,.04);
+  --shadow-lift:  0 2px 4px rgba(43,39,36,.05), 0 12px 32px rgba(43,39,36,.08);
+
+  /* ── 动画 ── */
+  --animate-fade-in:    fade-in 0.2s ease-out;
+  --animate-slide-in:   slide-in 0.2s ease-out;
+  --animate-node-enter: node-enter 0.3s ease-out;
+  --animate-pulse-dot:  pulse-dot 1.6s ease-in-out infinite;
 
   @keyframes fade-in {
     from { opacity: 0; }
-    to { opacity: 1; }
+    to   { opacity: 1; }
   }
   @keyframes slide-in {
     from { transform: translateY(-0.5rem); opacity: 0; }
-    to { transform: translateY(0); opacity: 1; }
+    to   { transform: translateY(0); opacity: 1; }
   }
   @keyframes node-enter {
-    from {
-      opacity: 0;
-      transform: scale(0.85);
-    }
-    to {
-      opacity: 1;
-      transform: scale(1);
-    }
+    from { opacity: 0; transform: scale(0.97); }
+    to   { opacity: 1; transform: scale(1); }
   }
-  @keyframes pulse-glow {
-    0%, 100% {
-      box-shadow: 0 0 0 0 oklch(14.5% 0.025 264 / 0);
-    }
-    50% {
-      box-shadow: 0 0 20px 4px oklch(14.5% 0.025 264 / 0.12);
-    }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(204,120,92,.5); }
+    50%      { opacity: .6; box-shadow: 0 0 0 4px rgba(204,120,92,0); }
   }
 }
 
-@custom-variant dark (&:where(.dark, .dark *));
-
-.dark {
-  --color-background: oklch(14.5% 0.025 264);
-  --color-foreground: oklch(98% 0.01 264);
-  --color-primary: oklch(75% 0.08 264);
-  --color-primary-foreground: oklch(14.5% 0.025 264);
-  --color-secondary: oklch(22% 0.025 264);
-  --color-secondary-foreground: oklch(85% 0.02 264);
-  --color-muted: oklch(22% 0.025 264);
-  --color-muted-foreground: oklch(60% 0.03 264);
-  --color-accent: oklch(22% 0.025 264);
-  --color-accent-foreground: oklch(85% 0.02 264);
-  --color-border: oklch(28% 0.025 264);
-  --color-ring: oklch(75% 0.08 264);
-  --color-card: oklch(18% 0.025 264);
-  --color-card-foreground: oklch(98% 0.01 264);
-  --color-popover: oklch(18% 0.025 264);
-  --color-popover-foreground: oklch(98% 0.01 264);
-  --color-destructive: oklch(62% 0.25 27);
-  --color-destructive-foreground: oklch(98% 0.01 264);
-
-  --color-status-pending: oklch(45% 0.03 264);
-  --color-status-stale: oklch(80% 0.16 45);
-  --color-status-completed: oklch(80% 0.16 170);
-  --color-status-error: oklch(70% 0.22 27);
-
-  --color-canvas-bg: oklch(17% 0.02 264);
-  --color-canvas-dots: oklch(30% 0.02 264);
-}
-
+/* ───────────────────────────────────────────────────────────────
+   基础排版 / 全局氛围
+   ─────────────────────────────────────────────────────────────── */
 @layer base {
   * { @apply border-border; }
-  body { @apply bg-background text-foreground antialiased; }
+
+  html {
+    background: var(--color-paper);
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.55;
+    letter-spacing: -0.005em;
+    font-variant-numeric: oldstyle-nums;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* 纸纹噪点（极淡） */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .17 0 0 0 0 .15 0 0 0 0 .14 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    opacity: 0.45;
+    pointer-events: none;
+    z-index: 100;
+    mix-blend-mode: multiply;
+  }
+
+  ::selection {
+    background: var(--color-clay-faint);
+    color: var(--color-ink);
+  }
+
+  /* 焦点：clay 细描边代替 shadcn 默认 ring */
+  :focus-visible {
+    outline: 1px solid var(--color-clay);
+    outline-offset: 2px;
+    box-shadow: none;
+  }
 }
 
+/* ───────────────────────────────────────────────────────────────
+   View transitions（保留）
+   ─────────────────────────────────────────────────────────────── */
 ::view-transition-old(root) {
   animation: 0.2s ease-out both slide-out-right;
 }
 ::view-transition-new(root) {
   animation: 0.2s ease-out both slide-in-right;
 }
-
 @keyframes slide-in-right {
   from { transform: translateX(30px); opacity: 0; }
-  to { transform: translateX(0); opacity: 1; }
+  to   { transform: translateX(0); opacity: 1; }
 }
 @keyframes slide-out-right {
   from { transform: translateX(0); opacity: 1; }
-  to { transform: translateX(-30px); opacity: 0; }
+  to   { transform: translateX(-30px); opacity: 0; }
 }
 
-/* ── XYFlow Handle styles ── */
-.react-flow__handle {
-  transition: width 0.2s ease, height 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
-  width: 10px !important;
-  height: 10px !important;
-  border: 2px solid var(--color-border) !important;
-  background-color: var(--color-background) !important;
+/* ───────────────────────────────────────────────────────────────
+   XYFlow 覆盖：让画布看起来像稿纸
+   ─────────────────────────────────────────────────────────────── */
+.react-flow {
+  background: var(--color-paper) !important;
 }
 
-.react-flow__handle:hover {
-  width: 14px !important;
-  height: 14px !important;
-  border-color: var(--color-ring) !important;
-  background-color: var(--color-ring) !important;
-}
-
-.react-flow__handle-connecting {
-  border-color: var(--color-ring) !important;
-  background-color: var(--color-ring) !important;
-}
-
-.react-flow__handle-valid {
-  border-color: var(--color-status-completed) !important;
-  background-color: var(--color-status-completed) !important;
-}
-
-/* ── XYFlow Connection line ── */
-.react-flow__connection-line {
-  stroke: var(--color-ring) !important;
-  stroke-width: 2px !important;
-}
-
-/* ── XYFlow Edge styles ── */
-.react-flow__edge-path {
-  stroke: var(--color-border) !important;
-  stroke-width: 2px !important;
-  transition: stroke 0.3s ease;
-}
-
-.react-flow__edge.selected .react-flow__edge-path {
-  stroke: var(--color-ring) !important;
-  stroke-width: 2.5px !important;
-}
-
-.react-flow__edge:hover .react-flow__edge-path {
-  stroke: var(--color-muted-foreground) !important;
-}
-
-/* ── XYFlow Controls ── */
-.react-flow__controls {
-  border-radius: var(--radius-lg) !important;
-  overflow: hidden !important;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
-}
-
-.react-flow__controls-button {
-  border-bottom: 1px solid var(--color-border) !important;
-  background-color: var(--color-card) !important;
-  fill: var(--color-foreground) !important;
-}
-
-.react-flow__controls-button:hover {
-  background-color: var(--color-accent) !important;
-}
-
-/* ── XYFlow MiniMap ── */
-.react-flow__minimap {
-  border-radius: var(--radius-md) !important;
-  border: 1px solid var(--color-border) !important;
-  overflow: hidden !important;
-  background-color: var(--color-card) !important;
-}
-
-/* ── XYFlow Background ── */
 .react-flow__background {
-  background-color: var(--color-canvas-bg) !important;
+  background-color: var(--color-paper) !important;
 }
 
-/* ── Edge delete button ── */
-.react-flow__edgeupdater {
-  stroke: var(--color-ring) !important;
+/* Handle：日常几乎不可见，hover 才浮现 */
+.react-flow__handle {
+  width: 8px !important;
+  height: 8px !important;
+  border: 1px solid var(--color-rule) !important;
+  background-color: var(--color-paper) !important;
+  opacity: 0.6;
+  transition: opacity .2s ease-out, background-color .2s ease-out, border-color .2s ease-out;
+}
+.react-flow__node:hover .react-flow__handle,
+.react-flow__handle:hover {
+  opacity: 1;
+  border-color: var(--color-clay);
+  background-color: var(--color-clay);
+}
+.react-flow__handle-connecting,
+.react-flow__handle-valid {
+  opacity: 1 !important;
+  border-color: var(--color-clay) !important;
+  background-color: var(--color-clay) !important;
 }
 
-/* ── Node selected glow ── */
-.react-flow__node.selected > div {
-  box-shadow: 0 0 0 1px var(--color-ring), 0 0 20px 2px oklch(14.5% 0.025 264 / 0.08);
+/* Edge：hairline + clay hover/selected */
+.react-flow__edge-path {
+  stroke: var(--color-rule) !important;
+  stroke-width: 1 !important;
+  transition: stroke .2s ease-out, stroke-width .2s ease-out;
+}
+.react-flow__edge.selected .react-flow__edge-path,
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke: var(--color-clay) !important;
+  stroke-width: 1.5 !important;
+}
+.react-flow__connection-line {
+  stroke: var(--color-clay) !important;
+  stroke-width: 1.5 !important;
+}
+
+/* MiniMap / Controls：第一期就让它们消失 */
+.react-flow__minimap,
+.react-flow__controls,
+.react-flow__attribution {
+  display: none !important;
+}
+
+/* 选中态：温和阴影代替蓝色 ring */
+.react-flow__node.selected > * {
+  /* FlowNode 自己处理 selected 视觉 */
+}
+
+/* xyflow 控制 Panel（如果留着会浮在角落，统一改 paper 底） */
+.react-flow__panel {
+  background: transparent !important;
+  margin: 16px !important;
+}
+
+/* ───────────────────────────────────────────────────────────────
+   Memory 对话 · Markdown 排印
+   ─────────────────────────────────────────────────────────────── */
+.fc-prose > * + * {
+  margin-top: 0.85em;
+}
+.fc-prose p {
+  margin: 0;
+}
+.fc-prose strong {
+  font-weight: 600;
+  color: var(--color-ink);
+}
+.fc-prose em {
+  font-style: italic;
+}
+.fc-prose a {
+  color: var(--color-clay);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  transition: color .2s ease-out;
+}
+.fc-prose a:hover {
+  color: var(--color-clay-deep);
+}
+.fc-prose ul,
+.fc-prose ol {
+  margin: 0.5em 0 0.5em 0;
+  padding-left: 1.6em;
+}
+.fc-prose ul {
+  list-style: none;
+}
+.fc-prose ul > li {
+  position: relative;
+}
+.fc-prose ul > li::before {
+  content: '·';
+  position: absolute;
+  left: -1em;
+  color: var(--color-clay);
+  font-weight: 600;
+}
+.fc-prose ol {
+  list-style: lower-roman;
+}
+.fc-prose ol > li::marker {
+  color: var(--color-clay);
+  font-style: italic;
+}
+.fc-prose code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  background: var(--color-paper-deep);
+  border: 1px solid var(--color-rule-soft);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--color-ink);
+}
+.fc-prose pre {
+  background: var(--color-paper-deep);
+  border: 1px solid var(--color-rule);
+  border-radius: 6px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.55;
+}
+.fc-prose pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  font-size: inherit;
+}
+.fc-prose blockquote {
+  border-left: 2px solid var(--color-clay);
+  padding-left: 14px;
+  font-style: italic;
+  color: var(--color-ink-soft);
+  margin: 1em 0;
+}
+.fc-prose h1,
+.fc-prose h2,
+.fc-prose h3,
+.fc-prose h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--color-ink);
+  letter-spacing: -0.012em;
+  line-height: 1.25;
+  margin-top: 1.4em;
+}
+.fc-prose h1 { font-size: 22px; }
+.fc-prose h2 { font-size: 19px; }
+.fc-prose h3 { font-size: 17px; font-style: italic; font-weight: 500; }
+.fc-prose h4 { font-size: 15px; font-style: italic; }
+.fc-prose hr {
+  border: 0;
+  border-top: 1px solid var(--color-rule-soft);
+  margin: 1.2em 0;
+}
+.fc-prose table {
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 0.8em 0;
+}
+.fc-prose th,
+.fc-prose td {
+  border-bottom: 1px solid var(--color-rule-soft);
+  padding: 6px 12px 6px 0;
+  text-align: left;
+}
+.fc-prose th {
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-style: italic;
+  color: var(--color-ink-soft);
+  border-bottom: 1px solid var(--color-rule);
+}
+
+/* Drop cap：仅会话第一段（mockup 风格 — 56px clay 首字下沉）*/
+.fc-prose-first > p:first-child::first-letter {
+  font-family: var(--font-display);
+  font-size: 56px;
+  line-height: 0.88;
+  float: left;
+  padding: 4px 10px 0 0;
+  color: var(--color-clay);
+  font-weight: 500;
+}
+/* 首段后跟段落／列表，drop cap 浮动必须 clear，否则文字会爬到首字旁边 */
+.fc-prose-first > * + * {
+  clear: none;
 }

@@ -35,7 +35,10 @@ yarn-error.log*
 
 # flowcabal cache
 .flowcabal-project-cache/
-memory/
+# engine 运行时数据 —— 必须用前导斜杠限定为项目根的 memory/，
+# 否则 Tailwind v4（默认读 .gitignore 决定扫源）会跳过 src/app/memory/ 路由
+# 的源文件，导致那个页面所有新写的工具类不进 CSS。
+/memory/
 # vercel
 .vercel
 
