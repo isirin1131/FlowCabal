@@ -32,10 +32,9 @@ function canReference(ws: Workspace, currentNodeId: string, candidateId: string)
   return true
 }
 
-function AddMenu({ onPick, onClose, isSystem, ws, currentNodeId }: {
+function AddMenu({ onPick, onClose, ws, currentNodeId }: {
   onPick: (block: TextBlock) => void
   onClose: () => void
-  isSystem: boolean
   ws: Workspace
   currentNodeId: string
 }) {
@@ -101,17 +100,15 @@ function AddMenu({ onPick, onClose, isSystem, ws, currentNodeId }: {
             onPick({ kind: 'ref', nodeId })
             onClose()
           }}
-          onClose={() => setShowPicker(false)}
         />
       )}
     </div>
   )
 }
 
-function RefPicker({ candidates, onPick, onClose }: {
+function RefPicker({ candidates, onPick }: {
   candidates: Array<{ node: NodeDef; index: number; canRef: boolean }>
   onPick: (nodeId: string) => void
-  onClose: () => void
 }) {
   const selectable = candidates.filter(c => c.canRef)
   const [focusIdx, setFocusIdx] = useState(0)
@@ -146,7 +143,7 @@ function RefPicker({ candidates, onPick, onClose }: {
       <div className="px-3.5 py-1 font-mono text-[10.5px] text-ink-faint tracking-[0.08em] border-b border-rule-soft mb-1">
         — 可引用上游 —
       </div>
-      {candidates.map((c, i) => {
+      {candidates.map((c) => {
         const selectableIdx = selectable.indexOf(c)
         const focused = selectableIdx === focusIdx
         if (!c.canRef) {
@@ -294,7 +291,6 @@ export function EditorPanel({ nodeId }: { nodeId: string }) {
           </button>
           {addMenu?.isSystem && (
             <AddMenu
-              isSystem={true}
               ws={activeWorkspace}
               currentNodeId={nodeId}
               onPick={(block) => handleAdd(block, true)}
@@ -319,7 +315,6 @@ export function EditorPanel({ nodeId }: { nodeId: string }) {
           </button>
           {addMenu && !addMenu.isSystem && (
             <AddMenu
-              isSystem={false}
               ws={activeWorkspace}
               currentNodeId={nodeId}
               onPick={(block) => handleAdd(block, false)}
