@@ -19,7 +19,15 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }
       toastOptions={{
         classNames: {
-          toast: "cn-toast",
+          toast:
+            "!bg-paper !border !border-rule !shadow-paper !rounded-md " +
+            "!font-display !text-[14px] !text-ink",
+          title: "!text-ink",
+          description: "!text-ink-soft",
+          actionButton: "!text-clay",
+          cancelButton: "!text-ink-faint",
+          error: "!border-error !text-error",
+          success: "!border-clay !text-ink",
         },
       }}
       {...props}
