@@ -1,8 +1,5 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { FileText, ExternalLink, FolderOpen } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Spinner } from '@/components/ui/spinner'
 
 export default function ManuscriptsPage() {
   const [files, setFiles] = useState<string[] | null>(null)
@@ -41,64 +38,78 @@ export default function ManuscriptsPage() {
     }
   }
 
-  const buttonLabel = opening
-    ? '正在打开...'
+  const openLabel = opening
+    ? 'opening...'
     : editorName
-      ? `在 ${editorName} 中打开`
-      : '在编辑器中打开'
+      ? `open in ${editorName.toLowerCase()} ↗`
+      : 'open in editor ↗'
 
   return (
-    <div className="p-6 overflow-auto h-full">
-      <h1 className="text-2xl font-semibold mb-6">手稿</h1>
+    <div className="h-full overflow-y-auto bg-paper">
+      <div className="relative">
+        <div className="absolute top-6 right-8 z-10">
+          <button
+            type="button"
+            onClick={openInEditor}
+            disabled={opening}
+            className="font-mono text-[10.5px] text-ink-faint hover:text-clay transition-colors disabled:opacity-50 cursor-pointer tracking-[0.14em] lowercase"
+          >
+            {openLabel}
+          </button>
+        </div>
 
-      <div className="flex flex-col gap-6">
-        <div className="rounded-lg border bg-card p-6">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 mb-2">
-                <FolderOpen className="w-5 h-5 text-muted-foreground shrink-0" />
-                <h2 className="font-medium">memory/manuscripts/</h2>
+        <section className="pt-24 pb-20 px-6">
+          <div className="text-center mb-12 select-none">
+            <span className="font-mono text-[10.5px] text-ink-faint tracking-[0.18em] lowercase">
+              <span className="text-rule mr-[18px] tracking-[-1px]">— —</span>
+              manuscripts
+              <span className="text-rule ml-[18px] tracking-[-1px]">— —</span>
+            </span>
+          </div>
+
+          <div className="max-w-[720px] mx-auto">
+            <div className="bg-paper-deep border border-rule rounded-md">
+              <div className="px-4 py-2 border-b border-rule-soft">
+                <span className="font-mono text-[11px] text-ink-soft tracking-wide">
+                  memory/manuscripts/
+                </span>
               </div>
-              <p className="text-sm text-muted-foreground">
-                手稿目录，存放你的小说、剧本、世界观等参考材料。
-              </p>
-
-              {files === null ? (
-                <div className="flex items-center gap-2 mt-3">
-                  <Spinner className="size-3" />
-                  <span className="text-xs text-muted-foreground">加载文件列表...</span>
-                </div>
-              ) : files.length === 0 ? (
-                <p className="text-xs text-muted-foreground mt-3">
-                  暂无手稿文件。点击下方按钮在编辑器中新建。
-                </p>
-              ) : (
-                <div className="mt-3">
-                  <p className="text-xs text-muted-foreground mb-1">
-                    {files.length} 个文件：
-                  </p>
-                  <ul className="text-sm space-y-0.5">
-                    {files.map((f) => (
-                      <li key={f} className="flex items-center gap-1.5 text-muted-foreground">
-                        <FileText className="w-3.5 h-3.5 shrink-0" />
-                        <span className="truncate">{f}</span>
+              <div className="px-4 py-3">
+                {files === null ? (
+                  <div className="font-display italic text-[14px] text-ink-faint">
+                    — 加载文件列表… —
+                  </div>
+                ) : files.length === 0 ? (
+                  <div className="py-2 text-center font-display italic text-[14px] text-ink-soft">
+                    — 尚无手稿，到编辑器中新建 —
+                  </div>
+                ) : (
+                  <ul className="flex flex-col gap-1">
+                    {files.map(f => (
+                      <li key={f} className="flex items-baseline gap-3 py-1">
+                        <span className="text-clay" aria-hidden="true">·</span>
+                        <span className="font-display text-[15px] text-ink-soft">
+                          {f}
+                        </span>
                       </li>
                     ))}
                   </ul>
-                </div>
-              )}
+                )}
+              </div>
             </div>
 
-            <Button
-              onClick={openInEditor}
-              disabled={opening}
-              className="shrink-0"
-            >
-              <ExternalLink className="w-4 h-4" />
-              {buttonLabel}
-            </Button>
+            <div className="mt-8 text-center">
+              <p className="font-display italic text-[14.5px] text-ink-soft leading-[1.65]">
+                手稿目录，存放小说、剧本、世界观等参考材料。
+              </p>
+              {files !== null && files.length > 0 && (
+                <p className="mt-2 font-mono text-[10.5px] text-ink-faint tracking-[0.14em] lowercase">
+                  共 {files.length} 个文件
+                </p>
+              )}
+            </div>
           </div>
-        </div>
+        </section>
       </div>
     </div>
   )
