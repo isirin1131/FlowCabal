@@ -87,8 +87,6 @@ export function Header() {
       </div>
 
       <nav className="ml-auto flex items-center gap-[14px] font-body text-[13px] text-ink-soft">
-        <NavLink href="/outputs">outputs</NavLink>
-        <Sep />
         <NavLink href="/memory">memory</NavLink>
         <Sep />
         <NavLink href="/manuscripts">manuscripts</NavLink>

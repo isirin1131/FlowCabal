@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
 import { applyNodeChanges, applyEdgeChanges, addEdge, type Node, type Edge } from '@xyflow/react'
 import type { Workspace, NodeDef, TextBlock } from '@flowcabal/engine'
 import { recordToWorkspace, workspaceToRecord } from '@/lib/serialization'
@@ -13,7 +12,6 @@ type GuiState = {
   edges: Edge[]
   selectedNodeId: string | null
   floatingPanelOpen: boolean
-  pinnedOutputs: string[]
   isLoading: boolean
 } & {
   switchWorkspace: (id: string) => void
@@ -31,7 +29,6 @@ type GuiState = {
   onConnect: (connection: any) => void
   selectNode: (id: string | null) => void
   renameNode: (nodeId: string, label: string) => Promise<void>
-  togglePinOutput: (id: string) => void
 }
 
 const ROMAN: [number, string][] = [
@@ -39,7 +36,7 @@ const ROMAN: [number, string][] = [
   [100, 'C'], [90, 'XC'], [50, 'L'], [40, 'XL'],
   [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I'],
 ]
-function toRoman(n: number): string {
+export function toRoman(n: number): string {
   let result = ''
   for (const [value, numeral] of ROMAN) {
     while (n >= value) { result += numeral; n -= value }
@@ -334,67 +331,53 @@ class WorkspaceActions {
   }
 }
 
-export const useStore = create<GuiState>()(
-  persist((set, get) => {
-    const actions = new WorkspaceActions(set, get)
-    return {
-      workspaces: [], activeWorkspace: null, nodes: [], edges: [],
-      selectedNodeId: null, floatingPanelOpen: false, pinnedOutputs: [], isLoading: false,
+export const useStore = create<GuiState>()((set, get) => {
+  const actions = new WorkspaceActions(set, get)
+  return {
+    workspaces: [], activeWorkspace: null, nodes: [], edges: [],
+    selectedNodeId: null, floatingPanelOpen: false, isLoading: false,
 
-      switchWorkspace: (id: string) => actions.internal_switchWorkspace(id),
-      loadWorkspace: (id: string) => actions.internal_loadWorkspace(id),
-      saveActiveWorkspace: () => actions.internal_saveActiveWorkspace(),
-      runAll: () => actions.internal_runAll(),
-      createNode: (label: string) => actions.internal_createNode(label),
-      deleteNode: (nodeId: string) => actions.internal_deleteNode(nodeId),
-      createWorkspace: (name: string) => actions.internal_createWorkspace(name),
+    switchWorkspace: (id: string) => actions.internal_switchWorkspace(id),
+    loadWorkspace: (id: string) => actions.internal_loadWorkspace(id),
+    saveActiveWorkspace: () => actions.internal_saveActiveWorkspace(),
+    runAll: () => actions.internal_runAll(),
+    createNode: (label: string) => actions.internal_createNode(label),
+    deleteNode: (nodeId: string) => actions.internal_deleteNode(nodeId),
+    createWorkspace: (name: string) => actions.internal_createWorkspace(name),
 
-      renameNode: (nodeId: string, label: string) => actions.internal_renameNode(nodeId, label),
-      updateBlock: (nodeId: string, isSystem: boolean, index: number, block: TextBlock) =>
-        actions.internal_updateBlock(nodeId, isSystem, index, block),
-      addBlock: (nodeId: string, block: TextBlock, isSystem: boolean) =>
-        actions.internal_addBlock(nodeId, block, isSystem),
-      removeBlock: (nodeId: string, isSystem: boolean, index: number) =>
-        actions.internal_removeBlock(nodeId, isSystem, index),
+    renameNode: (nodeId: string, label: string) => actions.internal_renameNode(nodeId, label),
+    updateBlock: (nodeId: string, isSystem: boolean, index: number, block: TextBlock) =>
+      actions.internal_updateBlock(nodeId, isSystem, index, block),
+    addBlock: (nodeId: string, block: TextBlock, isSystem: boolean) =>
+      actions.internal_addBlock(nodeId, block, isSystem),
+    removeBlock: (nodeId: string, isSystem: boolean, index: number) =>
+      actions.internal_removeBlock(nodeId, isSystem, index),
 
-      onNodesChange: (c: any) => set((s: any) => ({ nodes: applyNodeChanges(c, s.nodes) })),
-      onEdgesChange: (c: any) => set((s: any) => ({ edges: applyEdgeChanges(c, s.edges) })),
-      onConnect: (c: any) => {
-        set((s: any) => ({ edges: addEdge({ ...c, type: 'default', animated: false }, s.edges) }))
-        const ws = get().activeWorkspace
-        if (!ws) return
-        fetch(`/api/workspaces/${ws.id}/blocks`, {
-          method: 'POST',
-          body: JSON.stringify({
-            nodeId: c.target, action: 'insert', isSystem: true,
-            block: { kind: 'ref', nodeId: c.source },
-          }),
-        }).then(r => r.json()).then(data => {
-          if (data.workspace) {
-            const updatedWs = recordToWorkspace(data.workspace)
-            set((s: any) => ({
-              workspaces: s.workspaces.map((w: Workspace) => w.id === updatedWs.id ? updatedWs : w),
-              activeWorkspace: updatedWs,
-            }))
-          }
-        }).catch(() => {
-          set((s: any) => ({ edges: s.edges.filter((e: any) => e.id !== `e-${c.source}-${c.target}`) }))
-          toast.error('连接失败')
-        })
-      },
-      selectNode: (id: string | null) => set({ selectedNodeId: id, floatingPanelOpen: id !== null }),
-
-      togglePinOutput: (id: string) => set((s: any) => {
-        const pinned = s.pinnedOutputs.includes(id)
-          ? s.pinnedOutputs.filter((i: string) => i !== id)
-          : [...s.pinnedOutputs, id]
-        return { pinnedOutputs: pinned }
-      }),
-    }
-  }, {
-    name: 'flowcabal-gui-storage',
-    partialize: (state: any) => ({
-      pinnedOutputs: state.pinnedOutputs,
-    }),
-  })
-)
+    onNodesChange: (c: any) => set((s: any) => ({ nodes: applyNodeChanges(c, s.nodes) })),
+    onEdgesChange: (c: any) => set((s: any) => ({ edges: applyEdgeChanges(c, s.edges) })),
+    onConnect: (c: any) => {
+      set((s: any) => ({ edges: addEdge({ ...c, type: 'default', animated: false }, s.edges) }))
+      const ws = get().activeWorkspace
+      if (!ws) return
+      fetch(`/api/workspaces/${ws.id}/blocks`, {
+        method: 'POST',
+        body: JSON.stringify({
+          nodeId: c.target, action: 'insert', isSystem: true,
+          block: { kind: 'ref', nodeId: c.source },
+        }),
+      }).then(r => r.json()).then(data => {
+        if (data.workspace) {
+          const updatedWs = recordToWorkspace(data.workspace)
+          set((s: any) => ({
+            workspaces: s.workspaces.map((w: Workspace) => w.id === updatedWs.id ? updatedWs : w),
+            activeWorkspace: updatedWs,
+          }))
+        }
+      }).catch(() => {
+        set((s: any) => ({ edges: s.edges.filter((e: any) => e.id !== `e-${c.source}-${c.target}`) }))
+        toast.error('连接失败')
+      })
+    },
+    selectNode: (id: string | null) => set({ selectedNodeId: id, floatingPanelOpen: id !== null }),
+  }
+})

@@ -4,7 +4,6 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { EditorPanel } from './EditorPanel'
 import { OutputsPanel } from './OutputsPanel'
-import { ConfigPanel } from './ConfigPanel'
 
 export function FloatingPanel({ nodeId, open, onOpenChange }: {
   nodeId: string | null
@@ -21,14 +20,12 @@ export function FloatingPanel({ nodeId, open, onOpenChange }: {
             <TabsList>
               <TabsTrigger value="editor">编辑器</TabsTrigger>
               <TabsTrigger value="outputs">输出</TabsTrigger>
-              <TabsTrigger value="config">配置</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
         <div className="flex-1 overflow-auto p-4">
           {tab === 'editor' && nodeId && <EditorPanel nodeId={nodeId} />}
           {tab === 'outputs' && <OutputsPanel />}
-          {tab === 'config' && <ConfigPanel />}
         </div>
       </DialogContent>
     </Dialog>
