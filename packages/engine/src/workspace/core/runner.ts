@@ -1,5 +1,5 @@
 import { Workspace, LlmConfig, TextBlock } from '../../types';
-import { generate } from '../../llm/generate.js';
+import { generate, createStream } from '../../llm/generate.js';
 import { todoList, calcStale } from './graph.js';
 import { getNode } from './node.js';
 import { runMemoryAgent } from '../../agent/memory-agent.js';
@@ -78,3 +78,53 @@ export async function runAll(
 
     return executed;
 }
+
+export type NodeEvent =
+  | { type: 'dag-start'; total: number; nodeIds: string[] }
+  | { type: 'node-start'; nodeId: string }
+  | { type: 'node-token'; nodeId: string; chunk: string }
+  | { type: 'node-complete'; nodeId: string; output: string }
+  | { type: 'node-error'; nodeId: string; message: string }
+  | { type: 'dag-done'; executed: string[] };
+
+export async function* runAllStream(
+    ws: Workspace,
+    config: LlmConfig,
+    rootDir: string,
+    abortSignal?: AbortSignal,
+): AsyncGenerator<NodeEvent> {
+    calcStale(ws);
+    const list = todoList(ws);
+    yield { type: 'dag-start', total: list.length, nodeIds: [...list] };
+
+    const executed: string[] = [];
+    for (const nodeId of list) {
+        const node = getNode(ws, nodeId);
+        if (!node) continue;
+
+        yield { type: 'node-start', nodeId };
+
+        const system = await resolvePrompt(ws, node.systemPrompt, rootDir, config);
+        const user = await resolvePrompt(ws, node.userPrompt, rootDir, config);
+
+        let accumulated = '';
+        try {
+            const stream = createStream(config, system, user, abortSignal);
+            for await (const chunk of stream.textStream) {
+                accumulated += chunk;
+                yield { type: 'node-token', nodeId, chunk };
+            }
+            ws.outputs.set(nodeId, accumulated);
+            ws.stale_nodes = ws.stale_nodes.filter(id => id !== nodeId);
+            ws.target_nodes = ws.target_nodes.filter(id => id !== nodeId);
+            executed.push(nodeId);
+            yield { type: 'node-complete', nodeId, output: accumulated };
+        } catch (err) {
+            yield { type: 'node-error', nodeId, message: (err as Error).message };
+            throw err;
+        }
+    }
+
+    yield { type: 'dag-done', executed };
+}
+
