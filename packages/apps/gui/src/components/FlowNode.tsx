@@ -170,6 +170,7 @@ function estimateWords(text: string): number {
 
 function areEqual(prev: NodeProps<FlowNodeType>, next: NodeProps<FlowNodeType>) {
   return (
+    prev.id === next.id &&
     prev.data.label === next.data.label &&
     prev.data.systemPrompt?.length === next.data.systemPrompt?.length &&
     prev.data.userPrompt?.length === next.data.userPrompt?.length &&
