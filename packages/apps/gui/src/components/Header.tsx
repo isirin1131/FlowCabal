@@ -60,9 +60,7 @@ export function Header() {
           <SelectTrigger
             className="!h-auto !border-0 !bg-transparent !p-0 !shadow-none !ring-0 hover:!bg-transparent focus:!ring-0 focus-visible:!outline-none gap-1.5 font-display text-[16px] italic text-ink !w-auto"
           >
-            <SelectValue placeholder="未选择 workspace">
-              {activeWorkspace?.name}
-            </SelectValue>
+            <SelectValue placeholder="未选择 workspace" />
           </SelectTrigger>
           <SelectContent
             align="start"
