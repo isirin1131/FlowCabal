@@ -136,7 +136,6 @@ function CanvasInner() {
   const edges = useStore((s) => s.edges)
   const onNodesChange = useStore((s) => s.onNodesChange)
   const onEdgesChange = useStore((s) => s.onEdgesChange)
-  const onConnect = useStore((s) => s.onConnect)
   const selectNode = useStore((s) => s.selectNode)
   const createNode = useStore((s) => s.createNode)
 
@@ -174,7 +173,6 @@ function CanvasInner() {
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
-        onConnect={onConnect}
         onNodeClick={onNodeClick}
         onPaneClick={onPaneClick}
         onNodeContextMenu={onNodeContextMenu}

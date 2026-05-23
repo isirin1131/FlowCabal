@@ -1,6 +1,6 @@
 import { create } from 'zustand'
-import { applyNodeChanges, applyEdgeChanges, addEdge, type Node, type Edge } from '@xyflow/react'
-import type { Workspace, NodeDef, TextBlock } from '@flowcabal/engine'
+import { applyNodeChanges, applyEdgeChanges, type Node, type Edge } from '@xyflow/react'
+import type { Workspace, NodeDef, TextBlock, NodeEvent } from '@flowcabal/engine'
 import { recordToWorkspace, workspaceToRecord } from '@/lib/serialization'
 import { getLayoutedElements } from '@/lib/engine-to-flow'
 import { toast } from 'sonner'
@@ -11,8 +11,12 @@ type GuiState = {
   nodes: Node[]
   edges: Edge[]
   selectedNodeId: string | null
+  selectedNodeIds: Set<string>
   floatingPanelOpen: boolean
   isLoading: boolean
+  runningOutput: Map<string, string>
+  runningNodeId: string | null
+  dagProgress: { current: number; total: number } | null
 } & {
   switchWorkspace: (id: string) => void
   loadWorkspace: (id: string) => Promise<void>
@@ -21,13 +25,14 @@ type GuiState = {
   createNode: (label: string) => Promise<void>
   deleteNode: (nodeId: string) => Promise<void>
   createWorkspace: (name: string) => Promise<void>
+  addToTarget: (nodeId: string) => Promise<void>
   updateBlock: (nodeId: string, isSystem: boolean, index: number, block: TextBlock) => Promise<void>
   addBlock: (nodeId: string, block: TextBlock, isSystem: boolean) => Promise<void>
   removeBlock: (nodeId: string, isSystem: boolean, index: number) => Promise<void>
   onNodesChange: (changes: any) => void
   onEdgesChange: (changes: any) => void
-  onConnect: (connection: any) => void
   selectNode: (id: string | null) => void
+  setSelectedNodeIds: (ids: Set<string>) => void
   renameNode: (nodeId: string, label: string) => Promise<void>
 }
 
@@ -43,6 +48,21 @@ export function toRoman(n: number): string {
   }
   return result
 }
+
+function todoListCount(ws: Workspace): number {
+  const todo = new Set<string>()
+  const visit = (id: string) => {
+    if (todo.has(id)) return
+    todo.add(id)
+    for (const dep of ws.upstream.get(id) || []) {
+      if (!ws.outputs.has(dep)) visit(dep)
+    }
+  }
+  ws.target_nodes.forEach(visit)
+  return todo.size
+}
+
+export { todoListCount }
 
 function refLabelsForNode(ws: Workspace, nodeId: string): string[] {
   const sources = ws.upstream.get(nodeId) || []
@@ -146,37 +166,57 @@ class WorkspaceActions {
   internal_runAll = async () => {
     const ws = this.#get().activeWorkspace
     if (!ws) return
-    this.#set((s: any) => ({
-      nodes: s.nodes.map((n: any) => ({ ...n, data: { ...n.data, status: 'pending' } }))
-    }))
+
+    this.#set({
+      runningOutput: new Map(),
+      runningNodeId: null,
+      dagProgress: null,
+    })
+
     try {
       const res = await fetch('/api/engine/run-all', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ workspaceId: ws.id }),
       })
-      const data = await res.json()
-      if (!data.workspace) {
-        toast.warning('引擎未返回结果')
+
+      if (!res.ok || !res.body) {
+        const errText = await res.text().catch(() => 'unknown error')
+        toast.error(`运行失败：${errText}`)
         return
       }
-      const updatedWs = recordToWorkspace(data.workspace)
-      this.#set((s: any) => ({
-        workspaces: s.workspaces.map((w: Workspace) => w.id === updatedWs.id ? updatedWs : w),
-        activeWorkspace: updatedWs,
-        nodes: s.nodes.map((n: any) => ({
-          ...n,
-          data: {
-            ...n.data,
-            status: updatedWs.outputs.has(n.id) ? 'completed' : 'pending',
-            output: updatedWs.outputs.get(n.id) ?? null,
-          },
-        })),
-      }))
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+
+        for (const line of lines) {
+          if (!line.trim()) continue
+          try {
+            this.#handleNodeEvent(JSON.parse(line) as NodeEvent)
+          } catch {
+            // 跨 chunk 解析失败的行：忽略，下一轮 buffer 接住
+          }
+        }
+      }
+
+      await this.internal_loadWorkspace(ws.id)
     } catch {
-      this.#set((s: any) => ({
-        nodes: s.nodes.map((n: any) => ({ ...n, data: { ...n.data, status: 'error' } }))
-      }))
       toast.error('运行失败')
+    } finally {
+      this.#set({
+        runningOutput: new Map(),
+        runningNodeId: null,
+        dagProgress: null,
+      })
     }
   }
 
@@ -317,6 +357,96 @@ class WorkspaceActions {
     } catch {}
   }
 
+  #setNodeStatus = (nodeId: string, status: string) => {
+    this.#set((s: any) => ({
+      nodes: s.nodes.map((n: any) =>
+        n.id === nodeId ? { ...n, data: { ...n.data, status } } : n
+      ),
+    }))
+  }
+
+  #applyNodeComplete = (nodeId: string, output: string) => {
+    this.#set((s: any) => {
+      const ws = s.activeWorkspace
+      if (!ws) return s
+      const newOutputs = new Map(ws.outputs)
+      newOutputs.set(nodeId, output)
+      const newTarget = ws.target_nodes.filter((id: string) => id !== nodeId)
+      const newStale = ws.stale_nodes.filter((id: string) => id !== nodeId)
+      const newWs: Workspace = { ...ws, outputs: newOutputs, target_nodes: newTarget, stale_nodes: newStale }
+      return {
+        activeWorkspace: newWs,
+        workspaces: s.workspaces.map((w: Workspace) => w.id === newWs.id ? newWs : w),
+        nodes: s.nodes.map((n: any) =>
+          n.id === nodeId
+            ? { ...n, data: { ...n.data, status: 'completed', output } }
+            : n
+        ),
+      }
+    })
+  }
+
+  #handleNodeEvent = (event: NodeEvent) => {
+    switch (event.type) {
+      case 'dag-start':
+        this.#set({ dagProgress: { current: 0, total: event.total } })
+        break
+      case 'node-start':
+        this.#set({ runningNodeId: event.nodeId })
+        this.#setNodeStatus(event.nodeId, 'running')
+        break
+      case 'node-token':
+        this.#set((s: any) => {
+          const map = new Map(s.runningOutput)
+          map.set(event.nodeId, (map.get(event.nodeId) ?? '') + event.chunk)
+          return { runningOutput: map }
+        })
+        break
+      case 'node-complete':
+        this.#set((s: any) => {
+          const map = new Map(s.runningOutput)
+          map.delete(event.nodeId)
+          const dp = s.dagProgress
+          return {
+            runningOutput: map,
+            dagProgress: dp ? { ...dp, current: dp.current + 1 } : null,
+          }
+        })
+        this.#applyNodeComplete(event.nodeId, event.output)
+        break
+      case 'node-error':
+        // 本期不接 UI（无 runtimeErrors map），下期接 store.runtimeErrors
+        console.error(`Node ${event.nodeId} error:`, event.message)
+        break
+      case 'dag-done':
+        this.#set({ runningNodeId: null })
+        break
+    }
+  }
+
+  internal_addToTarget = async (nodeId: string) => {
+    const ws = this.#get().activeWorkspace
+    if (!ws) return
+    try {
+      const res = await fetch(`/api/workspaces/${ws.id}/target`, {
+        method: 'POST',
+        body: JSON.stringify({ nodeId }),
+      })
+      const data = await res.json()
+      if (data.workspace) {
+        const updatedWs = recordToWorkspace(data.workspace)
+        this.#set((s: any) => ({
+          workspaces: s.workspaces.map((w: Workspace) => w.id === updatedWs.id ? updatedWs : w),
+          activeWorkspace: updatedWs,
+          nodes: s.nodes.map((n: any) => syncNodeDataFromWorkspace(n, updatedWs)),
+        }))
+        toast.success('已加入运行目标')
+      }
+    } catch {
+      toast.error('操作失败')
+    }
+  }
+
   internal_removeBlock = async (nodeId: string, isSystem: boolean, index: number) => {
     const ws = this.#get().activeWorkspace
     if (!ws) return
@@ -335,7 +465,8 @@ export const useStore = create<GuiState>()((set, get) => {
   const actions = new WorkspaceActions(set, get)
   return {
     workspaces: [], activeWorkspace: null, nodes: [], edges: [],
-    selectedNodeId: null, floatingPanelOpen: false, isLoading: false,
+    selectedNodeId: null, selectedNodeIds: new Set(), floatingPanelOpen: false, isLoading: false,
+    runningOutput: new Map(), runningNodeId: null, dagProgress: null,
 
     switchWorkspace: (id: string) => actions.internal_switchWorkspace(id),
     loadWorkspace: (id: string) => actions.internal_loadWorkspace(id),
@@ -344,6 +475,7 @@ export const useStore = create<GuiState>()((set, get) => {
     createNode: (label: string) => actions.internal_createNode(label),
     deleteNode: (nodeId: string) => actions.internal_deleteNode(nodeId),
     createWorkspace: (name: string) => actions.internal_createWorkspace(name),
+    addToTarget: (nodeId: string) => actions.internal_addToTarget(nodeId),
 
     renameNode: (nodeId: string, label: string) => actions.internal_renameNode(nodeId, label),
     updateBlock: (nodeId: string, isSystem: boolean, index: number, block: TextBlock) =>
@@ -355,29 +487,15 @@ export const useStore = create<GuiState>()((set, get) => {
 
     onNodesChange: (c: any) => set((s: any) => ({ nodes: applyNodeChanges(c, s.nodes) })),
     onEdgesChange: (c: any) => set((s: any) => ({ edges: applyEdgeChanges(c, s.edges) })),
-    onConnect: (c: any) => {
-      set((s: any) => ({ edges: addEdge({ ...c, type: 'default', animated: false }, s.edges) }))
-      const ws = get().activeWorkspace
-      if (!ws) return
-      fetch(`/api/workspaces/${ws.id}/blocks`, {
-        method: 'POST',
-        body: JSON.stringify({
-          nodeId: c.target, action: 'insert', isSystem: true,
-          block: { kind: 'ref', nodeId: c.source },
-        }),
-      }).then(r => r.json()).then(data => {
-        if (data.workspace) {
-          const updatedWs = recordToWorkspace(data.workspace)
-          set((s: any) => ({
-            workspaces: s.workspaces.map((w: Workspace) => w.id === updatedWs.id ? updatedWs : w),
-            activeWorkspace: updatedWs,
-          }))
-        }
-      }).catch(() => {
-        set((s: any) => ({ edges: s.edges.filter((e: any) => e.id !== `e-${c.source}-${c.target}`) }))
-        toast.error('连接失败')
-      })
-    },
-    selectNode: (id: string | null) => set({ selectedNodeId: id, floatingPanelOpen: id !== null }),
+    selectNode: (id: string | null) => set({
+      selectedNodeId: id,
+      selectedNodeIds: id ? new Set([id]) : new Set(),
+      floatingPanelOpen: id !== null,
+    }),
+    setSelectedNodeIds: (ids: Set<string>) => set({
+      selectedNodeIds: ids,
+      selectedNodeId: ids.size === 1 ? [...ids][0] : null,
+      floatingPanelOpen: ids.size === 1,
+    }),
   }
 })
