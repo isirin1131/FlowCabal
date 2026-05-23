@@ -198,12 +198,12 @@ class WorkspaceActions {
         const updatedWs = recordToWorkspace(data.workspace)
         const existing = this.#get().workspaces
         const flow = workspaceToFlowData(updatedWs)
-        this.#set((s: any) => ({
+        this.#set({
           workspaces: existing.map((w: Workspace) => w.id === updatedWs.id ? updatedWs : w),
           activeWorkspace: updatedWs,
           nodes: flow.nodes,
           edges: flow.edges,
-        }))
+        })
         toast.success(`节点 "${label}" 已创建`)
       }
     } catch {
