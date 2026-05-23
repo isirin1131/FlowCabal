@@ -78,8 +78,7 @@ function ContextMenuPanel({ x, y, nodeId, selectedIds, onClose }: {
         }})
       }
     } else {
-      // 单选节点（如果右键的节点不在选中集，先单选它）
-      if (!selectedIds.has(nodeId)) selectNode(nodeId)
+      // 单选节点：右键时已经在 onNodeContextMenu 里同步过选中状态
       const inTarget = activeWorkspace?.target_nodes.includes(nodeId) ?? false
       items = [
         { label: '重命名', onClick: () => {
@@ -211,8 +210,10 @@ function CanvasInner() {
 
   const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => {
     event.preventDefault()
+    // 如果右键的节点不在选中集，先单选它（避免在 ContextMenuPanel 渲染中 setState）
+    if (!selectedNodeIds.has(node.id)) selectNode(node.id)
     setContextMenu({ x: event.clientX - 10, y: event.clientY - 10, nodeId: node.id })
-  }, [])
+  }, [selectedNodeIds, selectNode])
 
   const onPaneContextMenu = useCallback((event: React.MouseEvent | MouseEvent) => {
     event.preventDefault()
