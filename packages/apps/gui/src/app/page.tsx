@@ -2,6 +2,7 @@
 import dynamic from 'next/dynamic'
 import { useStore } from '@/store/useStore'
 import { FloatingPanel } from '@/components/FloatingPanel'
+import { RunButton } from '@/components/RunButton'
 import { Skeleton } from '@/components/ui/skeleton'
 
 const Canvas = dynamic(() => import('@/components/Canvas'), {
@@ -21,6 +22,7 @@ export default function Home() {
   return (
     <>
       <Canvas />
+      <RunButton />
       <FloatingPanel
         nodeId={selectedNodeId}
         open={floatingPanelOpen}

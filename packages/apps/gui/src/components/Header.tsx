@@ -23,17 +23,12 @@ export function Header() {
   const activeWorkspace = useStore((s) => s.activeWorkspace)
   const switchWorkspace = useStore((s) => s.switchWorkspace)
   const createWorkspace = useStore((s) => s.createWorkspace)
-  const runAll = useStore((s) => s.runAll)
-  const isLoading = useStore((s) => s.isLoading)
-  const nodes = useStore((s) => s.nodes)
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   const handleCreateWorkspace = useCallback(() => {
     const name = `Workspace ${workspaces.length + 1}`
     createWorkspace(name)
   }, [createWorkspace, workspaces.length])
-
-  const canRun = !isLoading && !!activeWorkspace && nodes.length > 0
 
   return (
     <header className="h-16 border-b border-rule flex items-center px-7 gap-7 shrink-0 bg-paper relative z-10">
@@ -116,16 +111,6 @@ export function Header() {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-
-        <button
-          type="button"
-          onClick={() => canRun && runAll()}
-          disabled={!canRun}
-          className="font-display text-[14px] text-clay border-b border-clay pb-[2px] ml-2 disabled:opacity-40 disabled:cursor-not-allowed hover:text-clay-deep hover:border-clay-deep transition-colors duration-200"
-          style={{ letterSpacing: '0.02em' }}
-        >
-          {isLoading ? '正在拟稿…' : '付印'}
-        </button>
       </nav>
 
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
