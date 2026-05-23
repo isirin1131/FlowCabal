@@ -94,7 +94,7 @@ function workspaceToFlowData(ws: Workspace) {
         id: `e-${sourceId}-${targetId}`,
         source: sourceId,
         target: targetId,
-        type: 'default',
+        type: 'custom',
         animated: false,
       })
     }
