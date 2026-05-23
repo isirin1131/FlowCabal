@@ -4,12 +4,8 @@ import { useState, useEffect } from 'react'
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from '@/components/ui/dialog'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -17,11 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Badge } from '@/components/ui/badge'
 import type { EditorDef, EditorConfigData } from '@/lib/editors'
 import type { LlmConfig } from '@flowcabal/engine'
-import { Pencil, Trash2, Plus, Eye, EyeOff, ChevronDown, ChevronRight } from 'lucide-react'
 
 interface Props {
   open: boolean
@@ -88,10 +81,35 @@ function formToConfig(data: LlmFormData): LlmConfig {
   return config
 }
 
-export function SettingsDialog({ open, onOpenChange }: Props) {
-  const [tab, setTab] = useState('editor')
+function FieldLabel({ children, muted }: { children: React.ReactNode; muted?: boolean }) {
+  return (
+    <label
+      className={[
+        'block font-mono text-[10.5px] tracking-[0.14em] lowercase mb-1.5',
+        muted ? 'text-ink-faint/80' : 'text-ink-faint',
+      ].join(' ')}
+    >
+      {children}
+    </label>
+  )
+}
 
-  // ── Editor state ──
+const inputCls =
+  'block w-full bg-paper-deep border border-rule rounded-md px-3 py-2 ' +
+  'font-mono text-[13px] text-ink ' +
+  'outline-none focus:border-clay transition-colors ' +
+  'disabled:opacity-60 placeholder:text-ink-faint'
+
+const textBtnClay =
+  'font-display italic text-[14px] text-clay hover:text-clay-deep transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
+const textBtnInk =
+  'font-display italic text-[14px] text-ink-soft hover:text-ink transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
+const textBtnError =
+  'font-display italic text-[14px] text-ink-faint hover:text-error transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed'
+
+export function SettingsDialog({ open, onOpenChange }: Props) {
+  const [tab, setTab] = useState<'editor' | 'llm'>('editor')
+
   const [builtins, setBuiltins] = useState<EditorDef[]>([])
   const [editorConfig, setEditorConfig] = useState<EditorConfigData | null>(null)
   const [editorLoading, setEditorLoading] = useState(true)
@@ -129,7 +147,6 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
     }
   }
 
-  // ── LLM state ──
   const [llmConfigs, setLlmConfigs] = useState<Record<string, LlmConfig> | null>(null)
   const [llmLoading, setLlmLoading] = useState(true)
   const [llmMode, setLlmMode] = useState<'list' | 'add' | 'edit'>('list')
@@ -167,8 +184,6 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
   const allEditors = editorConfig
     ? [...builtins, ...editorConfig.custom]
     : builtins
-
-  // ── LLM actions ──
 
   const startAdd = () => {
     setLlmForm(EMPTY_FORM)
@@ -238,8 +253,6 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
     }
   }
 
-  // ── Helpers ──
-
   const passwordValue = llmMode === 'edit' && !showPasswordEdited
     ? (llmForm.apiKey ? '••••••••' : '')
     : llmForm.apiKey
@@ -248,38 +261,82 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg!">
-        <DialogHeader>
-          <DialogTitle>设置</DialogTitle>
-        </DialogHeader>
+      <DialogContent
+        className="bg-paper border border-rule shadow-lift rounded-md max-w-[720px] sm:max-w-[720px]! w-[92vw] max-h-[82vh] p-0 gap-0 flex flex-col [&>button:last-child]:hidden"
+      >
+        <DialogTitle className="sr-only">设置</DialogTitle>
 
-        <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="w-full">
-            <TabsTrigger value="editor" className="flex-1">编辑器</TabsTrigger>
-            <TabsTrigger value="llm" className="flex-1">LLM 配置</TabsTrigger>
-          </TabsList>
+        {/* 顶部 chrome */}
+        <div className="shrink-0 px-7 py-4 border-b border-rule-soft relative">
+          <div className="text-center select-none">
+            <span className="font-mono text-[10.5px] text-ink-faint tracking-[0.18em] lowercase">
+              <span className="text-rule mr-[18px] tracking-[-1px]">— —</span>
+              settings
+              <span className="text-rule ml-[18px] tracking-[-1px]">— —</span>
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            className="absolute right-6 top-1/2 -translate-y-1/2 font-display text-[18px] text-ink-faint hover:text-clay transition-colors leading-none cursor-pointer"
+            aria-label="关闭"
+          >
+            ×
+          </button>
+        </div>
 
-          {/* ── Editor Tab ── */}
-          <TabsContent value="editor">
-            <div className="py-4 min-h-[120px]">
+        {/* tab toggle */}
+        <div className="shrink-0 px-7 py-3 border-b border-rule-soft flex items-baseline gap-3 font-body text-[13px]">
+          <button
+            type="button"
+            onClick={() => setTab('editor')}
+            className={[
+              'relative pb-[2px] cursor-pointer transition-colors',
+              tab === 'editor'
+                ? 'text-ink after:content-[\'\'] after:absolute after:left-0 after:right-0 after:-bottom-px after:h-px after:bg-clay'
+                : 'text-ink-faint hover:text-ink',
+            ].join(' ')}
+          >
+            editor
+          </button>
+          <span className="text-rule select-none">·</span>
+          <button
+            type="button"
+            onClick={() => setTab('llm')}
+            className={[
+              'relative pb-[2px] cursor-pointer transition-colors',
+              tab === 'llm'
+                ? 'text-ink after:content-[\'\'] after:absolute after:left-0 after:right-0 after:-bottom-px after:h-px after:bg-clay'
+                : 'text-ink-faint hover:text-ink',
+            ].join(' ')}
+          >
+            llm
+          </button>
+        </div>
+
+        {/* 内容区 */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-7 py-6">
+          {tab === 'editor' && (
+            <div>
+              <div className="mb-2 font-display italic text-[16px] text-ink">默认编辑器</div>
+              <p className="font-body text-[13px] text-ink-soft mb-5 leading-[1.55]">
+                在本地打开文件时使用的编辑器。
+              </p>
               {editorLoading ? (
-                <div className="text-sm text-muted-foreground">加载中...</div>
+                <div className="font-display italic text-[14px] text-ink-faint">— 加载中… —</div>
               ) : (
-                <div className="flex flex-col gap-2">
-                  <label className="text-sm font-medium">默认编辑器</label>
-                  <p className="text-xs text-muted-foreground">
-                    在本地打开文件时使用的编辑器
-                  </p>
+                <>
+                  <FieldLabel>当前默认</FieldLabel>
                   <Select
                     value={editorConfig?.default || 'vscode'}
                     onValueChange={(value) =>
                       setEditorConfig(prev => prev ? { ...prev, default: value } : null)
                     }
                   >
-                    <SelectTrigger className="h-9 w-full">
+                    <SelectTrigger className="!h-auto bg-paper-deep border border-rule rounded-md px-3 py-2 font-mono text-[13px] text-ink !ring-0 focus:border-clay">
                       <SelectValue placeholder="选择编辑器" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="bg-paper border-rule font-mono text-[13px]">
                       {allEditors.map((editor) => (
                         <SelectItem key={editor.id} value={editor.id}>
                           {editor.name}
@@ -287,103 +344,124 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
+
+                  <div className="mt-6 flex justify-end">
+                    <button
+                      type="button"
+                      onClick={saveEditorConfig}
+                      disabled={editorSaving}
+                      className={textBtnClay}
+                    >
+                      {editorSaving ? '保存中…' : '保存 →'}
+                    </button>
+                  </div>
+                </>
               )}
             </div>
-          </TabsContent>
+          )}
 
-          {/* ── LLM Config Tab ── */}
-          <TabsContent value="llm">
-            <div className="py-2 min-h-[120px]">
+          {tab === 'llm' && (
+            <div>
               {llmMode === 'list' ? (
-                <div className="flex flex-col gap-2">
+                <>
+                  <div className="mb-2 font-display italic text-[16px] text-ink">LLM 配置</div>
+                  <p className="font-body text-[13px] text-ink-soft mb-5 leading-[1.55]">
+                    命名为 <span className="font-mono text-[12px]">default</span> 的配置将作为默认 LLM。
+                  </p>
+
                   {llmLoading ? (
-                    <div className="text-sm text-muted-foreground py-4">加载中...</div>
+                    <div className="font-display italic text-[14px] text-ink-faint">— 加载中… —</div>
                   ) : !llmConfigs || Object.keys(llmConfigs).length === 0 ? (
-                    <div className="text-sm text-muted-foreground py-4">暂无 LLM 配置</div>
+                    <div className="text-center py-6 font-display italic text-[14px] text-ink-soft">
+                      — 暂无 LLM 配置 —
+                    </div>
                   ) : (
-                    <div className="divide-y border rounded-lg overflow-hidden">
+                    <ul className="flex flex-col">
                       {Object.entries(llmConfigs).map(([name, cfg]) => (
-                        <div
+                        <li
                           key={name}
-                          className="flex items-center gap-2 px-3 py-2 text-sm bg-card/50"
+                          className="px-2 py-3 border-b border-rule-soft last:border-b-0 flex items-baseline gap-3"
                         >
-                          <span className="font-medium min-w-0 truncate">{name}</span>
-                          {name === 'default' && (
-                            <Badge variant="secondary" className="shrink-0 text-[10px] h-4 px-1.5">
-                              默认
-                            </Badge>
-                          )}
-                          <span className="text-muted-foreground text-xs shrink-0">
-                            {PROVIDER_LABELS[cfg.provider] || cfg.provider}
+                          <span className="font-display text-[14.5px] text-ink shrink-0">
+                            {name}
                           </span>
-                          <span className="text-muted-foreground/70 text-xs min-w-0 truncate flex-1">
+                          {name === 'default' && (
+                            <span className="font-display italic text-[12.5px] shrink-0">
+                              <span className="text-clay">〔</span>
+                              <span className="text-ink-soft mx-0.5">default</span>
+                              <span className="text-clay">〕</span>
+                            </span>
+                          )}
+                          <span className="font-display italic text-[12.5px] shrink-0">
+                            <span className="text-clay">〔</span>
+                            <span className="text-ink-soft mx-0.5">
+                              {PROVIDER_LABELS[cfg.provider] || cfg.provider}
+                            </span>
+                            <span className="text-clay">〕</span>
+                          </span>
+                          <span className="font-mono text-[11px] text-ink-faint truncate flex-1 min-w-0">
                             {cfg.model}
                           </span>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
+                          <button
+                            type="button"
                             onClick={() => startEdit(name)}
-                            title="编辑"
+                            className={`${textBtnInk} shrink-0`}
                           >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
+                            编辑
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => deleteLlmConfig(name)}
                             disabled={llmDeleting === name}
-                            title="删除"
+                            className={`${textBtnError} shrink-0`}
                           >
-                            <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                          </Button>
-                        </div>
+                            {llmDeleting === name ? '删除中…' : '删除'}
+                          </button>
+                        </li>
                       ))}
-                    </div>
+                    </ul>
                   )}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="self-start mt-2"
-                    onClick={startAdd}
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    添加配置
-                  </Button>
-                </div>
+
+                  <div className="mt-5">
+                    <button type="button" onClick={startAdd} className={textBtnClay}>
+                      + 添加配置
+                    </button>
+                  </div>
+                </>
               ) : (
-                <div className="flex flex-col gap-3">
-                  <div className="text-sm font-medium">
+                <div className="flex flex-col gap-5">
+                  <div className="font-display italic text-[16px] text-ink">
                     {llmMode === 'add' ? '添加 LLM 配置' : `编辑 "${llmEditingName}"`}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1">
-                      <label className="text-xs font-medium">名称</label>
-                      <Input
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="col-span-2 sm:col-span-1">
+                      <FieldLabel>名称</FieldLabel>
+                      <input
+                        type="text"
                         value={llmForm.name}
                         onChange={e => setLlmForm(p => ({ ...p, name: e.target.value }))}
                         disabled={llmMode === 'edit'}
                         placeholder="如 default"
-                        className="h-8 text-sm"
+                        className={inputCls}
                       />
                       {llmMode === 'add' && (
-                        <p className="text-[10px] text-muted-foreground">
-                          命名为 &quot;default&quot; 即为默认配置
+                        <p className="mt-1.5 font-mono text-[10.5px] text-ink-faint tracking-wide lowercase">
+                          命名为 default 即为默认
                         </p>
                       )}
                     </div>
 
-                    <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1">
-                      <label className="text-xs font-medium">提供商</label>
+                    <div className="col-span-2 sm:col-span-1">
+                      <FieldLabel>提供商</FieldLabel>
                       <Select
                         value={llmForm.provider}
                         onValueChange={v => setLlmForm(p => ({ ...p, provider: v }))}
                       >
-                        <SelectTrigger className="h-8 text-sm">
+                        <SelectTrigger className="!h-auto bg-paper-deep border border-rule rounded-md px-3 py-2 font-mono text-[13px] text-ink !ring-0 focus:border-clay">
                           <SelectValue />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="bg-paper border-rule font-mono text-[13px]">
                           {PROVIDER_OPTIONS.map(o => (
                             <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
                           ))}
@@ -392,21 +470,22 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
                     </div>
 
                     {llmForm.provider === 'openai-compatible' && (
-                      <div className="flex flex-col gap-1.5 col-span-2">
-                        <label className="text-xs font-medium">Base URL</label>
-                        <Input
+                      <div className="col-span-2">
+                        <FieldLabel>Base URL</FieldLabel>
+                        <input
+                          type="text"
                           value={llmForm.baseURL}
                           onChange={e => setLlmForm(p => ({ ...p, baseURL: e.target.value }))}
                           placeholder="如 https://api.deepseek.com/v1"
-                          className="h-8 text-sm"
+                          className={inputCls}
                         />
                       </div>
                     )}
 
-                    <div className="flex flex-col gap-1.5 col-span-2">
-                      <label className="text-xs font-medium">API Key</label>
+                    <div className="col-span-2">
+                      <FieldLabel>API Key</FieldLabel>
                       <div className="relative">
-                        <Input
+                        <input
                           type={showPassword ? 'text' : 'password'}
                           value={passwordValue}
                           onChange={e => {
@@ -414,31 +493,32 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
                             if (llmMode === 'edit') setShowPasswordEdited(true)
                           }}
                           placeholder="sk-..."
-                          className="h-8 text-sm pr-8"
+                          className={`${inputCls} pr-16`}
                         />
                         <button
                           type="button"
                           onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-[11px] text-ink-faint hover:text-clay transition-colors tracking-wide cursor-pointer"
                         >
-                          {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          {showPassword ? '隐藏' : '显示'}
                         </button>
                       </div>
                     </div>
 
-                    <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1">
-                      <label className="text-xs font-medium">模型</label>
-                      <Input
+                    <div className="col-span-2 sm:col-span-1">
+                      <FieldLabel>模型</FieldLabel>
+                      <input
+                        type="text"
                         value={llmForm.model}
                         onChange={e => setLlmForm(p => ({ ...p, model: e.target.value }))}
                         placeholder="如 gpt-4o"
-                        className="h-8 text-sm"
+                        className={inputCls}
                       />
                     </div>
 
-                    <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1">
-                      <label className="text-xs font-medium text-muted-foreground">温度</label>
-                      <Input
+                    <div className="col-span-2 sm:col-span-1">
+                      <FieldLabel muted>温度</FieldLabel>
+                      <input
                         type="number"
                         min="0"
                         max="2"
@@ -446,39 +526,37 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
                         value={llmForm.temperature}
                         onChange={e => setLlmForm(p => ({ ...p, temperature: e.target.value }))}
                         placeholder="0.7"
-                        className="h-8 text-sm"
+                        className={inputCls}
                       />
                     </div>
 
-                    <div className="flex flex-col gap-1.5 col-span-2 sm:col-span-1">
-                      <label className="text-xs font-medium text-muted-foreground">Max Tokens</label>
-                      <Input
+                    <div className="col-span-2 sm:col-span-1">
+                      <FieldLabel muted>Max Tokens</FieldLabel>
+                      <input
                         type="number"
                         min="1"
                         step="1"
                         value={llmForm.maxTokens}
                         onChange={e => setLlmForm(p => ({ ...p, maxTokens: e.target.value }))}
                         placeholder="4096"
-                        className="h-8 text-sm"
+                        className={inputCls}
                       />
                     </div>
                   </div>
 
-                  {/* Advanced options */}
                   <button
                     type="button"
                     onClick={() => setShowAdvanced(!showAdvanced)}
-                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors -ml-1"
+                    className="self-start font-mono text-[11px] text-ink-faint hover:text-ink transition-colors tracking-wide lowercase cursor-pointer"
                   >
-                    {showAdvanced ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                    高级选项
+                    {showAdvanced ? '▾ 高级参数' : '▸ 高级参数'}
                   </button>
 
                   {showAdvanced && (
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-medium text-muted-foreground">Top P</label>
-                        <Input
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <FieldLabel muted>Top P</FieldLabel>
+                        <input
                           type="number"
                           min="0"
                           max="1"
@@ -486,12 +564,12 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
                           value={llmForm.topP}
                           onChange={e => setLlmForm(p => ({ ...p, topP: e.target.value }))}
                           placeholder="1.0"
-                          className="h-8 text-sm"
+                          className={inputCls}
                         />
                       </div>
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-medium text-muted-foreground">Frequency Penalty</label>
-                        <Input
+                      <div>
+                        <FieldLabel muted>Frequency Penalty</FieldLabel>
+                        <input
                           type="number"
                           min="-2"
                           max="2"
@@ -499,12 +577,12 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
                           value={llmForm.frequencyPenalty}
                           onChange={e => setLlmForm(p => ({ ...p, frequencyPenalty: e.target.value }))}
                           placeholder="0"
-                          className="h-8 text-sm"
+                          className={inputCls}
                         />
                       </div>
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-xs font-medium text-muted-foreground">Presence Penalty</label>
-                        <Input
+                      <div>
+                        <FieldLabel muted>Presence Penalty</FieldLabel>
+                        <input
                           type="number"
                           min="-2"
                           max="2"
@@ -512,48 +590,30 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
                           value={llmForm.presencePenalty}
                           onChange={e => setLlmForm(p => ({ ...p, presencePenalty: e.target.value }))}
                           placeholder="0"
-                          className="h-8 text-sm"
+                          className={inputCls}
                         />
                       </div>
                     </div>
                   )}
 
-                  <div className="flex gap-2 justify-end mt-1">
-                    <Button variant="outline" size="sm" onClick={cancelForm}>
+                  <div className="flex gap-6 justify-end mt-2">
+                    <button type="button" onClick={cancelForm} className={textBtnInk}>
                       取消
-                    </Button>
-                    <Button
-                      size="sm"
+                    </button>
+                    <button
+                      type="button"
                       onClick={saveLlmConfig}
                       disabled={!formValid || llmSaving}
+                      className={textBtnClay}
                     >
-                      {llmSaving ? '保存中...' : '保存'}
-                    </Button>
+                      {llmSaving ? '保存中…' : '保存 →'}
+                    </button>
                   </div>
                 </div>
               )}
             </div>
-          </TabsContent>
-        </Tabs>
-
-        <DialogFooter showCloseButton={false}>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => onOpenChange(false)}
-          >
-            关闭
-          </Button>
-          {tab === 'editor' && (
-            <Button
-              size="sm"
-              onClick={saveEditorConfig}
-              disabled={editorLoading || editorSaving}
-            >
-              {editorSaving ? '保存中...' : '保存'}
-            </Button>
           )}
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   )
