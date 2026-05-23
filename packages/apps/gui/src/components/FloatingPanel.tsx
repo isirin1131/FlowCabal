@@ -31,6 +31,18 @@ export function FloatingPanel({ nodeId, open, onOpenChange }: {
   }, [nodeId, node?.label])
 
   useEffect(() => {
+    const handleRename = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      if (detail?.nodeId === nodeId) {
+        setDraft(node?.label || '')
+        setEditing(true)
+      }
+    }
+    window.addEventListener('flowcabal:rename-node', handleRename as EventListener)
+    return () => window.removeEventListener('flowcabal:rename-node', handleRename as EventListener)
+  }, [nodeId, node?.label])
+
+  useEffect(() => {
     if (editing) {
       inputRef.current?.focus()
       inputRef.current?.select()

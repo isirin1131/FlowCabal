@@ -7,21 +7,31 @@ import {
   useViewport,
   useReactFlow,
   type NodeTypes,
+  type EdgeTypes,
   type Node,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { useStore } from '@/store/useStore'
 import FlowNode from './FlowNode'
+import { CustomEdge } from './CustomEdge'
 import { nanoid } from 'nanoid'
 import { getLayoutedElements } from '@/lib/engine-to-flow'
 
 const nodeTypes: NodeTypes = { flowNode: FlowNode }
+const edgeTypes: EdgeTypes = { custom: CustomEdge }
 
-function ContextMenuPanel({ x, y, nodeId, onClose }: {
-  x: number; y: number; nodeId: string | null; onClose: () => void
+function ContextMenuPanel({ x, y, nodeId, selectedIds, onClose }: {
+  x: number
+  y: number
+  nodeId: string | null
+  selectedIds: Set<string>
+  onClose: () => void
 }) {
   const createNode = useStore((s) => s.createNode)
   const deleteNode = useStore((s) => s.deleteNode)
+  const addToTarget = useStore((s) => s.addToTarget)
+  const activeWorkspace = useStore((s) => s.activeWorkspace)
+  const selectNode = useStore((s) => s.selectNode)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -40,15 +50,50 @@ function ContextMenuPanel({ x, y, nodeId, onClose }: {
   }, [onClose])
 
   type Item = { label: string; onClick: () => void; danger?: boolean }
-  const items: Item[] = nodeId
-    ? [
-        { label: '添加子节点', onClick: () => { createNode(`Child of ${nodeId}`); onClose() } },
-        { label: '复制节点', onClick: () => { createNode(`Copy of ${nodeId}`); onClose() } },
-        { label: '删除节点', onClick: () => { deleteNode(nodeId); onClose() }, danger: true },
+
+  let items: Item[] = []
+
+  if (nodeId === null) {
+    // 空白处
+    items = [{ label: '添加节点', onClick: () => { createNode(`节点 ${nanoid(4)}`); onClose() } }]
+  } else {
+    const isMulti = selectedIds.size >= 2 && selectedIds.has(nodeId)
+    if (isMulti) {
+      const ids = [...selectedIds]
+      const someNotTarget = activeWorkspace
+        ? ids.some(id => !activeWorkspace.target_nodes.includes(id))
+        : false
+      items = [
+        { label: `删除 ${ids.length} 个节点`, onClick: () => {
+          for (const id of ids) deleteNode(id)
+          onClose()
+        }, danger: true },
       ]
-    : [
-        { label: '添加节点', onClick: () => { createNode(`节点 ${nanoid(4)}`); onClose() } },
+      if (someNotTarget) {
+        items.unshift({ label: '加入 target', onClick: () => {
+          for (const id of ids) {
+            if (!activeWorkspace?.target_nodes.includes(id)) addToTarget(id)
+          }
+          onClose()
+        }})
+      }
+    } else {
+      // 单选节点（如果右键的节点不在选中集，先单选它）
+      if (!selectedIds.has(nodeId)) selectNode(nodeId)
+      const inTarget = activeWorkspace?.target_nodes.includes(nodeId) ?? false
+      items = [
+        { label: '重命名', onClick: () => {
+          selectNode(nodeId)
+          window.dispatchEvent(new CustomEvent('flowcabal:rename-node', { detail: { nodeId } }))
+          onClose()
+        }},
+        { label: '删除', onClick: () => { deleteNode(nodeId); onClose() }, danger: true },
       ]
+      if (!inTarget) {
+        items.push({ label: '加入 target', onClick: () => { addToTarget(nodeId); onClose() } })
+      }
+    }
+  }
 
   return (
     <div
@@ -137,15 +182,28 @@ function CanvasInner() {
   const onNodesChange = useStore((s) => s.onNodesChange)
   const onEdgesChange = useStore((s) => s.onEdgesChange)
   const selectNode = useStore((s) => s.selectNode)
+  const setSelectedNodeIds = useStore((s) => s.setSelectedNodeIds)
+  const selectedNodeIds = useStore((s) => s.selectedNodeIds)
   const createNode = useStore((s) => s.createNode)
 
   const [contextMenu, setContextMenu] = useState<{
     x: number; y: number; nodeId: string | null
   } | null>(null)
 
-  const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
-    selectNode(node.id)
-  }, [selectNode])
+  const onNodeClick = useCallback((event: React.MouseEvent, node: Node) => {
+    if (event.shiftKey) {
+      const next = new Set(selectedNodeIds)
+      next.add(node.id)
+      setSelectedNodeIds(next)
+    } else if (event.metaKey || event.ctrlKey) {
+      const next = new Set(selectedNodeIds)
+      if (next.has(node.id)) next.delete(node.id)
+      else next.add(node.id)
+      setSelectedNodeIds(next)
+    } else {
+      selectNode(node.id)
+    }
+  }, [selectNode, setSelectedNodeIds, selectedNodeIds])
 
   const onPaneClick = useCallback(() => {
     selectNode(null)
@@ -166,10 +224,15 @@ function CanvasInner() {
     createNode(`节点 ${nanoid(4)}`)
   }, [createNode])
 
+  const decoratedNodes = nodes.map(n => ({
+    ...n,
+    selected: selectedNodeIds.has(n.id),
+  }))
+
   return (
     <div className="w-full h-full relative select-none bg-paper">
       <ReactFlow
-        nodes={nodes}
+        nodes={decoratedNodes}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
@@ -179,15 +242,11 @@ function CanvasInner() {
         onPaneContextMenu={onPaneContextMenu}
         onDoubleClick={onPaneDoubleClick}
         nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        nodesConnectable={false}
         fitView
         fitViewOptions={{ padding: 0.25, duration: 0 }}
-        connectionLineStyle={{ stroke: 'var(--color-clay)', strokeWidth: 1.5 }}
-        defaultEdgeOptions={{
-          type: 'default',
-          animated: false,
-          style: { strokeWidth: 1 },
-        }}
-        deleteKeyCode={['Backspace', 'Delete']}
+        defaultEdgeOptions={{ type: 'custom' }}
         proOptions={{ hideAttribution: true }}
       >
         <LayoutButton />
@@ -199,6 +258,7 @@ function CanvasInner() {
           x={contextMenu.x}
           y={contextMenu.y}
           nodeId={contextMenu.nodeId}
+          selectedIds={selectedNodeIds}
           onClose={() => setContextMenu(null)}
         />
       )}
