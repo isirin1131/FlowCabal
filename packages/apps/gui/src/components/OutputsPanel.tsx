@@ -1,14 +1,7 @@
 'use client'
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useStore, toRoman } from '@/store/useStore'
 import type { NodeDef } from '@flowcabal/engine'
-
-const STATUS_LABEL: Record<string, string> = {
-  pending: 'pending',
-  stale: '需校对',
-  completed: 'completed',
-  error: '拒稿',
-}
 
 function estimateWords(text: string): number {
   let count = 0
@@ -30,20 +23,28 @@ function estimateWords(text: string): number {
 export function OutputsPanel() {
   const activeWorkspace = useStore((s) => s.activeWorkspace)
   const selectedNodeId = useStore((s) => s.selectedNodeId)
+  const runningNodeId = useStore((s) => s.runningNodeId)
+  const runningOutput = useStore((s) => s.runningOutput)
   const [copied, setCopied] = useState(false)
 
-  if (!selectedNodeId || !activeWorkspace) {
-    return (
-      <div className="max-w-[680px] mx-auto text-center py-12">
-        <p className="font-display italic text-[14.5px] text-ink-soft">— 未选择节点 —</p>
-      </div>
-    )
-  }
+  const scrollRef = useRef<HTMLDivElement>(null)
 
-  const idx = activeWorkspace.nodes.findIndex((n: NodeDef) => n.id === selectedNodeId)
-  const node = idx >= 0 ? activeWorkspace.nodes[idx] : null
-  const output = activeWorkspace.outputs.get(selectedNodeId) ?? null
-  const status: 'pending' | 'completed' = output ? 'completed' : 'pending'
+  const idx = activeWorkspace && selectedNodeId
+    ? activeWorkspace.nodes.findIndex((n: NodeDef) => n.id === selectedNodeId)
+    : -1
+  const node = idx >= 0 && activeWorkspace ? activeWorkspace.nodes[idx] : null
+  const roman = idx >= 0 ? toRoman(idx + 1) : '—'
+
+  const isRunning = !!selectedNodeId && runningNodeId === selectedNodeId
+  const runningChunks = selectedNodeId ? (runningOutput.get(selectedNodeId) ?? '') : ''
+  const output = activeWorkspace && selectedNodeId ? (activeWorkspace.outputs.get(selectedNodeId) ?? null) : null
+
+  // running 态：auto-scroll
+  useEffect(() => {
+    if (isRunning && scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    }
+  }, [isRunning, runningChunks])
 
   const handleCopy = useCallback(() => {
     if (!output) return
@@ -53,7 +54,38 @@ export function OutputsPanel() {
     }).catch(() => {})
   }, [output])
 
-  const roman = idx >= 0 ? toRoman(idx + 1) : '—'
+  if (!selectedNodeId || !activeWorkspace) {
+    return (
+      <div className="max-w-[680px] mx-auto text-center py-12">
+        <p className="font-display italic text-[14.5px] text-ink-soft">— 未选择节点 —</p>
+      </div>
+    )
+  }
+
+  // ── running 态 ──
+  if (isRunning) {
+    return (
+      <div className="max-w-[680px] mx-auto" ref={scrollRef}>
+        <div className="text-center mb-3 select-none">
+          <span className="font-mono text-[10.5px] text-ink-faint tracking-[0.18em] lowercase">
+            <span className="text-rule mr-[18px] tracking-[-1px]">— —</span>
+            output · {roman} · 正在生成
+            <span className="text-rule ml-[18px] tracking-[-1px]">— —</span>
+          </span>
+        </div>
+        <div className="font-display text-[16px] leading-[1.7] text-ink whitespace-pre-wrap break-words">
+          {runningChunks}
+        </div>
+        <div className="text-center mt-6 font-display italic text-[14.5px] text-ink-soft">
+          — 正在生成 —
+        </div>
+      </div>
+    )
+  }
+
+  // ── pending / completed 态 ──
+  const status = output ? 'completed' : 'pending'
+  const statusLabel = status === 'completed' ? 'completed' : 'pending'
   const wordCount = output ? estimateWords(output) : 0
 
   return (
@@ -67,9 +99,7 @@ export function OutputsPanel() {
       </div>
 
       <div className="text-center mb-8 flex items-baseline justify-center gap-3 font-mono text-[10.5px] text-ink-faint tracking-[0.14em] lowercase">
-        <span>
-          {STATUS_LABEL[status] || status}
-        </span>
+        <span>{statusLabel}</span>
         {output && (
           <>
             <span className="text-rule">·</span>
