@@ -1,13 +1,23 @@
-import { type EdgeProps, BaseEdge, getStraightPath } from '@xyflow/react'
+import { type EdgeProps, BaseEdge, getBezierPath } from '@xyflow/react'
 
-export function CustomEdge({ sourceX, sourceY, targetX, targetY, id }: EdgeProps) {
+export function CustomEdge({
+  sourceX,
+  sourceY,
+  targetX,
+  targetY,
+  sourcePosition,
+  targetPosition,
+  id,
+}: EdgeProps) {
   const adjustedSourceY = sourceY + 5
   const adjustedTargetY = targetY - 8
-  const [linePath] = getStraightPath({
+  const [linePath] = getBezierPath({
     sourceX,
     sourceY: adjustedSourceY,
+    sourcePosition,
     targetX,
     targetY: adjustedTargetY,
+    targetPosition,
   })
   return (
     <>
@@ -20,7 +30,7 @@ export function CustomEdge({ sourceX, sourceY, targetX, targetY, id }: EdgeProps
         strokeWidth={2}
         strokeLinecap="square"
       />
-      <BaseEdge id={id} path={linePath} style={{ stroke: '#C9BFAA', strokeWidth: 1 }} />
+      <BaseEdge id={id} path={linePath} style={{ stroke: '#C9BFAA', strokeWidth: 1, fill: 'none' }} />
     </>
   )
 }
