@@ -89,7 +89,14 @@ export function workspaceStatus(rootDir: string, workspaceId: string): void {
   console.log(`Workspace ID: ${workspaceId}`);
   console.log(`  Nodes: ${ws.nodes.length}`);
   console.log(`  Targets: ${ws.target_nodes.join(', ') || '(none)'}`);
-  console.log(`  Stale: ${ws.stale_nodes.map(e => e.id).join(', ') || '(none)'}`);
+  if (ws.stale_nodes.length === 0) {
+    console.log(`  Stale: (none)`);
+  } else {
+    console.log(`  Stale:`);
+    for (const entry of ws.stale_nodes) {
+      console.log(`    ${entry.id} (${entry.kind})`);
+    }
+  }
   console.log(`  Outputs: ${ws.outputs.size}`);
 }
 
