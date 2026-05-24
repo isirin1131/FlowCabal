@@ -1,8 +1,9 @@
 'use client'
 import { memo } from 'react'
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react'
-import type { TextBlock } from '@flowcabal/engine'
-import { useStore, getStaleKindForNode } from '@/store/useStore'
+import * as Tooltip from '@radix-ui/react-tooltip'
+import type { TextBlock, ErrorEntry } from '@flowcabal/engine'
+import { useStore, getStaleKindForNode, propagatedUpstreamRomans } from '@/store/useStore'
 
 type FlowNodeData = {
   label: string
@@ -99,17 +100,30 @@ function FlowNode({ id, data, selected }: NodeProps<FlowNodeType>) {
       />
 
       {staleKind && (
-        <span
-          className="absolute top-2 right-3 font-display italic text-[14px] leading-none z-10"
-          style={{
-            color: staleKind === 'direct'
-              ? 'var(--color-clay-deep)'
-              : 'rgba(182, 92, 69, 0.45)',
-          }}
-          aria-label={staleKind === 'direct' ? '已编辑，待重跑' : '上游已变，待重跑'}
-        >
-          ✱
-        </span>
+        <Tooltip.Root>
+          <Tooltip.Trigger asChild>
+            <span
+              className="absolute top-2 right-3 font-display italic text-[14px] leading-none z-10 cursor-help"
+              style={{
+                color: staleKind === 'direct'
+                  ? 'var(--color-clay-deep)'
+                  : 'rgba(182, 92, 69, 0.45)',
+              }}
+              aria-label={staleKind === 'direct' ? '已编辑，待重跑' : '上游已变，待重跑'}
+            >
+              ✱
+            </span>
+          </Tooltip.Trigger>
+          <Tooltip.Portal>
+            <Tooltip.Content
+              side="top"
+              className="bg-white border border-rule rounded-md shadow-lift px-3 py-2 max-w-[260px] z-50"
+            >
+              <StaleTooltipBody nodeId={id} staleKind={staleKind} />
+              <Tooltip.Arrow className="fill-white" />
+            </Tooltip.Content>
+          </Tooltip.Portal>
+        </Tooltip.Root>
       )}
 
       <div className="px-[22px] pt-[16px] pb-[14px]">
@@ -142,22 +156,35 @@ function FlowNode({ id, data, selected }: NodeProps<FlowNodeType>) {
 
         {/* Foot */}
         {hasError ? (
-          <div
-            className={[
-              'mt-[14px] pt-[10px] flex items-center justify-between',
-              'border-t border-t-clay-deep/30',
-            ].join(' ')}
-          >
-            <span
-              className="font-display italic text-[12px]"
-              style={{ color: 'var(--color-clay-deep)' }}
-            >
-              ● 上次失败
-            </span>
-            <span className="font-mono text-[10px] text-ink-faint tabular-nums">
-              {data.output ? `${estimateWords(data.output).toLocaleString()} 字` : '—'}
-            </span>
-          </div>
+          <Tooltip.Root>
+            <Tooltip.Trigger asChild>
+              <div
+                className={[
+                  'mt-[14px] pt-[10px] flex items-center justify-between cursor-help',
+                  'border-t border-t-clay-deep/30',
+                ].join(' ')}
+              >
+                <span
+                  className="font-display italic text-[12px]"
+                  style={{ color: 'var(--color-clay-deep)' }}
+                >
+                  ● 上次失败
+                </span>
+                <span className="font-mono text-[10px] text-ink-faint tabular-nums">
+                  {data.output ? `${estimateWords(data.output).toLocaleString()} 字` : '—'}
+                </span>
+              </div>
+            </Tooltip.Trigger>
+            <Tooltip.Portal>
+              <Tooltip.Content
+                side="top"
+                className="bg-white border border-rule rounded-md shadow-lift px-3 py-2 max-w-[300px] z-50"
+              >
+                <ErrorTooltipBody nodeId={id} entry={errorEntry!} />
+                <Tooltip.Arrow className="fill-white" />
+              </Tooltip.Content>
+            </Tooltip.Portal>
+          </Tooltip.Root>
         ) : (
           <div
             className={[
@@ -221,3 +248,45 @@ function areEqual(prev: NodeProps<FlowNodeType>, next: NodeProps<FlowNodeType>) 
 }
 
 export default memo(FlowNode, areEqual)
+
+function StaleTooltipBody({ nodeId, staleKind }: { nodeId: string; staleKind: 'direct' | 'propagated' }) {
+  const activeWs = useStore((s) => s.activeWorkspace)
+  const addToTarget = useStore((s) => s.addToTarget)
+  const romans = staleKind === 'propagated' ? propagatedUpstreamRomans(activeWs, nodeId) : []
+  const desc = staleKind === 'direct'
+    ? '本节点已编辑，上次输出可能不是最新'
+    : `上游 ${romans.slice(0, 3).join(', ')}${romans.length > 3 ? '…' : ''} 已变更，本节点输出可能不是最新`
+  return (
+    <div>
+      <p className="font-body text-[12px] text-ink leading-snug">{desc}</p>
+      <div className="border-t border-rule mt-2 pt-2">
+        <button
+          onClick={() => addToTarget(nodeId)}
+          className="font-display italic text-[12px] text-clay-deep hover:underline"
+        >
+          加入 target 重跑
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function ErrorTooltipBody({ nodeId, entry }: { nodeId: string; entry: ErrorEntry }) {
+  const addToTarget = useStore((s) => s.addToTarget)
+  return (
+    <div>
+      <p className="font-display italic text-[12px] text-clay-deep mb-1">上次运行失败</p>
+      <p className="font-mono text-[10px] text-ink leading-relaxed">
+        {entry.message.slice(0, 200)}{entry.message.length > 200 ? '…' : ''}
+      </p>
+      <div className="border-t border-rule mt-2 pt-2">
+        <button
+          onClick={() => addToTarget(nodeId)}
+          className="font-display italic text-[12px] text-clay-deep hover:underline"
+        >
+          加入 target 重跑
+        </button>
+      </div>
+    </div>
+  )
+}

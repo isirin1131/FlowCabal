@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Source_Serif_4, Manrope, IBM_Plex_Mono } from "next/font/google";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import "./globals.css";
 import { Header } from "@/components/Header";
 import { Toaster } from "@/components/ui/sonner";
@@ -43,11 +44,13 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="h-full flex flex-col">
-        <Header />
-        <main className="flex-1 overflow-hidden">
-          {children}
-        </main>
-        <Toaster />
+        <Tooltip.Provider delayDuration={200}>
+          <Header />
+          <main className="flex-1 overflow-hidden">
+            {children}
+          </main>
+          <Toaster />
+        </Tooltip.Provider>
       </body>
     </html>
   );
