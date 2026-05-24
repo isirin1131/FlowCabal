@@ -1,4 +1,4 @@
-import { readWorkspace, writeWorkspace, runAllStream, readLlmConfigs } from '@flowcabal/engine'
+import { readWorkspace, writeWorkspace, runAllDataflow, readLlmConfigs } from '@flowcabal/engine'
 
 export async function POST(request: Request) {
   const { workspaceId } = await request.json()
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     async start(controller) {
       const encoder = new TextEncoder()
       try {
-        for await (const event of runAllStream(workspace, config, projectDir)) {
+        for await (const event of runAllDataflow(workspace, config, projectDir)) {
           controller.enqueue(encoder.encode(JSON.stringify(event) + '\n'))
         }
         writeWorkspace(projectDir, workspaceId, workspace)
