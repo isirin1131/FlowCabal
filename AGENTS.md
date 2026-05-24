@@ -18,6 +18,7 @@ bun run typecheck:gui # 验证 GUI 代码
 
 | 日期 | 内容 | spec | plan |
 |------|------|------|------|
+| 2026-05-24 | **F 期**：stale 闭环（eager 扩散 + direct/propagated 双色 ✱）+ error 闭环（errors.log NDJSON + 节点尾栏文字 + tooltip）+ runAll 图原生并行（Kahn 运行时变体 + 不限并发 + error 不传染） | [spec](docs/superpowers/specs/2026-05-24-stale-error-parallel-design.md) | [plan](docs/superpowers/plans/2026-05-24-stale-error-parallel.md) |
 | 2026-05-24 | **B+C+D+E 期**：节点 4 态视觉、双尺度 stream（节点级 + token 级）、连线只读化、EditorPanel ref picker、RunButton dag 进度 | [spec](docs/superpowers/specs/2026-05-24-bcde-node-interaction.md) | [plan](docs/superpowers/plans/2026-05-24-bcde-node-interaction.md) |
 | 2026-05-23 | **A 期**：视觉统一（paper / clay / ink + Source Serif），所有面板迁到新调性 | [spec](docs/superpowers/specs/2026-05-23-gui-visual-unification-design.md) | [plan](docs/superpowers/plans/2026-05-23-gui-visual-unification.md) |
 
@@ -76,6 +77,35 @@ xyflow 的 `<ReactFlow defaultEdgeOptions={{ type: 'custom' }}>` 是 **fill-miss
 ### 流式协议 = NDJSON 不是 SSE
 
 `/api/engine/run-all` 返回 `Content-Type: application/x-ndjson`，客户端用 `fetch + response.body.getReader() + TextDecoder` 解析行。**不用 EventSource**（不支持 POST body）。engine 的 `runAllStream` 是 async generator，旧 `runAll` 必须保留不动（CLI 还在用）。
+
+### stale-tracker 必须在 block CRUD / removeNode **之后**调
+
+`packages/apps/gui/src/app/api/workspaces/[id]/blocks/route.ts` 和
+`.../nodes/route.ts` 的 DELETE handler 必须：先调 engine 旧函数
+（insertBlock/removeNode 等），再调 stale-tracker 的
+markBlockEdited / markRemovedNodeDownstream。**调前抓 downstream
+snapshot** —— removeNode 会清掉 ws.downstream Map，调完再读会拿到空数组。
+
+### dataflow-runner 的 inDeg 只数 todo 内的边
+
+`packages/engine/src/workspace/core/dataflow-runner.ts` 的 inDeg 初始化
+仅统计 todo 集内的 upstream。todo 外的节点 output 已是 cache 命中，
+视为已 done —— 否则 inDeg 永远 > 0，全部节点卡在 pending。
+
+### error 节点失败时 *不* push target_nodes
+
+dataflow-runner 的 fireNode catch 分支只做 `failed.add` + appendError，
+**不动** ws.target_nodes。该节点如果本来在 target_nodes 里就留着；
+不在的话（它是 target 祖先才进的 todo）也不主动加 —— 下次 runAll 凭
+"没 output 且是 target 或 target 祖先" 自然重试。
+
+### errors.log 必须用 getWorkspaceDir 计算路径
+
+`packages/engine/src/workspace/core/error-log.ts` 的 errors.log path
+必须用 `getWorkspaceDir(rootDir, wsId)` 而非 hardcode `.flowcabal/cache/`。
+真实 workspace 目录是 `.flowcabal-project-cache/<wsId>/`（paths.ts:18-24）。
+errors.log 必须跟 workspace.json 同目录，否则 workspaceDelete rmSync
+不能连带清除。spec 阶段的笔误已修正。
 
 ---
 
