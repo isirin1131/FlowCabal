@@ -311,10 +311,23 @@ class WorkspaceActions {
   }
 
   #updateNodeDataFromWorkspace = (updatedWs: Workspace) => {
+    const newEdges: Edge[] = []
+    for (const [targetId, sources] of updatedWs.upstream) {
+      for (const sourceId of sources) {
+        newEdges.push({
+          id: `e-${sourceId}-${targetId}`,
+          source: sourceId,
+          target: targetId,
+          type: 'custom',
+          animated: false,
+        })
+      }
+    }
     this.#set((s: any) => ({
       workspaces: s.workspaces.map((w: Workspace) => w.id === updatedWs.id ? updatedWs : w),
       activeWorkspace: updatedWs,
       nodes: s.nodes.map((n: any) => syncNodeDataFromWorkspace(n, updatedWs)),
+      edges: newEdges,
     }))
   }
 
