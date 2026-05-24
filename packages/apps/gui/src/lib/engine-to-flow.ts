@@ -17,7 +17,7 @@ export function getLayoutedElements(nodes: Node[], edges: Edge[]) {
 
   const g = new dagre.graphlib.Graph().setGraph({ rankdir: 'TB', ranksep: 100, nodesep: 80 })
   nodes.forEach((n) => g.setNode(n.id, { width: 200, height: 100 }))
-  validEdges.forEach((e) => g.setEdge(e.source, e.target))
+  validEdges.forEach((e) => g.setEdge(e.source, e.target, {}))
   dagre.layout(g)
   return {
     nodes: nodes.map((n) => {
