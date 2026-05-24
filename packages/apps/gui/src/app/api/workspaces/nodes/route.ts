@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { readWorkspace, writeWorkspace, addNode, removeNode, renameNode } from '@flowcabal/engine'
+import { readWorkspace, writeWorkspace, addNode, removeNode, renameNode, markRemovedNodeDownstream } from '@flowcabal/engine'
 import { workspaceToRecord } from '@/lib/serialization'
 
 export async function POST(request: Request) {
@@ -21,10 +21,12 @@ export async function DELETE(request: Request) {
   if (!workspace) {
     return NextResponse.json({ error: 'Workspace not found' }, { status: 404 })
   }
+  const downstreamSnapshot = [...(workspace.downstream.get(nodeId) || [])]
   const removed = removeNode(workspace, nodeId)
   if (!removed) {
     return NextResponse.json({ error: 'Node not found' }, { status: 404 })
   }
+  markRemovedNodeDownstream(workspace, downstreamSnapshot)
   writeWorkspace(projectDir, workspaceId, workspace)
   return NextResponse.json({ success: true, workspace: workspaceToRecord(workspace) })
 }
