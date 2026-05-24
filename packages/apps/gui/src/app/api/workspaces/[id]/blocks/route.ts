@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { readWorkspace, writeWorkspace, insertBlock, updateBlock, removeBlock } from '@flowcabal/engine'
+import { readWorkspace, writeWorkspace, insertBlock, updateBlock, removeBlock, markBlockEdited } from '@flowcabal/engine'
 import { workspaceToRecord } from '@/lib/serialization'
 
 export async function POST(
@@ -33,6 +33,7 @@ export async function POST(
     return NextResponse.json({ error: 'Operation failed' }, { status: 400 })
   }
 
+  markBlockEdited(workspace, nodeId)
   writeWorkspace(projectDir, id, workspace)
   return NextResponse.json({ success: true, workspace: workspaceToRecord(workspace) })
 }
