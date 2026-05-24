@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { applyNodeChanges, applyEdgeChanges, type Node, type Edge } from '@xyflow/react'
-import type { Workspace, NodeDef, TextBlock, NodeEvent } from '@flowcabal/engine'
+import type { Workspace, NodeDef, TextBlock, NodeEvent, ErrorEntry } from '@flowcabal/engine'
 import { recordToWorkspace, workspaceToRecord } from '@/lib/serialization'
 import { getLayoutedElements } from '@/lib/engine-to-flow'
 import { toast } from 'sonner'
@@ -17,6 +17,7 @@ type GuiState = {
   runningOutput: Map<string, string>
   runningNodeId: string | null
   dagProgress: { current: number; total: number } | null
+  runtimeErrors: Map<string, ErrorEntry>
 } & {
   switchWorkspace: (id: string) => void
   loadWorkspace: (id: string) => Promise<void>
@@ -130,6 +131,7 @@ class WorkspaceActions {
   constructor(set: any, get: any) { this.#set = set; this.#get = get }
 
   internal_switchWorkspace = (id: string) => {
+    this.#set({ runtimeErrors: new Map() })
     const ws = this.#get().workspaces.find((w: Workspace) => w.id === id)
     if (!ws) return
     this.#set({ activeWorkspace: ws, ...workspaceToFlowData(ws) })
@@ -149,6 +151,15 @@ class WorkspaceActions {
         : [...existing, workspace]
       this.#set({ workspaces: updated })
       this.internal_switchWorkspace(workspace.id)
+      try {
+        const errRes = await fetch(`/api/workspaces/${workspaceId}/errors?per-node=last`)
+        if (errRes.ok) {
+          const errMap: Record<string, ErrorEntry> = await errRes.json()
+          this.#set({ runtimeErrors: new Map(Object.entries(errMap)) })
+        }
+      } catch {
+        // 加载错误日志失败不阻塞 workspace 加载
+      }
     } finally {
       this.#set({ isLoading: false })
     }
@@ -480,6 +491,7 @@ export const useStore = create<GuiState>()((set, get) => {
     workspaces: [], activeWorkspace: null, nodes: [], edges: [],
     selectedNodeId: null, selectedNodeIds: new Set(), floatingPanelOpen: false, isLoading: false,
     runningOutput: new Map(), runningNodeId: null, dagProgress: null,
+    runtimeErrors: new Map(),
 
     switchWorkspace: (id: string) => actions.internal_switchWorkspace(id),
     loadWorkspace: (id: string) => actions.internal_loadWorkspace(id),
