@@ -1,6 +1,7 @@
 import { appendFileSync, existsSync, createReadStream, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { createInterface } from 'readline';
+import { getWorkspaceDir } from '../../paths';
 
 export interface ErrorEntry {
   ts: string; // ISO8601
@@ -9,7 +10,7 @@ export interface ErrorEntry {
 }
 
 function getErrorLogPath(rootDir: string, wsId: string): string {
-  return join(rootDir, '.flowcabal', 'cache', wsId, 'errors.log');
+  return join(getWorkspaceDir(rootDir, wsId), 'errors.log');
 }
 
 export function appendError(rootDir: string, wsId: string, nodeId: string, message: string): void {

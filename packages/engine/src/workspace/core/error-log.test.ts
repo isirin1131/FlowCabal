@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { appendError, readAllErrors, readLastErrorPerNode } from './error-log';
+import { getWorkspaceDir } from '../../paths';
 
 describe('error-log', () => {
   let rootDir: string;
@@ -10,7 +11,7 @@ describe('error-log', () => {
 
   beforeEach(() => {
     rootDir = mkdtempSync(join(tmpdir(), 'fc-error-log-'));
-    mkdirSync(join(rootDir, '.flowcabal', 'cache', wsId), { recursive: true });
+    mkdirSync(getWorkspaceDir(rootDir, wsId), { recursive: true });
   });
 
   afterEach(() => {
@@ -38,7 +39,7 @@ describe('error-log', () => {
   });
 
   test('T19: 坏行容错', async () => {
-    const logPath = join(rootDir, '.flowcabal', 'cache', wsId, 'errors.log');
+    const logPath = join(getWorkspaceDir(rootDir, wsId), 'errors.log');
     writeFileSync(logPath, '{"ts":"2026-05-24T00:00:00.000Z","nodeId":"a","message":"ok"}\n');
     writeFileSync(logPath, '{not-json-broken\n', { flag: 'a' });
     writeFileSync(logPath, '{"ts":"2026-05-24T00:00:01.000Z","nodeId":"b","message":"good"}\n', { flag: 'a' });
