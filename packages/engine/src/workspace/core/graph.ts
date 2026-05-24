@@ -71,8 +71,8 @@ export function todoList(ws: Workspace): string[] {
 
 export function calcStale(ws: Workspace): void {
     const visited = new Set<string>();
-    const staleSet = new Set(ws.stale_nodes);
-    const queue = [...ws.stale_nodes];
+    const staleIds = new Set(ws.stale_nodes.map(e => e.id));
+    const queue = [...staleIds];
 
     while (queue.length > 0) {
         const nodeId = queue.shift()!;
@@ -81,9 +81,9 @@ export function calcStale(ws: Workspace): void {
 
         const downs = ws.downstream.get(nodeId) || [];
         for (const downId of downs) {
-            if (!staleSet.has(downId)) {
-                staleSet.add(downId);
-                ws.stale_nodes.push(downId);
+            if (!staleIds.has(downId)) {
+                staleIds.add(downId);
+                ws.stale_nodes.push({ id: downId, kind: 'propagated' });
             }
             queue.push(downId);
         }

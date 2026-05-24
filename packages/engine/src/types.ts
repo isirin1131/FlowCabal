@@ -28,6 +28,8 @@ export interface Workflow {
 }
 
 // ── Workspace ──
+export type StaleEntry = { id: string; kind: 'direct' | 'propagated' };
+
 export interface Workspace {
   id: string;
   name: string;
@@ -36,7 +38,7 @@ export interface Workspace {
   upstream: Map<string, string[]>;
   downstream: Map<string, string[]>;
   target_nodes: string[];
-  stale_nodes: string[];
+  stale_nodes: StaleEntry[];
 }
 
 // ── LLM ──

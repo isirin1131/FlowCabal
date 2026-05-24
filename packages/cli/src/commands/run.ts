@@ -64,10 +64,10 @@ export function runPreview(rootDir: string, workspaceId: string): void {
   if (ws.stale_nodes.length === 0) {
     console.log('(none)');
   } else {
-    for (const nodeId of ws.stale_nodes) {
-      const node = ws.nodes.find(n => n.id === nodeId);
+    for (const entry of ws.stale_nodes) {
+      const node = ws.nodes.find(n => n.id === entry.id);
       const label = node?.label || 'unknown';
-      console.log(`  ${nodeId} — ${label}`);
+      console.log(`  ${entry.id} (${entry.kind}) — ${label}`);
     }
   }
 }

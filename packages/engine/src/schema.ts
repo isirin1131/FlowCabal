@@ -50,6 +50,11 @@ export const WorkflowSchema = z.object({
   nodes: z.array(NodeDefSchema),
 });
 
+export const StaleEntrySchema = z.object({
+  id: z.string(),
+  kind: z.enum(['direct', 'propagated']),
+});
+
 export const WorkspaceSchema = z.object({
   id: z.string(),
   name: z.string(),
@@ -58,7 +63,7 @@ export const WorkspaceSchema = z.object({
   upstream: z.record(z.string(), z.array(z.string())),
   downstream: z.record(z.string(), z.array(z.string())),
   target_nodes: z.array(z.string()),
-  stale_nodes: z.array(z.string()),
+  stale_nodes: z.array(StaleEntrySchema),
 });
 
 export const LlmConfigsFileSchema = z.record(z.string(), LlmConfigSchema);

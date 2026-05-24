@@ -44,7 +44,7 @@ async function runNode(
 
     const output = await generate(config, system, user);
     ws.outputs.set(nodeId, output);
-    ws.stale_nodes = ws.stale_nodes.filter(id => id !== nodeId);
+    ws.stale_nodes = ws.stale_nodes.filter(e => e.id !== nodeId);
     ws.target_nodes = ws.target_nodes.filter(id => id !== nodeId);
 }
 
@@ -115,7 +115,7 @@ export async function* runAllStream(
                 yield { type: 'node-token', nodeId, chunk };
             }
             ws.outputs.set(nodeId, accumulated);
-            ws.stale_nodes = ws.stale_nodes.filter(id => id !== nodeId);
+            ws.stale_nodes = ws.stale_nodes.filter(e => e.id !== nodeId);
             ws.target_nodes = ws.target_nodes.filter(id => id !== nodeId);
             executed.push(nodeId);
             yield { type: 'node-complete', nodeId, output: accumulated };

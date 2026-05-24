@@ -27,7 +27,7 @@ export function removeNode(ws: Workspace, nodeId: string): boolean {
     
     ws.nodes.splice(index, 1);
     ws.target_nodes = ws.target_nodes.filter(id => id !== nodeId);
-    ws.stale_nodes = ws.stale_nodes.filter(id => id !== nodeId);
+    ws.stale_nodes = ws.stale_nodes.filter(e => e.id !== nodeId);
     ws.outputs.delete(nodeId);
 
     for (const upstreamId of ws.upstream.get(nodeId) || []) {
@@ -48,8 +48,8 @@ export function removeNode(ws: Workspace, nodeId: string): boolean {
         if (node) {
             node.systemPrompt = node.systemPrompt.filter(b => b.kind !== 'ref' || b.nodeId !== nodeId);
             node.userPrompt = node.userPrompt.filter(b => b.kind !== 'ref' || b.nodeId !== nodeId);
-            if (!ws.stale_nodes.includes(downstreamId)) {
-                ws.stale_nodes.push(downstreamId);
+            if (!ws.stale_nodes.some(e => e.id === downstreamId)) {
+                ws.stale_nodes.push({ id: downstreamId, kind: 'propagated' });
             }
         }
     }
@@ -88,7 +88,9 @@ export function insertBlock(ws: Workspace, nodeId: string, block: TextBlock, isS
         if (!ws.downstream.get(refId)!.includes(nodeId)) ws.downstream.get(refId)!.push(nodeId);
     }
 
-    if (ws.outputs.has(nodeId) && !ws.stale_nodes.includes(nodeId)) ws.stale_nodes.push(nodeId);
+    if (ws.outputs.has(nodeId) && !ws.stale_nodes.some(e => e.id === nodeId)) {
+        ws.stale_nodes.push({ id: nodeId, kind: 'direct' });
+    }
     return true;
 }
 
@@ -107,7 +109,9 @@ export function removeBlock(ws: Workspace, nodeId: string, isSystem: boolean, bl
         if (down) { const i = down.indexOf(nodeId); if (i !== -1) down.splice(i, 1); }
     }
 
-    if (ws.outputs.has(nodeId) && !ws.stale_nodes.includes(nodeId)) ws.stale_nodes.push(nodeId);
+    if (ws.outputs.has(nodeId) && !ws.stale_nodes.some(e => e.id === nodeId)) {
+        ws.stale_nodes.push({ id: nodeId, kind: 'direct' });
+    }
     return true;
 }
 
@@ -135,6 +139,8 @@ export function updateBlock(ws: Workspace, nodeId: string, isSystem: boolean, bl
         if (!ws.downstream.get(refId)!.includes(nodeId)) ws.downstream.get(refId)!.push(nodeId);
     }
 
-    if (ws.outputs.has(nodeId) && !ws.stale_nodes.includes(nodeId)) ws.stale_nodes.push(nodeId);
+    if (ws.outputs.has(nodeId) && !ws.stale_nodes.some(e => e.id === nodeId)) {
+        ws.stale_nodes.push({ id: nodeId, kind: 'direct' });
+    }
     return true;
 }
