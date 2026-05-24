@@ -2,7 +2,7 @@
 import { memo } from 'react'
 import { Handle, Position, type NodeProps, type Node } from '@xyflow/react'
 import type { TextBlock } from '@flowcabal/engine'
-import { useStore } from '@/store/useStore'
+import { useStore, getStaleKindForNode } from '@/store/useStore'
 
 type FlowNodeData = {
   label: string
@@ -25,6 +25,7 @@ function FlowNode({ id, data, selected }: NodeProps<FlowNodeType>) {
   const isRunning = runningNodeId === id
   const inTarget = activeWorkspace?.target_nodes.includes(id) ?? false
   const hasOutput = !!data.output
+  const staleKind = getStaleKindForNode(activeWorkspace, id)
 
   // status 派生：running 优先 > target+pending/completed > completed
   let visualStatus: 'target-pending' | 'target-completed' | 'completed' | 'running'
@@ -94,6 +95,20 @@ function FlowNode({ id, data, selected }: NodeProps<FlowNodeType>) {
         id="t"
         className="!opacity-0 !pointer-events-none"
       />
+
+      {staleKind && (
+        <span
+          className="absolute top-2 right-3 font-display italic text-[14px] leading-none z-10"
+          style={{
+            color: staleKind === 'direct'
+              ? 'var(--color-clay-deep)'
+              : 'rgba(182, 92, 69, 0.45)',
+          }}
+          aria-label={staleKind === 'direct' ? '已编辑，待重跑' : '上游已变，待重跑'}
+        >
+          ✱
+        </span>
+      )}
 
       <div className="px-[22px] pt-[16px] pb-[14px]">
         {/* Roman numeral */}
