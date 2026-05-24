@@ -1,4 +1,4 @@
-import { type EdgeProps, BaseEdge, getBezierPath } from '@xyflow/react'
+import { type EdgeProps, BaseEdge, getSmoothStepPath } from '@xyflow/react'
 
 export function CustomEdge({
   sourceX,
@@ -11,13 +11,14 @@ export function CustomEdge({
 }: EdgeProps) {
   const adjustedSourceY = sourceY + 5
   const adjustedTargetY = targetY - 8
-  const [linePath] = getBezierPath({
+  const [linePath] = getSmoothStepPath({
     sourceX,
     sourceY: adjustedSourceY,
     sourcePosition,
     targetX,
     targetY: adjustedTargetY,
     targetPosition,
+    borderRadius: 12,
   })
   return (
     <>
