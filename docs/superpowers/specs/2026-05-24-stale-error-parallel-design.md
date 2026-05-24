@@ -458,7 +458,7 @@ export async function* runAllDataflow(
 └─────────────────────────┘
 ```
 
-- **✱ 字符**：`*`，`font-display italic 14px`
+- **✱ 字符**：`✱`（U+2731 Heavy Asterisk），`font-display italic 14px`
 - **direct**：`color: var(--color-clay-deep)`（#B65C45）
 - **propagated**：`color: rgba(182, 92, 69, 0.45)`
 - **同节点 direct + propagated**：取 direct（升级规则已在 stale-tracker 处理，store 拿到的 entry 就是 direct）
@@ -806,7 +806,9 @@ GUI RunButton click → store.runAll()
 - `packages/cli/src/commands/node.ts` — 零改动
 - BCDE 期定下的所有视觉规范 + 右键菜单 + EditorPanel ref picker + RunButton
 
-## CLI 兼容矩阵
+## CLI 兼容矩阵（描述性 · CLI 计划逐渐弃置）
+
+CLI 端本期不做任何主动适配；下面是"如果 CLI 还在用"会看到什么的事实清单。`@flowcabal/engine` 旧函数（`runAll` / `runSingle` / `insertBlock` 等）签名 + 语义保留是新模块设计的副作用，不是为 CLI 兼容作的硬约束。
 
 | CLI 操作 | stale 行为 | error 行为 | runAll 行为 |
 |---|---|---|---|
@@ -814,7 +816,7 @@ GUI RunButton click → store.runAll()
 | `fc node rm` removeNode | downstream 一跳标 propagated（旧函数已有逻辑）；不传递扩散 | 不变 | 不变 |
 | `fc run` | 跑前 `calcStale` 仍 lazy 扩散一次（旧 runAll 内调）—— 与 GUI 端 eager 扩散结果在 ws.stale_nodes 上**对齐** | 抛错中断（不写 errors.log，因为 CLI 不调 dataflow-runner） | 串行 fail-fast |
 
-差异：CLI 端不享受**完整闭环**（GUI 那种 transitive propagation + errors.log 写入 + 并行）。这是预期的"分层"——CLI 是技术用户用的，他们可以 `fc workspace status` 看 stale_nodes，跑挂了看 stderr。要 CLI 也享受闭环就在 cli 命令里加调 stale-tracker / error-log / dataflow-runner，本期不强制。
+CLI 后续会逐渐弃置，本期不投入做完整闭环；GUI 是当前唯一一等公民。
 
 ## 测试策略
 
@@ -869,7 +871,7 @@ mock LLM：测试用一个 `mockGenerate` / `mockCreateStream`，按 nodeId hash
 
 6. **propagated tooltip 的 upstream Roman list 算法是 O(V+E)**：每次 hover 计算一次。dag 规模 < 50 节点完全可接受。如果性能成问题再 memoize。
 
-7. **stale 视觉的 ✱ 字符渲染**：用 `*` 字符 + `font-display italic` —— 不同字体 fallback 时 ✱ 位置可能轻微飘。备选 Unicode `✱`（U+2731）更稳但可能没 italic glyph。**默认用 `*`**；A 期已加载的 Source Serif 必有此 glyph。
+7. **stale 视觉的 ✱ 字符渲染**：用 Unicode `✱`（U+2731 Heavy Asterisk）+ `font-display italic`。A 期加载的 Source Serif 含此 glyph；fallback 字体可能 italic 渲染稍异，但位置稳定（U+2731 是单宽字符，跨字体定位不飘）。
 
 8. **runtimeErrors store map 跟 ws 切换不同步问题**：切换 workspace 时若 `runtimeErrors` 没清空会显示上一个 workspace 的 error。`internal_switchWorkspace` 内加 `this.#set({ runtimeErrors: new Map() })` 再 `internal_loadWorkspace` 内 fetch 一次。
 
