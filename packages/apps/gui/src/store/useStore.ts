@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { applyNodeChanges, applyEdgeChanges, type Node, type Edge } from '@xyflow/react'
-import type { Workspace, NodeDef, TextBlock, NodeEvent, ErrorEntry } from '@flowcabal/engine'
+import type { Workspace, NodeDef, TextBlock, DataflowEvent, ErrorEntry } from '@flowcabal/engine'
 import { recordToWorkspace, workspaceToRecord } from '@/lib/serialization'
 import { getLayoutedElements } from '@/lib/engine-to-flow'
 import { toast } from 'sonner'
@@ -212,7 +212,7 @@ class WorkspaceActions {
         for (const line of lines) {
           if (!line.trim()) continue
           try {
-            this.#handleNodeEvent(JSON.parse(line) as NodeEvent)
+            this.#handleNodeEvent(JSON.parse(line) as DataflowEvent)
           } catch {
             // 跨 chunk 解析失败的行：忽略，下一轮 buffer 接住
           }
@@ -221,7 +221,7 @@ class WorkspaceActions {
 
       await this.internal_loadWorkspace(ws.id)
     } catch {
-      toast.error('运行失败')
+      // dag-done 已承担运行失败 toast；此处仅吞网络异常之外的兜底
     } finally {
       this.#set({
         runningOutput: new Map(),
@@ -410,7 +410,7 @@ class WorkspaceActions {
     })
   }
 
-  #handleNodeEvent = (event: NodeEvent) => {
+  #handleNodeEvent = (event: DataflowEvent) => {
     switch (event.type) {
       case 'dag-start':
         this.#set({ dagProgress: { current: 0, total: event.total } })
@@ -431,19 +431,37 @@ class WorkspaceActions {
           const map = new Map(s.runningOutput)
           map.delete(event.nodeId)
           const dp = s.dagProgress
+          const errMap = new Map(s.runtimeErrors)
+          errMap.delete(event.nodeId)
           return {
             runningOutput: map,
+            runtimeErrors: errMap,
             dagProgress: dp ? { ...dp, current: dp.current + 1 } : null,
           }
         })
         this.#applyNodeComplete(event.nodeId, event.output)
         break
       case 'node-error':
-        // 本期不接 UI（无 runtimeErrors map），下期接 store.runtimeErrors
-        console.error(`Node ${event.nodeId} error:`, event.message)
+        this.#set((s: any) => {
+          const errMap = new Map(s.runtimeErrors)
+          errMap.set(event.nodeId, {
+            ts: new Date().toISOString(),
+            nodeId: event.nodeId,
+            message: event.message,
+          })
+          return { runtimeErrors: errMap }
+        })
         break
       case 'dag-done':
         this.#set({ runningNodeId: null })
+        if (event.failed.length > 0 || event.stuck.length > 0) {
+          toast.warning(
+            `跑完：成功 ${event.done.length}，失败 ${event.failed.length}` +
+            (event.stuck.length > 0 ? `，未跑 ${event.stuck.length}` : '')
+          )
+        } else if (event.done.length > 0) {
+          toast.success(`跑完 ${event.done.length} 个节点`)
+        }
         break
     }
   }
