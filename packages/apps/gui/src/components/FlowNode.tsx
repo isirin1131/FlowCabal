@@ -26,6 +26,8 @@ function FlowNode({ id, data, selected }: NodeProps<FlowNodeType>) {
   const inTarget = activeWorkspace?.target_nodes.includes(id) ?? false
   const hasOutput = !!data.output
   const staleKind = getStaleKindForNode(activeWorkspace, id)
+  const errorEntry = useStore((s) => s.runtimeErrors.get(id))
+  const hasError = !!errorEntry
 
   // status 派生：running 优先 > target+pending/completed > completed
   let visualStatus: 'target-pending' | 'target-completed' | 'completed' | 'running'
@@ -139,21 +141,40 @@ function FlowNode({ id, data, selected }: NodeProps<FlowNodeType>) {
         </div>
 
         {/* Foot */}
-        <div
-          className={[
-            'mt-[14px] pt-[10px] flex items-center justify-between',
-            'font-body text-[10.5px] tracking-wide lowercase',
-            footerBorderClass,
-          ].join(' ')}
-        >
-          <span className={`flex items-center gap-[6px] ${footerColorClass}`}>
-            <span className={`inline-block w-[5px] h-[5px] rounded-full ${footerDotClass}`} aria-hidden="true" />
-            <span>{statusText}</span>
-          </span>
-          <span className="text-ink-faint tabular-nums">
-            {wordCount !== null ? `${wordCount.toLocaleString()} 字` : '—'}
-          </span>
-        </div>
+        {hasError ? (
+          <div
+            className={[
+              'mt-[14px] pt-[10px] flex items-center justify-between',
+              'border-t border-t-clay-deep/30',
+            ].join(' ')}
+          >
+            <span
+              className="font-display italic text-[12px]"
+              style={{ color: 'var(--color-clay-deep)' }}
+            >
+              ● 上次失败
+            </span>
+            <span className="font-mono text-[10px] text-ink-faint tabular-nums">
+              {data.output ? `${estimateWords(data.output).toLocaleString()} 字` : '—'}
+            </span>
+          </div>
+        ) : (
+          <div
+            className={[
+              'mt-[14px] pt-[10px] flex items-center justify-between',
+              'font-body text-[10.5px] tracking-wide lowercase',
+              footerBorderClass,
+            ].join(' ')}
+          >
+            <span className={`flex items-center gap-[6px] ${footerColorClass}`}>
+              <span className={`inline-block w-[5px] h-[5px] rounded-full ${footerDotClass}`} aria-hidden="true" />
+              <span>{statusText}</span>
+            </span>
+            <span className="text-ink-faint tabular-nums">
+              {wordCount !== null ? `${wordCount.toLocaleString()} 字` : '—'}
+            </span>
+          </div>
+        )}
       </div>
 
       <Handle
