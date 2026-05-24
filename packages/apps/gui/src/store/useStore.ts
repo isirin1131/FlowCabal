@@ -385,7 +385,7 @@ class WorkspaceActions {
       const newOutputs = new Map(ws.outputs)
       newOutputs.set(nodeId, output)
       const newTarget = ws.target_nodes.filter((id: string) => id !== nodeId)
-      const newStale = ws.stale_nodes.filter((id: string) => id !== nodeId)
+      const newStale = ws.stale_nodes.filter((e: { id: string }) => e.id !== nodeId)
       const newWs: Workspace = { ...ws, outputs: newOutputs, target_nodes: newTarget, stale_nodes: newStale }
       return {
         activeWorkspace: newWs,

@@ -89,7 +89,7 @@ export function workspaceStatus(rootDir: string, workspaceId: string): void {
   console.log(`Workspace ID: ${workspaceId}`);
   console.log(`  Nodes: ${ws.nodes.length}`);
   console.log(`  Targets: ${ws.target_nodes.join(', ') || '(none)'}`);
-  console.log(`  Stale: ${ws.stale_nodes.join(', ') || '(none)'}`);
+  console.log(`  Stale: ${ws.stale_nodes.map(e => e.id).join(', ') || '(none)'}`);
   console.log(`  Outputs: ${ws.outputs.size}`);
 }
 
