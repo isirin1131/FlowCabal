@@ -542,3 +542,30 @@ export const useStore = create<GuiState>()((set, get) => {
     }),
   }
 })
+
+export function getStaleKindForNode(ws: Workspace | null, nodeId: string): 'direct' | 'propagated' | null {
+  if (!ws) return null
+  const entry = ws.stale_nodes.find(e => e.id === nodeId)
+  return entry?.kind ?? null
+}
+
+export function propagatedUpstreamRomans(ws: Workspace | null, nodeId: string): string[] {
+  if (!ws) return []
+  const directIds = new Set(
+    ws.stale_nodes.filter(e => e.kind === 'direct').map(e => e.id)
+  )
+  const result: string[] = []
+  const visited = new Set<string>()
+  const queue = [...(ws.upstream.get(nodeId) || [])]
+  while (queue.length > 0) {
+    const id = queue.shift()!
+    if (visited.has(id)) continue
+    visited.add(id)
+    if (directIds.has(id)) {
+      const idx = ws.nodes.findIndex(n => n.id === id)
+      if (idx >= 0) result.push(toRoman(idx + 1))
+    }
+    for (const u of ws.upstream.get(id) || []) queue.push(u)
+  }
+  return result
+}
