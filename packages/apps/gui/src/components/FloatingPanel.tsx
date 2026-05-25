@@ -14,6 +14,7 @@ export function FloatingPanel({ nodeId, open, onOpenChange }: {
   const [tab, setTab] = useState<'editor' | 'output'>('editor')
   const activeWorkspace = useStore((s) => s.activeWorkspace)
   const renameNode = useStore((s) => s.renameNode)
+  const deleteNode = useStore((s) => s.deleteNode)
 
   const idx = activeWorkspace && nodeId
     ? activeWorkspace.nodes.findIndex((n: NodeDef) => n.id === nodeId)
@@ -143,9 +144,23 @@ export function FloatingPanel({ nodeId, open, onOpenChange }: {
           {tab === 'output' && <OutputsPanel />}
         </div>
 
-        {/* 底部 mono id */}
-        <div className="shrink-0 px-7 py-3 border-t border-rule-soft font-mono text-[10.5px] text-ink-faint tracking-wide lowercase truncate">
-          id: {nodeId || '—'}
+        {/* 底部 mono id + 删除节点 */}
+        <div className="shrink-0 px-7 py-3 border-t border-rule-soft flex items-center justify-between">
+          <span className="font-mono text-[10.5px] text-ink-faint tracking-wide lowercase truncate">
+            id: {nodeId || '—'}
+          </span>
+          {nodeId && (
+            <button
+              type="button"
+              onClick={() => {
+                deleteNode(nodeId)
+                onOpenChange(false)
+              }}
+              className="font-display italic text-[12.5px] text-error hover:opacity-80 transition-opacity cursor-pointer shrink-0 ml-3"
+            >
+              删除节点
+            </button>
+          )}
         </div>
       </DialogContent>
     </Dialog>
