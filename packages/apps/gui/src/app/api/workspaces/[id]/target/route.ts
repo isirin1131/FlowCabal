@@ -7,14 +7,18 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: workspaceId } = await params
-  const { nodeId } = await request.json()
+  const { nodeId, op } = await request.json() as { nodeId: string; op?: 'add' | 'toggle' }
   const projectDir = process.cwd()
   const workspace = readWorkspace(projectDir, workspaceId)
   if (!workspace) {
     return NextResponse.json({ error: 'Workspace not found' }, { status: 404 })
   }
-  if (!workspace.target_nodes.includes(nodeId)) {
-    workspace.target_nodes.push(nodeId)
+  const has = workspace.target_nodes.includes(nodeId)
+  if (op === 'toggle') {
+    if (has) workspace.target_nodes = workspace.target_nodes.filter(id => id !== nodeId)
+    else workspace.target_nodes.push(nodeId)
+  } else {
+    if (!has) workspace.target_nodes.push(nodeId)
   }
   writeWorkspace(projectDir, workspaceId, workspace)
   return NextResponse.json({ workspace: workspaceToRecord(workspace) })
