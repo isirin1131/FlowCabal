@@ -16,22 +16,18 @@ import FlowNode from './FlowNode'
 import { CustomEdge } from './CustomEdge'
 import { nanoid } from 'nanoid'
 import { getLayoutedElements } from '@/lib/engine-to-flow'
+import { toast } from 'sonner'
 
 const nodeTypes: NodeTypes = { flowNode: FlowNode }
 const edgeTypes: EdgeTypes = { custom: CustomEdge }
 
-function ContextMenuPanel({ x, y, nodeId, selectedIds, onClose }: {
+function ContextMenuPanel({ x, y, nodeId, onClose }: {
   x: number
   y: number
   nodeId: string | null
-  selectedIds: Set<string>
   onClose: () => void
 }) {
   const createNode = useStore((s) => s.createNode)
-  const deleteNode = useStore((s) => s.deleteNode)
-  const addToTarget = useStore((s) => s.addToTarget)
-  const activeWorkspace = useStore((s) => s.activeWorkspace)
-  const selectNode = useStore((s) => s.selectNode)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -49,50 +45,7 @@ function ContextMenuPanel({ x, y, nodeId, selectedIds, onClose }: {
     }
   }, [onClose])
 
-  type Item = { label: string; onClick: () => void; danger?: boolean }
-
-  let items: Item[] = []
-
-  if (nodeId === null) {
-    // 空白处
-    items = [{ label: '添加节点', onClick: () => { createNode(`节点 ${nanoid(4)}`); onClose() } }]
-  } else {
-    const isMulti = selectedIds.size >= 2 && selectedIds.has(nodeId)
-    if (isMulti) {
-      const ids = [...selectedIds]
-      const someNotTarget = activeWorkspace
-        ? ids.some(id => !activeWorkspace.target_nodes.includes(id))
-        : false
-      items = [
-        { label: `删除 ${ids.length} 个节点`, onClick: () => {
-          for (const id of ids) deleteNode(id)
-          onClose()
-        }, danger: true },
-      ]
-      if (someNotTarget) {
-        items.unshift({ label: '加入 target', onClick: () => {
-          for (const id of ids) {
-            if (!activeWorkspace?.target_nodes.includes(id)) addToTarget(id)
-          }
-          onClose()
-        }})
-      }
-    } else {
-      // 单选节点：右键时已经在 onNodeContextMenu 里同步过选中状态
-      const inTarget = activeWorkspace?.target_nodes.includes(nodeId) ?? false
-      items = [
-        { label: '重命名', onClick: () => {
-          selectNode(nodeId)
-          window.dispatchEvent(new CustomEvent('flowcabal:rename-node', { detail: { nodeId } }))
-          onClose()
-        }},
-        { label: '删除', onClick: () => { deleteNode(nodeId); onClose() }, danger: true },
-      ]
-      if (!inTarget) {
-        items.push({ label: '加入 target', onClick: () => { addToTarget(nodeId); onClose() } })
-      }
-    }
-  }
+  if (nodeId !== null) return null  // 节点不再走菜单；防回归挡板
 
   return (
     <div
@@ -100,19 +53,12 @@ function ContextMenuPanel({ x, y, nodeId, selectedIds, onClose }: {
       className="fixed z-50 min-w-[180px] bg-paper border border-rule rounded-md shadow-lift py-1 animate-slide-in font-body text-[13px]"
       style={{ left: x, top: y }}
     >
-      {items.map((item, i) => (
-        <button
-          key={i}
-          className={[
-            'w-full text-left px-3 py-1.5 cursor-pointer transition-colors duration-150',
-            'hover:bg-clay-faint',
-            item.danger ? 'text-error hover:!text-error' : 'text-ink hover:text-clay-deep',
-          ].join(' ')}
-          onClick={item.onClick}
-        >
-          {item.label}
-        </button>
-      ))}
+      <button
+        className="w-full text-left px-3 py-1.5 cursor-pointer transition-colors duration-150 hover:bg-clay-faint text-ink hover:text-clay-deep"
+        onClick={() => { createNode(`节点 ${nanoid(4)}`); onClose() }}
+      >
+        添加节点
+      </button>
     </div>
   )
 }
@@ -184,6 +130,8 @@ function CanvasInner() {
   const setSelectedNodeIds = useStore((s) => s.setSelectedNodeIds)
   const selectedNodeIds = useStore((s) => s.selectedNodeIds)
   const createNode = useStore((s) => s.createNode)
+  const dagProgress = useStore((s) => s.dagProgress)
+  const toggleTarget = useStore((s) => s.toggleTarget)
 
   const [contextMenu, setContextMenu] = useState<{
     x: number; y: number; nodeId: string | null
@@ -210,10 +158,12 @@ function CanvasInner() {
 
   const onNodeContextMenu = useCallback((event: React.MouseEvent, node: Node) => {
     event.preventDefault()
-    // 如果右键的节点不在选中集，先单选它（避免在 ContextMenuPanel 渲染中 setState）
-    if (!selectedNodeIds.has(node.id)) selectNode(node.id)
-    setContextMenu({ x: event.clientX - 10, y: event.clientY - 10, nodeId: node.id })
-  }, [selectedNodeIds, selectNode])
+    if (dagProgress !== null) {
+      toast.warning('运行中无法修改 target')
+      return
+    }
+    toggleTarget(node.id)
+  }, [dagProgress, toggleTarget])
 
   const onPaneContextMenu = useCallback((event: React.MouseEvent | MouseEvent) => {
     event.preventDefault()
@@ -259,7 +209,6 @@ function CanvasInner() {
           x={contextMenu.x}
           y={contextMenu.y}
           nodeId={contextMenu.nodeId}
-          selectedIds={selectedNodeIds}
           onClose={() => setContextMenu(null)}
         />
       )}
