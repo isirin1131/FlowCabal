@@ -46,6 +46,7 @@ interface LlmFormData {
   topP: string
   frequencyPenalty: string
   presencePenalty: string
+  providerOptions: string
 }
 
 const EMPTY_FORM: LlmFormData = {
@@ -59,6 +60,23 @@ const EMPTY_FORM: LlmFormData = {
   topP: '',
   frequencyPenalty: '',
   presencePenalty: '',
+  providerOptions: '',
+}
+
+const DEEPSEEK_PRESET = {
+  baseURL: 'https://api.deepseek.com',
+  model: 'deepseek-v4-pro',
+  maxTokens: '384000',
+  providerOptions: JSON.stringify(
+    {
+      deepseek: {
+        thinking: { type: 'enabled' },
+        reasoning_effort: 'max',
+      },
+    },
+    null,
+    2,
+  ),
 }
 
 function formToConfig(data: LlmFormData): LlmConfig {
@@ -78,6 +96,13 @@ function formToConfig(data: LlmFormData): LlmConfig {
   if (!isNaN(fp)) config.frequencyPenalty = fp
   const pp = parseFloat(data.presencePenalty)
   if (!isNaN(pp)) config.presencePenalty = pp
+  if (data.providerOptions.trim()) {
+    try {
+      config.providerOptions = JSON.parse(data.providerOptions)
+    } catch {
+      // 校验已在 onBlur 拦住，理论上不会到
+    }
+  }
   return config
 }
 
@@ -158,6 +183,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
   const [showPassword, setShowPassword] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [showPasswordEdited, setShowPasswordEdited] = useState(false)
+  const [providerOptionsError, setProviderOptionsError] = useState<string | null>(null)
 
   const fetchLlmConfigs = async () => {
     setLlmLoading(true)
@@ -192,6 +218,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
     setShowPassword(true)
     setShowPasswordEdited(false)
     setShowAdvanced(false)
+    setProviderOptionsError(null)
     setLlmMode('add')
   }
 
@@ -209,10 +236,14 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
       topP: cfg.topP?.toString() || '',
       frequencyPenalty: cfg.frequencyPenalty?.toString() || '',
       presencePenalty: cfg.presencePenalty?.toString() || '',
+      providerOptions: cfg.providerOptions
+        ? JSON.stringify(cfg.providerOptions, null, 2)
+        : '',
     })
     setShowPassword(false)
     setShowPasswordEdited(false)
-    setShowAdvanced(!!(cfg.topP || cfg.frequencyPenalty || cfg.presencePenalty))
+    setShowAdvanced(!!(cfg.topP || cfg.frequencyPenalty || cfg.presencePenalty || cfg.providerOptions))
+    setProviderOptionsError(null)
     setLlmEditingName(name)
     setLlmMode('edit')
   }
@@ -221,6 +252,33 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
     setLlmMode('list')
     setShowPassword(false)
     setShowPasswordEdited(false)
+  }
+
+  const onProviderChange = (v: string) => {
+    setLlmForm(p => {
+      if (v !== 'openai-compatible') return { ...p, provider: v }
+      return {
+        ...p,
+        provider: v,
+        baseURL: p.baseURL || DEEPSEEK_PRESET.baseURL,
+        model: p.model || DEEPSEEK_PRESET.model,
+        maxTokens: p.maxTokens || DEEPSEEK_PRESET.maxTokens,
+        providerOptions: p.providerOptions || DEEPSEEK_PRESET.providerOptions,
+      }
+    })
+  }
+
+  const validateProviderOptions = () => {
+    if (!llmForm.providerOptions.trim()) {
+      setProviderOptionsError(null)
+      return
+    }
+    try {
+      JSON.parse(llmForm.providerOptions)
+      setProviderOptionsError(null)
+    } catch (e) {
+      setProviderOptionsError(e instanceof Error ? e.message : 'JSON 解析失败')
+    }
   }
 
   const saveLlmConfig = async () => {
@@ -272,7 +330,11 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
     ? (llmForm.apiKey ? '••••••••' : '')
     : llmForm.apiKey
 
-  const formValid = llmForm.name.trim() && llmForm.apiKey.trim() && llmForm.model.trim()
+  const formValid =
+    llmForm.name.trim() &&
+    llmForm.apiKey.trim() &&
+    llmForm.model.trim() &&
+    !providerOptionsError
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -486,7 +548,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
                       <FieldLabel>提供商</FieldLabel>
                       <Select
                         value={llmForm.provider}
-                        onValueChange={v => setLlmForm(p => ({ ...p, provider: v }))}
+                        onValueChange={onProviderChange}
                       >
                         <SelectTrigger className="!h-auto bg-paper-deep border border-rule rounded-md px-3 py-2 font-mono text-[13px] text-ink !ring-0 focus:border-clay">
                           <SelectValue />
@@ -622,6 +684,22 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
                           placeholder="0"
                           className={inputCls}
                         />
+                      </div>
+                      <div className="col-span-2">
+                        <FieldLabel muted>provider options (JSON)</FieldLabel>
+                        <textarea
+                          rows={5}
+                          value={llmForm.providerOptions}
+                          onChange={e => setLlmForm(p => ({ ...p, providerOptions: e.target.value }))}
+                          onBlur={validateProviderOptions}
+                          placeholder='{"deepseek":{"thinking":{"type":"enabled"}}}'
+                          className={`${inputCls} resize-y leading-relaxed`}
+                        />
+                        {providerOptionsError && (
+                          <p className="mt-1.5 font-mono text-[10.5px] text-error">
+                            {providerOptionsError}
+                          </p>
+                        )}
                       </div>
                     </div>
                   )}
