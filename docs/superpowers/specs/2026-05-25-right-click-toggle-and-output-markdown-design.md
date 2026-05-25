@@ -381,7 +381,7 @@ import { Prose } from '@/components/Prose'
 按下顺序走：
 
 1. 右键一个未在 target 的节点 → 顶描边变 `clay-deep`，状态文字 "待运行" 或 "待重跑"（取决于是否有 output）；toast "已加入运行目标"
-2. 再次右键同节点 → 顶描边变回 `rule`（默认 1px），状态文字 "completed" 或 "completed"（取决于 output）；toast "已移出运行目标"
+2. 再次右键同节点 → 顶描边变回 `rule`（默认 1px），状态文字 "completed"；toast "已移出运行目标"
 3. 多次连续右键同节点 → 状态在加入 / 移出之间正确翻转
 4. 右键节点时编辑器**不**打开 —— FloatingPanel 状态 `floatingPanelOpen` 保持不变
 5. shift+左键 选中 3 个节点后右键其中一个 → 只 toggle 被右键那个，另外两个仍选中且 target 状态不变
