@@ -1,7 +1,6 @@
 'use client'
 import { useState, useRef, useCallback, useEffect } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import { Prose } from '@/components/Prose'
 import type { MemoryStreamChunk } from '@flowcabal/engine'
 import {
   isPersistenceAvailable,
@@ -23,20 +22,6 @@ type ChatMessage = UserMessage | AssistantMessage
 
 function id() {
   return Math.random().toString(36).slice(2, 10)
-}
-
-// ───────────────────────────────────────────────────────────────
-//  Markdown 渲染（助手消息正文）
-//  display serif 16px / 行高 1.7，首段 drop cap 由 .fc-prose-first 接管
-// ───────────────────────────────────────────────────────────────
-function Prose({ children, first }: { children: string; first?: boolean }) {
-  return (
-    <div className={`fc-prose font-display text-[16px] leading-[1.7] text-ink ${first ? 'fc-prose-first' : ''}`}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-        {children}
-      </ReactMarkdown>
-    </div>
-  )
 }
 
 // 思考过程：左 2px clay 竖线 + italic + ink-soft，无图标
