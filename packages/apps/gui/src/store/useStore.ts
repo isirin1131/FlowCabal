@@ -28,6 +28,7 @@ type GuiState = {
   deleteNode: (nodeId: string) => Promise<void>
   createWorkspace: (name: string) => Promise<void>
   addToTarget: (nodeId: string) => Promise<void>
+  toggleTarget: (nodeId: string) => Promise<void>
   updateBlock: (nodeId: string, isSystem: boolean, index: number, block: TextBlock) => Promise<void>
   addBlock: (nodeId: string, block: TextBlock, isSystem: boolean) => Promise<void>
   removeBlock: (nodeId: string, isSystem: boolean, index: number) => Promise<void>
@@ -546,6 +547,31 @@ class WorkspaceActions {
     }
   }
 
+  internal_toggleTarget = async (nodeId: string) => {
+    const ws = this.#get().activeWorkspace
+    if (!ws) return
+    const wasInTarget = ws.target_nodes.includes(nodeId)
+    try {
+      const res = await fetch(`/api/workspaces/${ws.id}/target`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nodeId, op: 'toggle' }),
+      })
+      const data = await res.json()
+      if (data.workspace) {
+        const updatedWs = recordToWorkspace(data.workspace)
+        this.#set((s: any) => ({
+          workspaces: s.workspaces.map((w: Workspace) => w.id === updatedWs.id ? updatedWs : w),
+          activeWorkspace: updatedWs,
+          nodes: s.nodes.map((n: any) => syncNodeDataFromWorkspace(n, updatedWs)),
+        }))
+        toast.success(wasInTarget ? '已移出运行目标' : '已加入运行目标')
+      }
+    } catch {
+      toast.error('操作失败')
+    }
+  }
+
   internal_removeBlock = async (nodeId: string, isSystem: boolean, index: number) => {
     const ws = this.#get().activeWorkspace
     if (!ws) return
@@ -577,6 +603,7 @@ export const useStore = create<GuiState>()((set, get) => {
     deleteNode: (nodeId: string) => actions.internal_deleteNode(nodeId),
     createWorkspace: (name: string) => actions.internal_createWorkspace(name),
     addToTarget: (nodeId: string) => actions.internal_addToTarget(nodeId),
+    toggleTarget: (nodeId: string) => actions.internal_toggleTarget(nodeId),
 
     renameNode: (nodeId: string, label: string) => actions.internal_renameNode(nodeId, label),
     updateBlock: (nodeId: string, isSystem: boolean, index: number, block: TextBlock) =>
