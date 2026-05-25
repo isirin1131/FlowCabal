@@ -147,6 +147,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
     }
   }
 
+  const [llmActive, setLlmActive] = useState<string>('')
   const [llmConfigs, setLlmConfigs] = useState<Record<string, LlmConfig> | null>(null)
   const [llmLoading, setLlmLoading] = useState(true)
   const [llmMode, setLlmMode] = useState<'list' | 'add' | 'edit'>('list')
@@ -164,6 +165,7 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
       const res = await fetch('/api/llm-configs')
       if (res.ok) {
         const data = await res.json()
+        setLlmActive(data.active ?? '')
         setLlmConfigs(data.configs)
       }
     } catch {
@@ -250,6 +252,19 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
       // ignore
     } finally {
       setLlmDeleting(null)
+    }
+  }
+
+  const setActiveLlmConfig = async (name: string) => {
+    try {
+      await fetch('/api/llm-configs', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: name }),
+      })
+      await fetchLlmConfigs()
+    } catch {
+      // ignore
     }
   }
 
@@ -377,48 +392,63 @@ export function SettingsDialog({ open, onOpenChange }: Props) {
                     </div>
                   ) : (
                     <ul className="flex flex-col">
-                      {Object.entries(llmConfigs).map(([name, cfg]) => (
-                        <li
-                          key={name}
-                          className="px-2 py-3 border-b border-rule-soft last:border-b-0 flex items-baseline gap-3"
-                        >
-                          <span className="font-display text-[14.5px] text-ink shrink-0">
-                            {name}
-                          </span>
-                          {name === 'default' && (
+                      {Object.entries(llmConfigs).map(([name, cfg]) => {
+                        const isActive = llmActive === name
+                        return (
+                          <li
+                            key={name}
+                            className={[
+                              'py-3 border-b border-rule-soft last:border-b-0 flex items-baseline gap-3',
+                              isActive ? 'pl-[6px] border-l-2 border-clay -ml-[8px]' : 'px-2',
+                            ].join(' ')}
+                          >
+                            <span className="font-display text-[14.5px] text-ink shrink-0">
+                              {name}
+                            </span>
+                            {isActive && (
+                              <span className="font-display italic text-[12.5px] shrink-0">
+                                <span className="text-clay">〔</span>
+                                <span className="text-ink-soft mx-0.5">active</span>
+                                <span className="text-clay">〕</span>
+                              </span>
+                            )}
                             <span className="font-display italic text-[12.5px] shrink-0">
                               <span className="text-clay">〔</span>
-                              <span className="text-ink-soft mx-0.5">default</span>
+                              <span className="text-ink-soft mx-0.5">
+                                {PROVIDER_LABELS[cfg.provider] || cfg.provider}
+                              </span>
                               <span className="text-clay">〕</span>
                             </span>
-                          )}
-                          <span className="font-display italic text-[12.5px] shrink-0">
-                            <span className="text-clay">〔</span>
-                            <span className="text-ink-soft mx-0.5">
-                              {PROVIDER_LABELS[cfg.provider] || cfg.provider}
+                            <span className="font-mono text-[11px] text-ink-faint truncate flex-1 min-w-0">
+                              {cfg.model}
                             </span>
-                            <span className="text-clay">〕</span>
-                          </span>
-                          <span className="font-mono text-[11px] text-ink-faint truncate flex-1 min-w-0">
-                            {cfg.model}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => startEdit(name)}
-                            className={`${textBtnInk} shrink-0`}
-                          >
-                            编辑
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => deleteLlmConfig(name)}
-                            disabled={llmDeleting === name}
-                            className={`${textBtnError} shrink-0`}
-                          >
-                            {llmDeleting === name ? '删除中…' : '删除'}
-                          </button>
-                        </li>
-                      ))}
+                            {!isActive && (
+                              <button
+                                type="button"
+                                onClick={() => setActiveLlmConfig(name)}
+                                className={`${textBtnInk} shrink-0`}
+                              >
+                                设为活跃
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => startEdit(name)}
+                              className={`${textBtnInk} shrink-0`}
+                            >
+                              编辑
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => deleteLlmConfig(name)}
+                              disabled={llmDeleting === name}
+                              className={`${textBtnError} shrink-0`}
+                            >
+                              {llmDeleting === name ? '删除中…' : '删除'}
+                            </button>
+                          </li>
+                        )
+                      })}
                     </ul>
                   )}
 
