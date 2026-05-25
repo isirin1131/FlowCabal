@@ -9,13 +9,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { SettingsDialog } from '@/components/SettingsDialog'
 
 export function Header() {
@@ -25,10 +18,14 @@ export function Header() {
   const createWorkspace = useStore((s) => s.createWorkspace)
   const [settingsOpen, setSettingsOpen] = useState(false)
 
-  const handleCreateWorkspace = useCallback(() => {
-    const name = `Workspace ${workspaces.length + 1}`
-    createWorkspace(name)
-  }, [createWorkspace, workspaces.length])
+  const handleSelectChange = useCallback((value: string) => {
+    if (value === '__create__') {
+      const name = `Workspace ${workspaces.length + 1}`
+      createWorkspace(name)
+    } else {
+      switchWorkspace(value)
+    }
+  }, [createWorkspace, workspaces.length, switchWorkspace])
 
   return (
     <header className="h-16 border-b border-rule flex items-center px-7 gap-7 shrink-0 bg-paper relative z-10">
@@ -50,7 +47,7 @@ export function Header() {
         </span>
         <Select
           value={activeWorkspace?.id || ''}
-          onValueChange={switchWorkspace}
+          onValueChange={handleSelectChange}
         >
           <SelectTrigger
             className="!h-auto !border-0 !bg-transparent !p-0 !shadow-none !ring-0 hover:!bg-transparent focus:!ring-0 focus-visible:!outline-none gap-1.5 font-display text-[16px] italic text-ink !w-auto"
@@ -61,20 +58,33 @@ export function Header() {
             align="start"
             className="bg-paper border-rule font-display"
           >
-            {workspaces.length === 0 && (
-              <div className="px-3 py-2 text-[13px] italic text-ink-faint">
-                — 暂无 workspace —
-              </div>
-            )}
-            {workspaces.map((ws) => (
+            {workspaces.length === 0 ? (
               <SelectItem
-                key={ws.id}
-                value={ws.id}
+                value="__create__"
                 className="font-display italic text-[14px]"
               >
-                {ws.name}
+                新建 workspace
               </SelectItem>
-            ))}
+            ) : (
+              <>
+                {workspaces.map((ws) => (
+                  <SelectItem
+                    key={ws.id}
+                    value={ws.id}
+                    className="font-display italic text-[14px]"
+                  >
+                    {ws.name}
+                  </SelectItem>
+                ))}
+                <div className="mx-2 my-1 border-t border-rule-soft" />
+                <SelectItem
+                  value="__create__"
+                  className="font-display italic text-[13px] text-ink-faint"
+                >
+                  + 新建 workspace
+                </SelectItem>
+              </>
+            )}
           </SelectContent>
         </Select>
       </div>
@@ -85,32 +95,13 @@ export function Header() {
         <NavLink href="/manuscripts">manuscripts</NavLink>
         <Sep />
 
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            className="text-ink-faint hover:text-ink text-[16px] leading-none px-1 cursor-pointer outline-none focus-visible:text-clay"
-            aria-label="更多"
-          >
-            ⋯
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            className="bg-paper border-rule min-w-[160px] font-body text-[13px]"
-          >
-            <DropdownMenuItem
-              onClick={handleCreateWorkspace}
-              className="text-ink hover:!bg-clay-faint hover:!text-clay-deep cursor-pointer"
-            >
-              新建 workspace
-            </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-rule-soft" />
-            <DropdownMenuItem
-              onClick={() => setSettingsOpen(true)}
-              className="text-ink hover:!bg-clay-faint hover:!text-clay-deep cursor-pointer"
-            >
-              设置...
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <button
+          onClick={() => setSettingsOpen(true)}
+          className="text-ink-faint hover:text-ink text-[16px] leading-none px-1 cursor-pointer outline-none focus-visible:text-clay"
+          aria-label="设置"
+        >
+          ⋯
+        </button>
       </nav>
 
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />

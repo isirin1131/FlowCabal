@@ -850,7 +850,7 @@ export default function MemoryPage() {
                   </p>
                   <p className="mt-4 font-body text-[13px] text-ink-faint">
                     它会读取 <span className="font-mono">memory/</span> 与{' '}
-                    <span className="font-mono">memory/manuscripts/</span> 来回答你的问题
+                    <span className="font-mono">manuscripts/</span> 来回答你的问题，或是帮助你整理修改 <span className="font-mono">memory/</span>
                   </p>
                 </div>
               )}

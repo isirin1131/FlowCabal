@@ -1,4 +1,5 @@
 'use client'
+import { useEffect } from 'react'
 import dynamic from 'next/dynamic'
 import { useStore } from '@/store/useStore'
 import { FloatingPanel } from '@/components/FloatingPanel'
@@ -18,6 +19,11 @@ export default function Home() {
   const selectedNodeId = useStore((s) => s.selectedNodeId)
   const floatingPanelOpen = useStore((s) => s.floatingPanelOpen)
   const selectNode = useStore((s) => s.selectNode)
+  const loadAllWorkspaces = useStore((s) => s.loadAllWorkspaces)
+
+  useEffect(() => {
+    loadAllWorkspaces()
+  }, [loadAllWorkspaces])
 
   return (
     <>

@@ -1,6 +1,6 @@
 import { join } from "path";
 import { homedir } from "os";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs";
 import { LlmConfig, Workflow, Workspace } from "./types.js";
 import { LlmConfigsFileSchema, WorkflowSchema, WorkspaceSchema } from "./schema.js";
 
@@ -41,6 +41,29 @@ export function writeCurrentWorkspace(projectDir: string, workspaceId: string): 
   const file = getCurrentWorkspaceFile(projectDir);
   ensureDir(join(file, ".."));
   writeFileSync(file, workspaceId, "utf-8");
+}
+
+export function listWorkspaceEntries(projectDir: string): { id: string; name: string }[] {
+  const cacheDir = getCacheDir(projectDir);
+  if (!existsSync(cacheDir)) return [];
+
+  const entries: { id: string; name: string }[] = [];
+  const dirs = readdirSync(cacheDir, { withFileTypes: true });
+  for (const d of dirs) {
+    if (!d.isDirectory() || d.name === "current") continue;
+    const wsFile = join(cacheDir, d.name, "workspace.json");
+    if (!existsSync(wsFile)) continue;
+    try {
+      const content = readFileSync(wsFile, "utf-8");
+      const data = JSON.parse(content);
+      if (data.id && data.name) {
+        entries.push({ id: data.id, name: data.name });
+      }
+    } catch {
+      // 损坏的 workspace.json 跳过
+    }
+  }
+  return entries.sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export function getNodeOutputFile(projectDir: string, workspaceId: string, nodeId: string): string {

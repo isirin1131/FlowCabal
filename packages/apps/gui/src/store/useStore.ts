@@ -21,6 +21,7 @@ type GuiState = {
 } & {
   switchWorkspace: (id: string) => void
   loadWorkspace: (id: string) => Promise<void>
+  loadAllWorkspaces: () => Promise<void>
   saveActiveWorkspace: () => Promise<void>
   runAll: () => Promise<void>
   createNode: (label: string) => Promise<void>
@@ -135,6 +136,10 @@ class WorkspaceActions {
     const ws = this.#get().workspaces.find((w: Workspace) => w.id === id)
     if (!ws) return
     this.#set({ activeWorkspace: ws, ...workspaceToFlowData(ws) })
+    fetch('/api/workspaces/current', {
+      method: 'PUT',
+      body: JSON.stringify({ workspaceId: id }),
+    }).catch(() => {})
   }
 
   internal_loadWorkspace = async (workspaceId: string) => {
@@ -159,6 +164,58 @@ class WorkspaceActions {
         }
       } catch {
         // 加载错误日志失败不阻塞 workspace 加载
+      }
+    } finally {
+      this.#set({ isLoading: false })
+    }
+  }
+
+  internal_loadAllWorkspaces = async () => {
+    this.#set({ isLoading: true })
+    try {
+      const listRes = await fetch('/api/workspaces')
+      const listData = await listRes.json()
+      const list: { id: string; name: string }[] = listData.workspaces ?? []
+      const currentId: string | null = listData.currentWorkspaceId ?? null
+
+      if (list.length === 0) {
+        this.#set({ isLoading: false })
+        return
+      }
+
+      const wsList: Workspace[] = []
+      for (const entry of list) {
+        try {
+          const res = await fetch(`/api/workspaces/${entry.id}`)
+          const data = await res.json()
+          if (data.workspace) {
+            wsList.push(recordToWorkspace(data.workspace))
+          }
+        } catch {
+          // 个别 workspace 加载失败不阻塞整体
+        }
+      }
+
+      if (wsList.length === 0) {
+        this.#set({ isLoading: false })
+        return
+      }
+
+      this.#set({ workspaces: wsList })
+
+      const targetId = currentId && wsList.find((w) => w.id === currentId)
+        ? currentId
+        : wsList[0].id
+      this.internal_switchWorkspace(targetId)
+
+      try {
+        const errRes = await fetch(`/api/workspaces/${targetId}/errors?per-node=last`)
+        if (errRes.ok) {
+          const errMap: Record<string, ErrorEntry> = await errRes.json()
+          this.#set({ runtimeErrors: new Map(Object.entries(errMap)) })
+        }
+      } catch {
+        // 加载错误日志失败不阻塞首屏
       }
     } finally {
       this.#set({ isLoading: false })
@@ -513,6 +570,7 @@ export const useStore = create<GuiState>()((set, get) => {
 
     switchWorkspace: (id: string) => actions.internal_switchWorkspace(id),
     loadWorkspace: (id: string) => actions.internal_loadWorkspace(id),
+    loadAllWorkspaces: () => actions.internal_loadAllWorkspaces(),
     saveActiveWorkspace: () => actions.internal_saveActiveWorkspace(),
     runAll: () => actions.internal_runAll(),
     createNode: (label: string) => actions.internal_createNode(label),

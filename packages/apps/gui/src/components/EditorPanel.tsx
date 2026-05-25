@@ -3,6 +3,75 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { useStore, toRoman } from '@/store/useStore'
 import type { TextBlock, NodeDef, Workspace } from '@flowcabal/engine'
 
+function AutoSaveTextarea({
+  defaultValue,
+  onSave,
+  className,
+  placeholder,
+  style,
+}: {
+  defaultValue: string
+  onSave: (value: string) => void
+  className?: string
+  placeholder?: string
+  style?: React.CSSProperties
+}) {
+  const [draft, setDraft] = useState(defaultValue)
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(null)
+  const draftRef = useRef(defaultValue)
+  const defaultValueRef = useRef(defaultValue)
+  const onSaveRef = useRef(onSave)
+
+  useEffect(() => {
+    onSaveRef.current = onSave
+  })
+
+  useEffect(() => {
+    // 只在用户没有正在编辑的脏数据时吸收外部变化；否则只更新水位，不动 draft
+    if (draftRef.current === defaultValueRef.current) {
+      setDraft(defaultValue)
+      draftRef.current = defaultValue
+    }
+    defaultValueRef.current = defaultValue
+  }, [defaultValue])
+
+  const dirty = () => draftRef.current !== defaultValueRef.current
+
+  const flush = () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+    if (!dirty()) return
+    onSaveRef.current(draftRef.current)
+  }
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const v = e.target.value
+    draftRef.current = v
+    setDraft(v)
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(flush, 800)
+  }
+
+  useEffect(() => {
+    return () => {
+      flush()
+    }
+  }, [])
+
+  return (
+    <textarea
+      value={draft}
+      onChange={handleChange}
+      onBlur={flush}
+      placeholder={placeholder}
+      className={className}
+      style={style}
+    />
+  )
+}
+
 function SceneLabel({ text }: { text: string }) {
   return (
     <div className="text-center mb-6 select-none">
@@ -248,18 +317,18 @@ export function EditorPanel({ nodeId }: { nodeId: string }) {
         </div>
         <div className="px-4 py-3">
           {block.kind === 'literal' && (
-            <textarea
+            <AutoSaveTextarea
               defaultValue={block.content}
-              onBlur={(e) => updateBlock(nodeId, isSystem, i, { kind: 'literal', content: e.target.value })}
+              onSave={(v) => updateBlock(nodeId, isSystem, i, { kind: 'literal', content: v })}
               className="block w-full bg-transparent outline-none resize-none border-0 font-display text-[15px] text-ink leading-[1.65] min-h-[80px]"
               style={{ fieldSizing: 'content' } as React.CSSProperties}
             />
           )}
           {block.kind === 'agent-inject' && (
-            <textarea
+            <AutoSaveTextarea
               defaultValue={block.hint}
+              onSave={(v) => updateBlock(nodeId, isSystem, i, { kind: 'agent-inject', hint: v })}
               placeholder="向 agent 描述要注入的内容…"
-              onBlur={(e) => updateBlock(nodeId, isSystem, i, { kind: 'agent-inject', hint: e.target.value })}
               className="block w-full bg-transparent outline-none resize-none border-0 font-display italic text-[14.5px] text-ink-soft leading-[1.65] min-h-[60px] placeholder:text-ink-faint placeholder:italic"
               style={{ fieldSizing: 'content' } as React.CSSProperties}
             />

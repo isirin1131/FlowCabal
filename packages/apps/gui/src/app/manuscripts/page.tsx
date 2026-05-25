@@ -100,7 +100,7 @@ export default function ManuscriptsPage() {
 
             <div className="mt-8 text-center">
               <p className="font-display italic text-[14.5px] text-ink-soft leading-[1.65]">
-                手稿目录，存放小说、剧本、世界观等参考材料。
+                手稿目录，存放小说原稿、设定档案等自定义材料。
               </p>
               {files !== null && files.length > 0 && (
                 <p className="mt-2 font-mono text-[10.5px] text-ink-faint tracking-[0.14em] lowercase">
