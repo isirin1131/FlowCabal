@@ -1,6 +1,7 @@
 'use client'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useStore, toRoman } from '@/store/useStore'
+import { Prose } from './Prose'
 import type { NodeDef } from '@flowcabal/engine'
 
 function estimateWords(text: string): number {
@@ -73,9 +74,7 @@ export function OutputsPanel() {
             <span className="text-rule ml-[18px] tracking-[-1px]">— —</span>
           </span>
         </div>
-        <div className="font-display text-[16px] leading-[1.7] text-ink whitespace-pre-wrap break-words">
-          {runningChunks}
-        </div>
+        <Prose>{runningChunks}</Prose>
         <div className="text-center mt-6 font-display italic text-[14.5px] text-ink-soft">
           — 正在生成 —
         </div>
@@ -118,9 +117,7 @@ export function OutputsPanel() {
 
       {output ? (
         <>
-          <div className="font-display text-[16px] leading-[1.7] text-ink whitespace-pre-wrap break-words">
-            {output}
-          </div>
+          <Prose>{output}</Prose>
           <div className="text-center mt-12 font-mono text-[12px] text-ink-faint tracking-[0.6em] select-none">
             ·  ·  ·
           </div>
