@@ -1,4 +1,4 @@
-import { conversationalMemoryAgentStream, readLlmConfigs, type MemoryStreamChunk } from '@flowcabal/engine'
+import { conversationalMemoryAgentStream, getActiveLlmConfig, type MemoryStreamChunk } from '@flowcabal/engine'
 
 interface MemoryMessage {
   role: 'user' | 'assistant'
@@ -7,9 +7,8 @@ interface MemoryMessage {
 }
 
 export async function POST(request: Request) {
-  const { messages, configName } = (await request.json()) as {
+  const { messages } = (await request.json()) as {
     messages: MemoryMessage[]
-    configName?: string
   }
 
   if (!messages || messages.length === 0) {
@@ -20,11 +19,9 @@ export async function POST(request: Request) {
   }
 
   const projectDir = process.cwd()
-  const configs = readLlmConfigs()
-  const name = configName || 'default'
-  const config = configs[name]
+  const config = getActiveLlmConfig()
   if (!config) {
-    return new Response(JSON.stringify({ error: `LLM config '${name}' not found` }), {
+    return new Response(JSON.stringify({ error: '请先在 settings 选择活跃 LLM' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
     })

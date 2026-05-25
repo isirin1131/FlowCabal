@@ -1,11 +1,11 @@
-import { readWorkspace, writeWorkspace, runAllDataflow, readLlmConfigs } from '@flowcabal/engine'
+import { readWorkspace, writeWorkspace, runAllDataflow, getActiveLlmConfig } from '@flowcabal/engine'
 
 export async function POST(request: Request) {
   const { workspaceId } = await request.json()
   const projectDir = process.cwd()
-  const config = readLlmConfigs()['default']
+  const config = getActiveLlmConfig()
   if (!config) {
-    return new Response(JSON.stringify({ error: 'No default LLM config' }), {
+    return new Response(JSON.stringify({ error: '请先在 settings 选择活跃 LLM' }), {
       status: 400,
       headers: { 'Content-Type': 'application/json' },
     })
