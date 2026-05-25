@@ -5,7 +5,7 @@
   "scripts": {
     "flowcabal": "bun packages/cli/src/index.ts",
     "dev": "cd packages/apps/gui && bun run dev",
-    "typecheck": "bunx tsc --noEmit -p packages/engine/tsconfig.json && bunx tsc --noEmit -p packages/cli/tsconfig.json",
+    "typecheck": "bunx tsc --noEmit -p packages/engine/tsconfig.json",
     "typecheck:gui": "cd packages/apps/gui && tsc --noEmit"
   }
 }

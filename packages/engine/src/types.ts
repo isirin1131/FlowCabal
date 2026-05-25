@@ -64,4 +64,8 @@ export interface LlmConfig {
   providerOptions?: Record<string, Record<string, JsonValue>>;
 }
 
+export interface LlmFile {
+  active: string;
+  configs: Record<string, LlmConfig>;
+}
 

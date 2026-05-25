@@ -1,8 +1,8 @@
 import { join } from "path";
 import { homedir } from "os";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs";
-import { LlmConfig, Workflow, Workspace } from "./types.js";
-import { LlmConfigsFileSchema, WorkflowSchema, WorkspaceSchema } from "./schema.js";
+import { LlmConfig, LlmFile, Workflow, Workspace } from "./types.js";
+import { LlmFileSchema, WorkflowSchema, WorkspaceSchema } from "./schema.js";
 
 // 全局配置目录
 export const GLOBAL_CONFIG_DIR = join(homedir(), ".config", "flowcabal");
@@ -77,21 +77,28 @@ function ensureDir(dir: string): void {
   }
 }
 
-// 全局配置读写
-export function readLlmConfigs(): Record<string, LlmConfig> {
+// 全局 LLM 文件读写
+export function readLlmFile(filePath: string = LLM_CONFIGS_FILE): LlmFile {
   ensureDir(GLOBAL_CONFIG_DIR);
-  if (!existsSync(LLM_CONFIGS_FILE)) return {};
-  
-  const content = readFileSync(LLM_CONFIGS_FILE, "utf-8");
-  const parsed = JSON.parse(content);
-  return LlmConfigsFileSchema.parse(parsed);
+  if (!existsSync(filePath)) return { active: '', configs: {} };
+  try {
+    const content = readFileSync(filePath, "utf-8");
+    return LlmFileSchema.parse(JSON.parse(content));
+  } catch {
+    return { active: '', configs: {} };
+  }
 }
 
-export function writeLlmConfigs(configs: Record<string, LlmConfig>): void {
+export function writeLlmFile(file: LlmFile, filePath: string = LLM_CONFIGS_FILE): void {
   ensureDir(GLOBAL_CONFIG_DIR);
-  const validated = LlmConfigsFileSchema.parse(configs);
-  const content = JSON.stringify(validated, null, 2);
-  writeFileSync(LLM_CONFIGS_FILE, content, "utf-8");
+  const validated = LlmFileSchema.parse(file);
+  writeFileSync(filePath, JSON.stringify(validated, null, 2), "utf-8");
+}
+
+export function getActiveLlmConfig(filePath: string = LLM_CONFIGS_FILE): LlmConfig | null {
+  const file = readLlmFile(filePath);
+  if (!file.active) return null;
+  return file.configs[file.active] ?? null;
 }
 
 // Workflow读写

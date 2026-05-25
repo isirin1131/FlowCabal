@@ -66,4 +66,7 @@ export const WorkspaceSchema = z.object({
   stale_nodes: z.array(StaleEntrySchema),
 });
 
-export const LlmConfigsFileSchema = z.record(z.string(), LlmConfigSchema);
+export const LlmFileSchema = z.object({
+  active: z.string(),
+  configs: z.record(z.string(), LlmConfigSchema),
+});
