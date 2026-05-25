@@ -88,7 +88,10 @@ flowcabal[.exe]   (在用户 cwd 跑)
     │
     ├─ installSignalHandlers()  // SIGINT/SIGTERM → graceful exit
     │
-    ├─ serverImport = import('./server.js')   // Next 同进程起服务
+    ├─ serverPath = join(cacheDir, '.next/standalone/server.js')
+    │   serverImport = import(serverPath)   // 必须用绝对路径：
+    │                                       // dynamic import 的相对路径解析的是
+    │                                       // launcher.ts 自身位置，不是 cwd
     │
     ├─ await waitForReady(port, 10s)
     │     50ms 间隔 net.connect 探测；超时 → 报错退出
@@ -120,8 +123,9 @@ flowcabal[.exe]   (在用户 cwd 跑)
 
 ### 关键技术决策
 
-1. **同进程 `import('./server.js')`，不 fork 子进程**
+1. **同进程 dynamic import，不 fork 子进程**
    - 理由：Bun --compile 后自身就是 Bun runtime，自我 spawn 复杂；Next.js standalone server.js 是 listen-and-go 脚本，dynamic import 完全够用
+   - ⚠️ 必须用**绝对路径** `import(join(cacheDir, '.next/standalone/server.js'))` —— 相对路径 `import('./server.js')` 解析的是 launcher.ts 文件本身的位置，跟 `process.chdir` 无关
 2. **JS-only tar parser 内化（不调系统 `tar`）**
    - Windows 10 早期版本无 `tar.exe`；外部命令的引号/路径/编码跨平台麻烦
    - tar 格式简单：512 字节 header + 文件 payload + 512 字节对齐 padding；40 行能写完只读 parser
@@ -184,7 +188,7 @@ build-assets:
         bun-version: latest
     - run: bun install
     - name: Build Next.js standalone
-      run: cd packages/apps/gui && bun next build
+      run: cd packages/apps/gui && bun run build
     - name: Pack gui-assets.tar
       run: |
         cd packages/apps/gui
@@ -295,7 +299,7 @@ release:
 | `packages/apps/gui/build/gui-assets.tar` | 加入 `.gitignore` 不入库；只在 CI 生成 |
 | Next build 跨平台 native deps | `.next/standalone` 中的 `node_modules` 在 Linux x64 host 上 hoist；GUI 未用 `next/image`，无 sharp 等原生依赖。CI 若失败再补 |
 | Tar 内 symlink 跨平台 | Linux host 打 tar 时用 `--dereference` 展开 symlink 为实文件，避免 Windows 端解压时 symlink 失效 |
-| Bun `bun next build` | 通过 `bun` 调 `next` CLI；Next.js 标准产出，无 Bun-specific 改造 |
+| Bun 调 Next build | 用 gui 包内的 `bun run build` 脚本（已在 `package.json#scripts.build = "next build"`），等效 `npx next build` |
 | `next.config.ts` | 增加 `output: 'standalone'` |
 
 ---
@@ -332,6 +336,9 @@ Finish
   <MajorUpgrade DowngradeErrorMessage="已安装更新版本" />
   <MediaTemplate EmbedCab="yes" />
 
+  <!-- 注：Scope="perUserOrMachine" 让 WiX 4 自动管理 ALLUSERS / MSIINSTALLPERUSER；
+       通常不再需要手设这俩 Property。下面两行是 v3 习惯，v4 实施时按需删除。
+       默认 per-user 行为通过 UI 默认选项实现。 -->
   <Property Id="ALLUSERS" Value="2" />
   <Property Id="MSIINSTALLPERUSER" Value="1" />
 
@@ -523,6 +530,7 @@ CLI 命令清单**不**整段保留。给一句指引：「CLI 详细命令见 `
 | MSI SmartScreen 阻挡严重影响新用户 | README 写绕过指引；远期考虑买 EV cert |
 | 首次启动 extract 时间过长（>5s） | 改用 gzip 压缩 tar 牺牲 extract 速度换体积；或换 zstd |
 | 老 cache 目录残留累积 | 加 `--clear-cache` flag；或 launcher 启动时清理 7 天前的旧 hash 目录（暂不做） |
+| Server 启动失败 vs `waitForReady` 误判 timeout | 用 `Promise.race([waitForReady(port), serverImport])` 包裹 —— server import 若 reject，立即报错退出而不是干等 10s |
 
 ---
 
@@ -530,8 +538,8 @@ CLI 命令清单**不**整段保留。给一句指引：「CLI 详细命令见 `
 
 实施完成后，本机能验证：
 
-1. `bun run --filter gui next build` 不报错
-2. 本地 `bun build --compile packages/apps/gui/launcher.ts --outfile flowcabal` 出二进制
+1. `cd packages/apps/gui && bun run build` 不报错（产出 `.next/standalone/`）
+2. 本地 `cd packages/apps/gui && bun build --compile launcher.ts --outfile flowcabal` 出二进制
 3. `./flowcabal` 跑起，浏览器自动开 `http://127.0.0.1:3737`，可创建 workspace
 4. `./flowcabal --port=4000` 监听 4000
 5. `./flowcabal --no-open` 不开浏览器
