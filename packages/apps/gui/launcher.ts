@@ -12,7 +12,7 @@
 //
 import { createHash } from 'node:crypto';
 import { createServer, connect } from 'node:net';
-import { existsSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, readdirSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, readdirSync, symlinkSync, linkSync, copyFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir, platform } from 'node:os';
 import { spawn } from 'node:child_process';
@@ -119,12 +119,18 @@ function computeCacheDir(tarBuf: Uint8Array): string {
   return join(getCacheRoot(), hash);
 }
 
-// ── POSIX ustar tar parser (read-only, regular files & directories only) ──
+// ── POSIX ustar / GNU / pax tar parser (read-only) ──
+// 处理三种 entry：'0' 普通文件、'5' 目录、'1' hardlink。
+// 长路径走 typeflag 'L' (GNU LongLink) 或 'x' (pax extended header) 的 path/linkpath
+// 记录补在下一条 entry 上 —— 不补就会用截 100 字节的 ustar name 字段，
+// 比如 @opentelemetry/api/build/src/* 全截成 .../build/sr → mkdir + writeFile 撞
+// 同一路径，EISDIR 三平台齐爆。
 interface TarEntry {
   name: string;
   size: number;
   mode: number;
-  type: '0' | '5';   // '0' = file, '5' = directory
+  type: '0' | '5' | '1';   // '0' = file, '5' = directory, '1' = hardlink
+  linkname?: string;        // hardlink 目标（archive-root 相对路径）
   data: Uint8Array;
 }
 
@@ -135,9 +141,35 @@ function readCStr(buf: Uint8Array, start: number, len: number): string {
   return new TextDecoder('utf-8').decode(slice.subarray(0, end));
 }
 
+// pax extended header 内容是 "<len> <key>=<value>\n" 重复，len 是含 len 串自身的总字节数
+function parsePaxRecords(buf: Uint8Array): Record<string, string> {
+  const out: Record<string, string> = {};
+  let p = 0;
+  while (p < buf.length) {
+    let spaceIdx = p;
+    while (spaceIdx < buf.length && buf[spaceIdx] !== 0x20) spaceIdx++;
+    if (spaceIdx >= buf.length) break;
+    const lenStr = new TextDecoder('utf-8').decode(buf.subarray(p, spaceIdx));
+    const recLen = parseInt(lenStr, 10);
+    if (!Number.isFinite(recLen) || recLen <= 0 || p + recLen > buf.length) break;
+    const kvStart = spaceIdx + 1;
+    const kvEnd = p + recLen - 1;   // 去掉尾 \n
+    if (kvEnd > kvStart) {
+      const kv = new TextDecoder('utf-8').decode(buf.subarray(kvStart, kvEnd));
+      const eqIdx = kv.indexOf('=');
+      if (eqIdx > 0) out[kv.slice(0, eqIdx)] = kv.slice(eqIdx + 1);
+    }
+    p += recLen;
+  }
+  return out;
+}
+
 function parseTar(buf: Uint8Array): TarEntry[] {
   const entries: TarEntry[] = [];
   let offset = 0;
+  let pendingName: string | null = null;       // 来自 'L' 或 pax 'path'
+  let pendingLinkname: string | null = null;   // 来自 'K' 或 pax 'linkpath'
+
   while (offset + 512 <= buf.length) {
     const header = buf.subarray(offset, offset + 512);
     // end-of-archive: two consecutive 512-byte zero blocks (we stop at first all-zero)
@@ -147,29 +179,58 @@ function parseTar(buf: Uint8Array): TarEntry[] {
     const modeStr = readCStr(header, 100, 8).trim();
     const sizeStr = readCStr(header, 124, 12).trim();
     const typeFlag = String.fromCharCode(header[156]);
+    const linkname = readCStr(header, 157, 100);
     const prefix = readCStr(header, 345, 155);
 
     const size = sizeStr ? parseInt(sizeStr, 8) : 0;
     const mode = modeStr ? parseInt(modeStr, 8) : 0o644;
-    const fullName = prefix ? `${prefix}/${name}` : name;
 
     offset += 512;
+    const contentStart = offset;
+    offset += Math.ceil(size / 512) * 512;
 
-    // Only handle regular files ('0' or '') and directories ('5'); skip others
-    if (typeFlag === '0' || typeFlag === '' || typeFlag === '5') {
-      const isDir = typeFlag === '5';
-      const data = isDir ? new Uint8Array(0) : buf.subarray(offset, offset + size);
-      entries.push({
-        name: fullName,
-        size,
-        mode,
-        type: isDir ? '5' : '0',
-        data,
-      });
+    // 长路径扩展 —— 把内容当作下条 entry 的 name/linkname
+    if (typeFlag === 'L') {
+      pendingName = readCStr(buf, contentStart, size);
+      continue;
+    }
+    if (typeFlag === 'K') {
+      pendingLinkname = readCStr(buf, contentStart, size);
+      continue;
+    }
+    if (typeFlag === 'x' || typeFlag === 'X') {
+      const recs = parsePaxRecords(buf.subarray(contentStart, contentStart + size));
+      if (recs.path) pendingName = recs.path;
+      if (recs.linkpath) pendingLinkname = recs.linkpath;
+      continue;
+    }
+    // 'g' (pax global), '2' (symlink), '3'/'4'/'6' (devices/fifo) 等：跳过，
+    // 并清掉 pending —— 长名扩展只对紧邻下一条 entry 生效
+    if (typeFlag !== '0' && typeFlag !== '' && typeFlag !== '5' && typeFlag !== '1') {
+      pendingName = null;
+      pendingLinkname = null;
+      continue;
     }
 
-    // Advance past content (512-aligned)
-    offset += Math.ceil(size / 512) * 512;
+    const ustarFullName = prefix ? `${prefix}/${name}` : name;
+    const fullName = pendingName ?? ustarFullName;
+    const fullLinkname = pendingLinkname ?? linkname;
+    pendingName = null;
+    pendingLinkname = null;
+
+    if (typeFlag === '5') {
+      entries.push({ name: fullName, size: 0, mode, type: '5', data: new Uint8Array(0) });
+    } else if (typeFlag === '1') {
+      entries.push({
+        name: fullName, size: 0, mode, type: '1',
+        linkname: fullLinkname, data: new Uint8Array(0),
+      });
+    } else {
+      entries.push({
+        name: fullName, size, mode, type: '0',
+        data: buf.subarray(contentStart, contentStart + size),
+      });
+    }
   }
   return entries;
 }
@@ -189,6 +250,13 @@ function ensureExtracted(cacheDir: string, tarBuf: Uint8Array): void {
     const out = join(cacheDir, e.name);
     if (e.type === '5') {
       mkdirSync(out, { recursive: true });
+    } else if (e.type === '1') {
+      // tar hardlink target 是 archive-root 相对路径；先 hardlink 省 ~100MB，
+      // 失败（跨 mount / FAT 文件系统）再 fallback copy
+      const target = join(cacheDir, e.linkname!);
+      mkdirSync(dirname(out), { recursive: true });
+      try { linkSync(target, out); }
+      catch { copyFileSync(target, out); }
     } else {
       mkdirSync(dirname(out), { recursive: true });
       writeFileSync(out, e.data);
