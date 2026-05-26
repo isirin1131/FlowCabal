@@ -8,31 +8,9 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Native builds (guaranteed)
-          - os: ubuntu-latest
-            artifact: flowcabal-linux-x64
-            cross: ""
-          - os: macos-latest
-            artifact: flowcabal-darwin-arm64
-            cross: ""
-          - os: windows-latest
-            artifact: flowcabal-windows-x64.exe
-            cross: ""
-          # Cross-compiled builds (best-effort)
-          - os: ubuntu-latest
-            artifact: flowcabal-linux-arm64
-            cross: "--target=bun-linux-arm64"
-          - os: macos-latest
-            artifact: flowcabal-darwin-x64
-            cross: "--target=bun-darwin-x64"
-
-    runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.cross != '' }}
+  # ─── Stage 1: 一次性 build Next standalone + 打 tar ───
+  build-assets:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -43,17 +21,200 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Build binary
-        run: bun build --compile packages/cli/src/index.ts --outfile ${{ matrix.artifact }} ${{ matrix.cross }}
+      - name: Build Next.js standalone
+        run: cd packages/apps/gui && bun run build
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Clean any local dev pollution from standalone
+        run: |
+          rm -rf packages/apps/gui/.next/standalone/packages/apps/gui/.flowcabal-project-cache
+          rm -rf packages/apps/gui/.next/standalone/packages/apps/gui/memory
+
+      - name: Copy static assets into standalone tree
+        run: |
+          # Next 16 standalone 自动拷 public/ 但 NOT .next/static/；server 改 cwd 后
+          # 从 standalone/<app>/.next/static/ 找，所以必须显式拷
+          cp -r packages/apps/gui/.next/static packages/apps/gui/.next/standalone/packages/apps/gui/.next/static
+          ls packages/apps/gui/.next/standalone/packages/apps/gui/.next/static/chunks | head -3
+
+      - name: Pack gui-assets.tar
+        run: |
+          cd packages/apps/gui
+          mkdir -p build
+          # --dereference 把 .bun/ flat store 的相对 symlink 展开为实文件；
+          # launcher runtime 的 fixStandaloneNodeModules 再把 .bun/ 链回传统 layout
+          tar -cf build/gui-assets.tar --dereference -C . .next/standalone
+          ls -lh build/gui-assets.tar
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gui-assets
+          path: packages/apps/gui/build/gui-assets.tar
+          retention-days: 1
+
+  # ─── Stage 2: 5 平台 native build SEA binary ───
+  build-binary:
+    needs: build-assets
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            artifact: flowcabal-darwin-arm64
+            ext: ""
+            mac: true
+          - os: macos-13
+            artifact: flowcabal-darwin-x64
+            ext: ""
+            mac: true
+          - os: ubuntu-latest
+            artifact: flowcabal-linux-x64
+            ext: ""
+            mac: false
+          - os: ubuntu-24.04-arm
+            artifact: flowcabal-linux-arm64
+            ext: ""
+            mac: false
+          - os: windows-latest
+            artifact: flowcabal-windows-x64
+            ext: ".exe"
+            mac: false
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node 22.20 LTS
+        # 22.20 修了 SEA BlobDeserializer 在大 blob (>200MB) 上的 segfault bug；
+        # 不要降级到 22.11 或更旧版本
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.20.0'
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Download gui-assets
+        uses: actions/download-artifact@v4
+        with:
+          name: gui-assets
+          path: packages/apps/gui/build/
+
+      - name: Bundle launcher.ts (esbuild → CJS)
+        run: cd packages/apps/gui && bun run bundle:launcher
+
+      - name: Generate SEA blob
+        run: cd packages/apps/gui && bun run sea:blob
+
+      - name: Install postject
+        run: npm install -g postject
+
+      - name: Copy Node binary + chmod +w (POSIX)
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: |
+          cp "$(which node)" packages/apps/gui/build/${{ matrix.artifact }}${{ matrix.ext }}
+          chmod +w packages/apps/gui/build/${{ matrix.artifact }}${{ matrix.ext }}
+
+      - name: Copy Node binary (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $nodeExe = (Get-Command node).Source
+          Copy-Item $nodeExe packages\apps\gui\build\${{ matrix.artifact }}${{ matrix.ext }}
+
+      - name: macOS - remove signature
+        if: matrix.mac == true
+        run: codesign --remove-signature packages/apps/gui/build/${{ matrix.artifact }}${{ matrix.ext }}
+
+      - name: Inject SEA blob (macOS)
+        if: matrix.mac == true
+        run: |
+          postject packages/apps/gui/build/${{ matrix.artifact }}${{ matrix.ext }} \
+            NODE_SEA_BLOB packages/apps/gui/build/sea-prep.blob \
+            --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2 \
+            --macho-segment-name NODE_SEA
+
+      - name: Inject SEA blob (Linux)
+        if: matrix.os == 'ubuntu-latest' || matrix.os == 'ubuntu-24.04-arm'
+        shell: bash
+        run: |
+          postject packages/apps/gui/build/${{ matrix.artifact }}${{ matrix.ext }} \
+            NODE_SEA_BLOB packages/apps/gui/build/sea-prep.blob \
+            --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
+
+      - name: Inject SEA blob (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          postject packages\apps\gui\build\${{ matrix.artifact }}${{ matrix.ext }} `
+            NODE_SEA_BLOB packages\apps\gui\build\sea-prep.blob `
+            --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2
+
+      - name: macOS - re-sign (ad-hoc)
+        if: matrix.mac == true
+        run: codesign --sign - packages/apps/gui/build/${{ matrix.artifact }}${{ matrix.ext }}
+
+      - name: Smoke test --help (POSIX)
+        if: matrix.os != 'windows-latest'
+        shell: bash
+        run: |
+          chmod +x packages/apps/gui/build/${{ matrix.artifact }}${{ matrix.ext }}
+          packages/apps/gui/build/${{ matrix.artifact }}${{ matrix.ext }} --help
+
+      - name: Smoke test --help (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: packages\apps\gui\build\${{ matrix.artifact }}${{ matrix.ext }} --help
+
+      - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: ${{ matrix.artifact }}
+          path: packages/apps/gui/build/${{ matrix.artifact }}${{ matrix.ext }}
 
+  # ─── Stage 3: Windows MSI ───
+  build-msi:
+    needs: build-binary
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download windows-x64 binary
+        uses: actions/download-artifact@v4
+        with:
+          name: flowcabal-windows-x64
+          path: dist/
+
+      - name: Install WiX 4
+        run: dotnet tool install --global wix --version 4.0.4
+
+      - name: Build MSI
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v',''
+          # download-artifact 单文件解包出来路径就是 artifact 名（无 .exe 后缀）；重命名为 .exe
+          if (Test-Path dist\flowcabal-windows-x64) {
+            Rename-Item dist\flowcabal-windows-x64 flowcabal-windows-x64.exe -Force
+          }
+          wix extension add WixToolset.UI.wixext/4.0.4
+          wix build packaging\windows\flowcabal.wxs `
+            -define Version=$version `
+            -define ExePath=dist\flowcabal-windows-x64.exe `
+            -ext WixToolset.UI.wixext `
+            -out flowcabal-windows-x64.msi
+          dir flowcabal-windows-x64.msi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: flowcabal-windows-x64.msi
+          path: flowcabal-windows-x64.msi
+
+  # ─── Stage 4: 收集所有 artifact，发 GH release ───
   release:
-    needs: build
+    needs: [build-binary, build-msi]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     steps:
@@ -68,7 +229,7 @@ jobs:
       - name: List artifacts
         run: ls -lh dist/
 
-      - name: Make binaries executable
+      - name: Make POSIX binaries executable
         run: chmod +x dist/flowcabal-linux-* dist/flowcabal-darwin-* 2>/dev/null || true
 
       - name: Create release
