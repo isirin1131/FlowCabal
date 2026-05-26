@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "bundle:launcher": "esbuild launcher.ts --bundle --platform=node --target=node22 --format=cjs --outfile=build/launcher.bundle.js --external:node:sea",
+    "sea:blob": "node --experimental-sea-config sea-config.json",
+    "sea:build": "bun run bundle:launcher && bun run sea:blob"
   },
   "dependencies": {
     "@flowcabal/engine": "workspace:*",
@@ -37,9 +40,10 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/dagre": "^0.7",
+    "esbuild": "^0.25.0",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
-    "@types/dagre": "^0.7",
     "tailwindcss": "^4",
     "typescript": "^5"
   },
