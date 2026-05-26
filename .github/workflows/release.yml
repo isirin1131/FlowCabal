@@ -72,10 +72,6 @@ jobs:
             artifact: flowcabal-darwin-arm64
             ext: ""
             mac: true
-          - os: macos-13
-            artifact: flowcabal-darwin-x64
-            ext: ""
-            mac: true
           - os: ubuntu-latest
             artifact: flowcabal-linux-x64
             ext: ""
