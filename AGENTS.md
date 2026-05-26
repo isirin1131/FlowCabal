@@ -1,6 +1,6 @@
 # FlowCabal Agent Guide
 
-**Current Focus**: FlowCabal GUI — Next.js 应用使用 @xyflow/react 构建 DAG 编辑器。
+**Current Focus**: GUI release packaging —— Next.js standalone + Node 22 SEA 单二进制 + Windows MSI。GUI 内核稳定中。
 
 ---
 
@@ -10,7 +10,22 @@
 bun dev              # 启动 GUI 开发服务器 (http://localhost:3000)
 bun run typecheck    # 验证 engine + cli 代码
 bun run typecheck:gui # 验证 GUI 代码
+
+# release 构建（本地验证用，CI 自动跑）
+cd packages/apps/gui
+bun run build
+cp -r .next/static .next/standalone/packages/apps/gui/.next/static
+tar -cf build/gui-assets.tar --dereference -C . .next/standalone
+bun run sea:build                                              # esbuild bundle + node SEA blob
+cp $(which node) build/flowcabal-local && chmod +w build/flowcabal-local
+codesign --remove-signature build/flowcabal-local              # macOS only
+npx postject build/flowcabal-local NODE_SEA_BLOB build/sea-prep.blob \
+  --sentinel-fuse NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2 \
+  --macho-segment-name NODE_SEA                                # macOS only flag
+codesign --sign - build/flowcabal-local                        # macOS only
 ```
+
+⚠️ 本地 node 必须是 v22.20.0 或更新（旧版 SEA BlobDeserializer 在 >200MB blob 上 segfault）。Homebrew 的 `/opt/homebrew/bin/node` 是 split-build stub，没 SEA fuse，要从 nodejs.org 下载官方预编译版。
 
 ---
 
@@ -18,6 +33,7 @@ bun run typecheck:gui # 验证 GUI 代码
 
 | 日期 | 内容 | spec | plan |
 |------|------|------|------|
+| 2026-05-26 | **G 期**：GUI release packaging（弃 Bun --compile 改用 Node 22.20 LTS SEA；launcher 子进程化 + FLOWCABAL_PROJECT_ROOT env 隔离 cwd；5 平台 native build matrix；Windows MSI） | [spec](docs/superpowers/specs/2026-05-26-gui-release-packaging.md) | [plan](docs/superpowers/plans/2026-05-26-gui-release-packaging.md) |
 | 2026-05-24 | **F 期**：stale 闭环（eager 扩散 + direct/propagated 双色 ✱）+ error 闭环（errors.log NDJSON + 节点尾栏文字 + tooltip）+ runAll 图原生并行（Kahn 运行时变体 + 不限并发 + error 不传染） | [spec](docs/superpowers/specs/2026-05-24-stale-error-parallel-design.md) | [plan](docs/superpowers/plans/2026-05-24-stale-error-parallel.md) |
 | 2026-05-24 | **B+C+D+E 期**：节点 4 态视觉、双尺度 stream（节点级 + token 级）、连线只读化、EditorPanel ref picker、RunButton dag 进度 | [spec](docs/superpowers/specs/2026-05-24-bcde-node-interaction.md) | [plan](docs/superpowers/plans/2026-05-24-bcde-node-interaction.md) |
 | 2026-05-23 | **A 期**：视觉统一（paper / clay / ink + Source Serif），所有面板迁到新调性 | [spec](docs/superpowers/specs/2026-05-23-gui-visual-unification-design.md) | [plan](docs/superpowers/plans/2026-05-23-gui-visual-unification.md) |
@@ -106,6 +122,46 @@ dataflow-runner 的 fireNode catch 分支只做 `failed.add` + appendError，
 真实 workspace 目录是 `.flowcabal-project-cache/<wsId>/`（paths.ts:18-24）。
 errors.log 必须跟 workspace.json 同目录，否则 workspaceDelete rmSync
 不能连带清除。spec 阶段的笔误已修正。
+
+### Release 构建：tar 前必须 cp .next/static 到 standalone 子目录
+
+Next 16 standalone 模式只自动复制 `public/` 到 `.next/standalone/<app>/`，
+**不复制 `.next/static/`**。但 server.js 头部 chdir __dirname 后从
+`<dir>/.next/static/` 找静态资源（CSS、JS chunks）—— 路径错位 →
+浏览器 404 → 无样式无 JS hydration → UI 上"添加 LLM 配置"等控件根本
+不渲染（看似配置读不到，其实是前端代码没跑起来）。
+
+打 tar 前 release.yml 和本地都必须显式：
+
+```bash
+cp -r .next/static .next/standalone/packages/apps/gui/.next/static
+```
+
+### GUI API 必须用 getProjectRoot() 而非 process.cwd()
+
+`packages/apps/gui/launcher.ts` spawn server 子进程时，server.js 头部
+`process.chdir(__dirname)` 会让子进程 cwd 漂到 standalone 解压目录。
+GUI API 不能直接用 `process.cwd()`，必须走 `getProjectRoot()` helper
+（`packages/apps/gui/src/lib/project-root.ts`），优先读 FLOWCABAL_PROJECT_ROOT
+env（launcher 启动子进程时注入），dev (bun dev) fallback 到 cwd 保持兼容。
+
+### Bun standalone 必须运行时 fix .bun/ flat store
+
+`bun next build` 产 standalone 时，把 `next` 真目录拷到
+`standalone/packages/apps/gui/node_modules/next/`，但 transitive deps
+（`@swc/helpers`、`react` 等）只在 `standalone/node_modules/.bun/<pkg>/`
+里，没有传统 `standalone/node_modules/<pkg>/` 入口。Node 标准 require
+walk-up 找不到。`packages/apps/gui/launcher.ts` 的 `fixStandaloneNodeModules`
+在 ensureExtracted 之后从 `.bun/` 创建符号链接到传统位置（Windows 跳过
+因为需要特权）。
+
+### Node SEA binary 必须用 22.20+
+
+Node 22.11 SEA `BlobDeserializer::ReadArithmetic` 在 >200MB blob 上
+segfault。我们的 SEA blob 含 ~250MB 的 Next standalone tar，必须用
+22.20.0 或更新。release.yml 已锁 `setup-node@v4` `node-version: '22.20.0'`，
+不要降级。本地构建务必从 nodejs.org 下载官方 22.20+ 预编译包，
+Homebrew 的 node 是 split-build stub，没 SEA fuse sentinel。
 
 ---
 
