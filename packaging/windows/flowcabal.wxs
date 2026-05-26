@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+
+  <Package Name="FlowCabal"
+           Manufacturer="FlowCabal"
+           Version="$(var.Version)"
+           UpgradeCode="7E087851-EF53-435C-B61B-E3FEA961C328"
+           Scope="perUserOrMachine">
+
+    <MajorUpgrade DowngradeErrorMessage="已安装更新版本的 FlowCabal。" />
+    <MediaTemplate EmbedCab="yes" />
+
+    <!-- Main features -->
+    <Feature Id="Main" Title="FlowCabal" Level="1" AllowAbsent="no">
+      <ComponentRef Id="MainExe" />
+      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="PathEnv" />
+    </Feature>
+
+    <Feature Id="DesktopShortcut" Title="桌面快捷方式" Level="1">
+      <ComponentRef Id="DesktopSC" />
+    </Feature>
+
+    <!-- Directories -->
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="FlowCabal" />
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="StartMenuFolder" Name="FlowCabal" />
+    </StandardDirectory>
+    <StandardDirectory Id="DesktopFolder" />
+
+    <!-- Main exe -->
+    <Component Id="MainExe" Directory="INSTALLFOLDER">
+      <File Source="$(var.ExePath)" Name="flowcabal.exe" KeyPath="yes" />
+    </Component>
+
+    <!-- PATH (always HKCU — see spec for rationale) -->
+    <Component Id="PathEnv" Directory="INSTALLFOLDER">
+      <Environment Id="PathVar"
+                   Name="PATH"
+                   Action="set"
+                   Part="last"
+                   System="no"
+                   Value="[INSTALLFOLDER]" />
+      <RegistryValue Root="HKCU" Key="Software\FlowCabal"
+                     Name="PathInstalled" Type="integer" Value="1"
+                     KeyPath="yes" />
+    </Component>
+
+    <!-- Start menu shortcut -->
+    <Component Id="StartMenuShortcut" Directory="StartMenuFolder">
+      <Shortcut Id="StartSC" Name="FlowCabal"
+                Target="[INSTALLFOLDER]flowcabal.exe"
+                WorkingDirectory="INSTALLFOLDER" />
+      <RemoveFolder Id="RemoveStartMenuFolder" On="uninstall" />
+      <RegistryValue Root="HKMU" Key="Software\FlowCabal"
+                     Name="StartMenu" Type="integer" Value="1"
+                     KeyPath="yes" />
+    </Component>
+
+    <!-- Desktop shortcut (optional feature) -->
+    <Component Id="DesktopSC" Directory="DesktopFolder">
+      <Shortcut Id="DesktopSCShortcut" Name="FlowCabal"
+                Target="[INSTALLFOLDER]flowcabal.exe"
+                WorkingDirectory="INSTALLFOLDER" />
+      <RegistryValue Root="HKMU" Key="Software\FlowCabal"
+                     Name="DesktopShortcut" Type="integer" Value="1"
+                     KeyPath="yes" />
+    </Component>
+
+    <!-- License -->
+    <WixVariable Id="WixUILicenseRtf" Value="packaging\windows\license.rtf" />
+
+    <!-- UI: Advanced 提供装机范围选择 -->
+    <ui:WixUI Id="WixUI_Advanced" />
+  </Package>
+</Wix>
