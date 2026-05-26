@@ -18,7 +18,10 @@
 /out/
 
 # production
-/build
+/build/*
+# launcher.ts 静态 import build/gui-assets.tar；保留占位文件，
+# CI download-artifact 时会覆盖为真 tarball（不入 commit）
+!/build/gui-assets.tar
 
 # misc
 .DS_Store
