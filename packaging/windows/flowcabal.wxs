@@ -26,8 +26,8 @@
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLFOLDER" Name="FlowCabal" />
     </StandardDirectory>
-    <StandardDirectory Id="ProgramMenuFolder">
-      <Directory Id="StartMenuFolder" Name="FlowCabal" />
+    <StandardDirectory Id="StartMenuFolder">
+      <Directory Id="StartMenuSCFolder" Name="FlowCabal" />
     </StandardDirectory>
     <StandardDirectory Id="DesktopFolder" />
 
@@ -50,7 +50,7 @@
     </Component>
 
     <!-- Start menu shortcut -->
-    <Component Id="StartMenuShortcut" Directory="StartMenuFolder">
+    <Component Id="StartMenuShortcut" Directory="StartMenuSCFolder">
       <Shortcut Id="StartSC" Name="FlowCabal"
                 Target="[INSTALLFOLDER]flowcabal.exe"
                 WorkingDirectory="INSTALLFOLDER" />
@@ -72,6 +72,10 @@
 
     <!-- License -->
     <WixVariable Id="WixUILicenseRtf" Value="packaging\windows\license.rtf" />
+
+    <!-- WixUI_Advanced 要求的属性 -->
+    <Property Id="ApplicationFolderName" Value="FlowCabal" />
+    <Property Id="WixAppFolder" Value="WixPerUserFolder" />
 
     <!-- UI: Advanced 提供装机范围选择 -->
     <ui:WixUI Id="WixUI_Advanced" />
