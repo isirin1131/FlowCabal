@@ -12,7 +12,7 @@ jobs:
   build-assets:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -45,7 +45,7 @@ jobs:
           tar -cf build/gui-assets.tar --dereference -C . .next/standalone
           ls -lh build/gui-assets.tar
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: gui-assets
           path: packages/apps/gui/build/gui-assets.tar
@@ -81,12 +81,12 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Setup Node 22.20 LTS
         # 22.20 修了 SEA BlobDeserializer 在大 blob (>200MB) 上的 segfault bug；
         # 不要降级到 22.11 或更旧版本
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22.20.0'
 
@@ -98,7 +98,7 @@ jobs:
         run: bun install
 
       - name: Download gui-assets
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: gui-assets
           path: packages/apps/gui/build/
@@ -170,7 +170,7 @@ jobs:
         shell: pwsh
         run: packages\apps\gui\build\${{ matrix.artifact }}${{ matrix.ext }} --help
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: ${{ matrix.artifact }}
           path: packages/apps/gui/build/${{ matrix.artifact }}${{ matrix.ext }}
@@ -180,10 +180,10 @@ jobs:
     needs: build-binary
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Download windows-x64 binary
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: flowcabal-windows-x64
           path: dist/
@@ -207,7 +207,7 @@ jobs:
             -out flowcabal-windows-x64.msi
           dir flowcabal-windows-x64.msi
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: flowcabal-windows-x64.msi
           path: flowcabal-windows-x64.msi
@@ -218,10 +218,10 @@ jobs:
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           path: dist/
           merge-multiple: true
