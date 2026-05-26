@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { readWorkspace, writeWorkspace } from '@flowcabal/engine'
 import { workspaceToRecord } from '@/lib/serialization'
+import { getProjectRoot } from '@/lib/project-root'
 
 export async function POST(
   request: Request,
@@ -8,7 +9,7 @@ export async function POST(
 ) {
   const { id: workspaceId } = await params
   const { nodeId, op } = await request.json() as { nodeId: string; op?: 'add' | 'toggle' }
-  const projectDir = process.cwd()
+  const projectDir = getProjectRoot()
   const workspace = readWorkspace(projectDir, workspaceId)
   if (!workspace) {
     return NextResponse.json({ error: 'Workspace not found' }, { status: 404 })

@@ -1,8 +1,9 @@
 import { readWorkspace, writeWorkspace, runAllDataflow, getActiveLlmConfig } from '@flowcabal/engine'
+import { getProjectRoot } from '@/lib/project-root'
 
 export async function POST(request: Request) {
   const { workspaceId } = await request.json()
-  const projectDir = process.cwd()
+  const projectDir = getProjectRoot()
   const config = getActiveLlmConfig()
   if (!config) {
     return new Response(JSON.stringify({ error: '请先在 settings 选择活跃 LLM' }), {

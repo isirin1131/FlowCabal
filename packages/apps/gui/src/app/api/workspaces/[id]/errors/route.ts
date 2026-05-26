@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { readLastErrorPerNode, readAllErrors } from '@flowcabal/engine';
+import { getProjectRoot } from '@/lib/project-root';
 
 export async function GET(
   request: Request,
@@ -7,7 +8,7 @@ export async function GET(
 ) {
   const { id: workspaceId } = await params;
   const url = new URL(request.url);
-  const projectDir = process.cwd();
+  const projectDir = getProjectRoot();
 
   if (url.searchParams.get('per-node') === 'last') {
     const map = await readLastErrorPerNode(projectDir, workspaceId);

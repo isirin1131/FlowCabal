@@ -1,4 +1,5 @@
 import { conversationalMemoryAgentStream, getActiveLlmConfig, type MemoryStreamChunk } from '@flowcabal/engine'
+import { getProjectRoot } from '@/lib/project-root'
 
 interface MemoryMessage {
   role: 'user' | 'assistant'
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
     })
   }
 
-  const projectDir = process.cwd()
+  const projectDir = getProjectRoot()
   const config = getActiveLlmConfig()
   if (!config) {
     return new Response(JSON.stringify({ error: '请先在 settings 选择活跃 LLM' }), {

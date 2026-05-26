@@ -5,6 +5,7 @@ import { platform } from 'os'
 import { join, resolve } from 'path'
 import { getEditorConfig } from '@/lib/editor-config'
 import { BUILTIN_EDITORS } from '@/lib/editors'
+import { getProjectRoot } from '@/lib/project-root'
 
 const TARGET_DIRS: Record<string, string> = {
   manuscripts: join('memory', 'manuscripts'),
@@ -13,7 +14,7 @@ const TARGET_DIRS: Record<string, string> = {
 
 export async function POST(request: Request) {
   const { target, path: customPath, editorId } = await request.json()
-  const projectDir = process.cwd()
+  const projectDir = getProjectRoot()
 
   let dirPath: string
   if (target && TARGET_DIRS[target]) {
