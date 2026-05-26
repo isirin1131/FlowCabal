@@ -274,11 +274,11 @@ function ensureExtracted(cacheDir: string, tarBuf: Uint8Array): void {
 // node_modules/next/，但 transitive deps (@swc/helpers, react 等) 只在
 // .bun/<pkg>/node_modules/<pkg>/ 下，没有传统 standalone/node_modules/<pkg>/
 // 入口。Node 标准 walk-up 找不到。这里从 .bun/ 链接出传统 layout。
-// Windows 跳过（symlink 需要特权）—— 在那里只能用 SEA 模式（CI bundle 时
-// 已经在 Linux 跑 fixStandaloneNodeModules 然后整体打 tar 进 SEA asset?
-// 不行，extract 是 runtime 的，必须 runtime 做；Windows 解决路径待补充）。
+// Windows 走 NTFS junction (symlinkSync type='junction') —— 不需要 elevation，
+// 只能 link 目录，正好符合需求（且 Node 自动把 target 规范为绝对路径）。
 function fixStandaloneNodeModules(standaloneRoot: string): void {
-  if (platform() === 'win32') return;
+  const isWin = platform() === 'win32';
+  const linkType: 'junction' | 'dir' = isWin ? 'junction' : 'dir';
   const rootNm = join(standaloneRoot, 'node_modules');
   const bunDir = join(rootNm, '.bun');
   if (!existsSync(bunDir)) return;
@@ -297,14 +297,14 @@ function fixStandaloneNodeModules(standaloneRoot: string): void {
           const linkDir = join(rootNm, first, second);
           if (!existsSync(linkDir)) {
             mkdirSync(join(rootNm, first), { recursive: true });
-            try { symlinkSync(targetDir, linkDir); } catch { /* race-condition tolerant */ }
+            try { symlinkSync(targetDir, linkDir, linkType); } catch { /* race-condition tolerant */ }
           }
         }
       } else {
         const targetDir = join(innerNm, first);
         const linkDir = join(rootNm, first);
         if (!existsSync(linkDir)) {
-          try { symlinkSync(targetDir, linkDir); } catch { /* race-condition tolerant */ }
+          try { symlinkSync(targetDir, linkDir, linkType); } catch { /* race-condition tolerant */ }
         }
       }
     }
