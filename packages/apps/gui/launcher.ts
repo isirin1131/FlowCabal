@@ -78,13 +78,97 @@ async function computeCacheDir(tarPath: string): Promise<string> {
   return join(getCacheRoot(), hash);
 }
 
+// ── POSIX ustar tar parser (read-only, regular files & directories only) ──
+interface TarEntry {
+  name: string;
+  size: number;
+  mode: number;
+  type: '0' | '5';   // '0' = file, '5' = directory
+  data: Uint8Array;
+}
+
+function readCStr(buf: Uint8Array, start: number, len: number): string {
+  const slice = buf.subarray(start, start + len);
+  let end = slice.indexOf(0);
+  if (end < 0) end = slice.length;
+  return new TextDecoder('utf-8').decode(slice.subarray(0, end));
+}
+
+function parseTar(buf: Uint8Array): TarEntry[] {
+  const entries: TarEntry[] = [];
+  let offset = 0;
+  while (offset + 512 <= buf.length) {
+    const header = buf.subarray(offset, offset + 512);
+    // end-of-archive: two consecutive 512-byte zero blocks (we stop at first all-zero)
+    if (header.every(b => b === 0)) break;
+
+    const name = readCStr(header, 0, 100);
+    const modeStr = readCStr(header, 100, 8).trim();
+    const sizeStr = readCStr(header, 124, 12).trim();
+    const typeFlag = String.fromCharCode(header[156]);
+    const prefix = readCStr(header, 345, 155);
+
+    const size = sizeStr ? parseInt(sizeStr, 8) : 0;
+    const mode = modeStr ? parseInt(modeStr, 8) : 0o644;
+    const fullName = prefix ? `${prefix}/${name}` : name;
+
+    offset += 512;
+
+    // Only handle regular files ('0' or '') and directories ('5'); skip others
+    if (typeFlag === '0' || typeFlag === '' || typeFlag === '5') {
+      const isDir = typeFlag === '5';
+      const data = isDir ? new Uint8Array(0) : buf.subarray(offset, offset + size);
+      entries.push({
+        name: fullName,
+        size,
+        mode,
+        type: isDir ? '5' : '0',
+        data,
+      });
+    }
+
+    // Advance past content (512-aligned)
+    offset += Math.ceil(size / 512) * 512;
+  }
+  return entries;
+}
+
+async function ensureExtracted(cacheDir: string, tarPath: string): Promise<void> {
+  const sentinel = join(cacheDir, '.ready');
+  if (existsSync(sentinel)) return;
+
+  console.log('Extracting GUI assets (first run)...');
+
+  // Clean any partial extract from a previous crash
+  if (existsSync(cacheDir)) rmSync(cacheDir, { recursive: true, force: true });
+  mkdirSync(cacheDir, { recursive: true });
+
+  const buf = new Uint8Array(await Bun.file(tarPath).arrayBuffer());
+  const entries = parseTar(buf);
+  for (const e of entries) {
+    const out = join(cacheDir, e.name);
+    if (e.type === '5') {
+      mkdirSync(out, { recursive: true });
+    } else {
+      mkdirSync(dirname(out), { recursive: true });
+      writeFileSync(out, e.data);
+      // chmod only on POSIX; Windows ignores
+      if (platform() !== 'win32' && e.mode) {
+        try { chmodSync(out, e.mode & 0o777); } catch { /* ignore */ }
+      }
+    }
+  }
+  writeFileSync(sentinel, '');
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) { console.log(HELP); return; }
 
   const cacheDir = await computeCacheDir(assetsTar);
-  console.log('cacheDir =', cacheDir);
-  console.log('TODO: extract, probe port, start server');
+  await ensureExtracted(cacheDir, assetsTar);
+  console.log('extracted to:', cacheDir);
+  console.log('TODO: probe port, start server');
 }
 
 main().catch((e) => {
