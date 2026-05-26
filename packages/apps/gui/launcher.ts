@@ -1,24 +1,45 @@
-#!/usr/bin/env bun
+#!/usr/bin/env node
 //
 // FlowCabal GUI launcher.
 //
-// ⚠️ build/gui-assets.tar 是占位文件（CI 会覆盖为真 tarball）。
-//    本地跑 `tar -cf build/gui-assets.tar ...` 测试后，不要把真 tar
-//    commit 进仓库 —— 真 tarball 约 50MB。
+// 三种运行模式：
+//   - dev: `bun run launcher.ts` → 从 build/gui-assets.tar 读
+//   - SEA: 嵌入 Node SEA binary，sea.getAsset() 读 tar
+//   - server subprocess: 主 launcher spawn 自身 + --internal-server-entry=<abs>
+//     → createRequire(abs) 加载 standalone server.js，立即返回（让 server.js
+//     接管事件循环）。子进程的 cwd 会被 server.js 头部 chdir(__dirname) 改
+//     成 standaloneDir；GUI API 通过 FLOWCABAL_PROJECT_ROOT env 拿用户 cwd。
 //
 import { createHash } from 'node:crypto';
 import { createServer, connect } from 'node:net';
-import { existsSync, mkdirSync, writeFileSync, rmSync, chmodSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, readdirSync, symlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir, platform } from 'node:os';
 import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 
-import assetsTar from './build/gui-assets.tar' with { type: 'file' };
+const __filename_self = fileURLToPath(import.meta.url);
+const localRequire = createRequire(import.meta.url);
+
+// node:sea 是 Node 22+ 模块；Bun 1.x 不支持 → static import 会爆。
+// 用 createRequire 动态加载 + try/catch，让 dev 模式（Bun）也能跑。
+type SeaModule = {
+  isSea(): boolean;
+  getAsset(key: string): ArrayBuffer;
+};
+let seaModule: SeaModule | null = null;
+try {
+  seaModule = localRequire('node:sea') as SeaModule;
+} catch {
+  // dev 模式 / Bun runtime / 老版 Node：fallback 到 fs 读 build/gui-assets.tar
+}
 
 interface Args {
   port?: number;
   open: boolean;
   help: boolean;
+  internalServerEntry?: string;
 }
 
 const HELP = `flowcabal — local GUI for FlowCabal
@@ -47,6 +68,8 @@ function parseArgs(argv: string[]): Args {
         process.exit(2);
       }
       args.port = n;
+    } else if (a.startsWith('--internal-server-entry=')) {
+      args.internalServerEntry = a.slice('--internal-server-entry='.length);
     } else {
       console.error(`Unknown argument: ${a}\nUse --help for usage.`);
       process.exit(2);
@@ -72,9 +95,20 @@ function getCacheRoot(): string {
   }
 }
 
-async function computeCacheDir(tarPath: string): Promise<string> {
-  const buf = await Bun.file(tarPath).arrayBuffer();
-  const hash = createHash('sha256').update(new Uint8Array(buf)).digest('hex').slice(0, 16);
+function loadTarBuffer(): Uint8Array {
+  if (seaModule?.isSea()) {
+    const ab = seaModule.getAsset('gui-assets.tar');
+    return new Uint8Array(ab);
+  }
+  // dev: launcher.ts 在 packages/apps/gui/，tar 在 packages/apps/gui/build/
+  const here = dirname(__filename_self);
+  const tarPath = join(here, 'build', 'gui-assets.tar');
+  const buf = readFileSync(tarPath);
+  return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+}
+
+function computeCacheDir(tarBuf: Uint8Array): string {
+  const hash = createHash('sha256').update(tarBuf).digest('hex').slice(0, 16);
   return join(getCacheRoot(), hash);
 }
 
@@ -133,7 +167,7 @@ function parseTar(buf: Uint8Array): TarEntry[] {
   return entries;
 }
 
-async function ensureExtracted(cacheDir: string, tarPath: string): Promise<void> {
+function ensureExtracted(cacheDir: string, tarBuf: Uint8Array): void {
   const sentinel = join(cacheDir, '.ready');
   if (existsSync(sentinel)) return;
 
@@ -143,8 +177,7 @@ async function ensureExtracted(cacheDir: string, tarPath: string): Promise<void>
   if (existsSync(cacheDir)) rmSync(cacheDir, { recursive: true, force: true });
   mkdirSync(cacheDir, { recursive: true });
 
-  const buf = new Uint8Array(await Bun.file(tarPath).arrayBuffer());
-  const entries = parseTar(buf);
+  const entries = parseTar(tarBuf);
   for (const e of entries) {
     const out = join(cacheDir, e.name);
     if (e.type === '5') {
@@ -159,6 +192,48 @@ async function ensureExtracted(cacheDir: string, tarPath: string): Promise<void>
     }
   }
   writeFileSync(sentinel, '');
+}
+
+// ── Bun next build 把 standalone 的依赖压在 standalone/node_modules/.bun/
+// flat store 里：next 真目录被 dereference 拷到 standalone/packages/apps/gui/
+// node_modules/next/，但 transitive deps (@swc/helpers, react 等) 只在
+// .bun/<pkg>/node_modules/<pkg>/ 下，没有传统 standalone/node_modules/<pkg>/
+// 入口。Node 标准 walk-up 找不到。这里从 .bun/ 链接出传统 layout。
+// Windows 跳过（symlink 需要特权）—— 在那里只能用 SEA 模式（CI bundle 时
+// 已经在 Linux 跑 fixStandaloneNodeModules 然后整体打 tar 进 SEA asset?
+// 不行，extract 是 runtime 的，必须 runtime 做；Windows 解决路径待补充）。
+function fixStandaloneNodeModules(standaloneRoot: string): void {
+  if (platform() === 'win32') return;
+  const rootNm = join(standaloneRoot, 'node_modules');
+  const bunDir = join(rootNm, '.bun');
+  if (!existsSync(bunDir)) return;
+
+  for (const entry of readdirSync(bunDir)) {
+    if (entry === 'node_modules') continue;
+    const innerNm = join(bunDir, entry, 'node_modules');
+    if (!existsSync(innerNm)) continue;
+
+    for (const first of readdirSync(innerNm)) {
+      if (first.startsWith('@')) {
+        const scopeDir = join(innerNm, first);
+        if (!existsSync(scopeDir)) continue;
+        for (const second of readdirSync(scopeDir)) {
+          const targetDir = join(scopeDir, second);
+          const linkDir = join(rootNm, first, second);
+          if (!existsSync(linkDir)) {
+            mkdirSync(join(rootNm, first), { recursive: true });
+            try { symlinkSync(targetDir, linkDir); } catch { /* race-condition tolerant */ }
+          }
+        }
+      } else {
+        const targetDir = join(innerNm, first);
+        const linkDir = join(rootNm, first);
+        if (!existsSync(linkDir)) {
+          try { symlinkSync(targetDir, linkDir); } catch { /* race-condition tolerant */ }
+        }
+      }
+    }
+  }
 }
 
 // ── Port probing & server readiness ──
@@ -224,7 +299,7 @@ function openBrowser(url: string): void {
 }
 
 let shuttingDown = false;
-function installSignalHandlers(): void {
+function installSignalHandlers(killChild?: () => void): void {
   const handler = () => {
     if (shuttingDown) {
       console.error('Force exit.');
@@ -232,6 +307,7 @@ function installSignalHandlers(): void {
     }
     shuttingDown = true;
     console.log('\nShutting down...');
+    killChild?.();
     // Give Next server ~100ms to flush before exit
     setTimeout(() => process.exit(0), 100);
   };
@@ -239,19 +315,81 @@ function installSignalHandlers(): void {
   process.on('SIGTERM', handler);
 }
 
+// ── Server subprocess mode：被自身 spawn 的 child 进入这里 ──
+function runServerInline(serverAbsPath: string): void {
+  // createRequire 以 server.js 自身 URL 为锚点，Node 走标准 fs walk-up 解析
+  // require('next') 等。server.js 头部会 process.chdir(__dirname) —— 这里
+  // 是子进程，cwd 漂移不影响 launcher 父进程；GUI API 用 FLOWCABAL_PROJECT_ROOT
+  // env 拿原始 cwd。
+  const req = createRequire(pathToFileURL(serverAbsPath).href);
+  req(serverAbsPath);
+  // require 完返回；server.js 的 startServer({...}) 已 schedule 在事件循环上
+  // 跑（异步），子进程不会退出。
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) { console.log(HELP); return; }
 
-  const cacheDir = await computeCacheDir(assetsTar);
-  await ensureExtracted(cacheDir, assetsTar);
+  // ── 子进程模式 ──
+  if (args.internalServerEntry) {
+    runServerInline(args.internalServerEntry);
+    return;
+  }
+
+  // ── 主模式 ──
+  // GUI API 用 FLOWCABAL_PROJECT_ROOT env 找用户项目目录（getProjectRoot
+  // helper 在 src/lib/project-root.ts）；server 子进程跑起来后 cwd 会被
+  // server.js 头部 chdir(__dirname) 改掉，所以不能依赖 cwd。
+  const userCwd = process.cwd();
+  const tarBuf = loadTarBuffer();
+  const cacheDir = computeCacheDir(tarBuf);
+  ensureExtracted(cacheDir, tarBuf);
+  // Bun standalone 的 .bun/ flat store 不是传统 node_modules layout；
+  // 在 cache 解压后建符号链接，让 server.js 的 require('@swc/helpers') 等能找到
+  fixStandaloneNodeModules(join(cacheDir, '.next', 'standalone'));
+
   const port = await probePort(args.port ?? 3737);
+  const standaloneDir = join(cacheDir, '.next', 'standalone', 'packages', 'apps', 'gui');
+  const serverPath = join(standaloneDir, 'server.js');
 
-  process.env.PORT = String(port);
-  process.env.HOSTNAME = '127.0.0.1';
+  const childEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    FLOWCABAL_PROJECT_ROOT: userCwd,
+    PORT: String(port),
+    HOSTNAME: '127.0.0.1',
+    NODE_ENV: 'production',
+  };
 
-  console.log(`Would start server at port ${port} from ${cacheDir}`);
-  console.log('TODO: chdir + import + waitForReady + openBrowser');
+  // SEA 模式 process.argv[0] 是 binary 自身；非 SEA (dev) 是 'bun'/'node'，
+  // 需要先传脚本路径（process.argv[1]）再传 flag
+  const childArgs = seaModule?.isSea()
+    ? [`--internal-server-entry=${serverPath}`]
+    : [process.argv[1], `--internal-server-entry=${serverPath}`];
+
+  const child = spawn(process.execPath, childArgs, {
+    env: childEnv,
+    stdio: 'inherit',
+  });
+
+  installSignalHandlers(() => child.kill('SIGTERM'));
+
+  child.on('exit', (code) => process.exit(code ?? 0));
+
+  try {
+    await waitForReady(port, 30_000);
+  } catch (e) {
+    console.error('Server not ready:', e);
+    child.kill('SIGTERM');
+    process.exit(1);
+  }
+
+  const url = `http://127.0.0.1:${port}`;
+  console.log(`FlowCabal running at ${url}`);
+  if (args.open) openBrowser(url);
+
+  // 父进程保持前台直到子进程 exit handler 触发 process.exit
+  await new Promise(() => { /* never resolves */ });
 }
 
 main().catch((e) => {
