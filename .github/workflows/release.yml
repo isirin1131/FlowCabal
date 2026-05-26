@@ -21,6 +21,11 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Build @flowcabal/engine (tsc → dist/)
+        # engine main 字段指向 dist/index.js，但 dist/ 在 .gitignore；GUI Next
+        # build 需要 engine 已编译才能 resolve workspace symlink 后的 entry
+        run: cd packages/engine && bun run build
+
       - name: Build Next.js standalone
         run: cd packages/apps/gui && bun run build
 
