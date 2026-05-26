@@ -6,7 +6,8 @@
            Manufacturer="FlowCabal"
            Version="$(var.Version)"
            UpgradeCode="7E087851-EF53-435C-B61B-E3FEA961C328"
-           Scope="perUserOrMachine">
+           Scope="perUserOrMachine"
+           Codepage="65001">
 
     <MajorUpgrade DowngradeErrorMessage="已安装更新版本的 FlowCabal。" />
     <MediaTemplate EmbedCab="yes" />
