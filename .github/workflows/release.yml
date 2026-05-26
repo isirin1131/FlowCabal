@@ -200,7 +200,16 @@ jobs:
       - name: Build MSI
         shell: pwsh
         run: |
-          $version = "${{ github.ref_name }}" -replace '^v',''
+          $raw = "${{ github.ref_name }}" -replace '^v',''
+          # WiX 只吃 #.#.#.# 或 #.#.#-label.#。tag 第 4 段如果非纯数字（如
+          # v0.9.1.b），把 0.x.y.z 转成 0.x.y-z.0 喂 WiX；纯 semver / 四段
+          # 数字保持原样
+          if ($raw -match '^(\d+\.\d+\.\d+)\.(.+)$' -and $matches[2] -notmatch '^\d+$') {
+            $version = "$($matches[1])-$($matches[2]).0"
+            Write-Host "Sanitized $raw -> $version for WiX"
+          } else {
+            $version = $raw
+          }
           # download-artifact 单文件解包出来路径就是 artifact 名（无 .exe 后缀）；重命名为 .exe
           if (Test-Path dist\flowcabal-windows-x64) {
             Rename-Item dist\flowcabal-windows-x64 flowcabal-windows-x64.exe -Force
