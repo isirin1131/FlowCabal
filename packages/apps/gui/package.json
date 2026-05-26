@@ -9,7 +9,8 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "bundle:launcher": "esbuild launcher.ts --bundle --platform=node --target=node22 --format=cjs --outfile=build/launcher.bundle.js --external:node:sea",
-    "sea:blob": "node --experimental-sea-config sea-config.json",
+    "sea:check-node": "node -e \"const v=process.versions.node.split('.').map(Number);if(v[0]!==22||v[1]<20){console.error('SEA build needs Node 22.20.x LTS (current: '+process.versions.node+'). Other versions build incompatible blob (BlobDeserializer segfault). Download from nodejs.org/dist/v22.20.0/ to /tmp and use full path.');process.exit(1)}\"",
+    "sea:blob": "bun run sea:check-node && node --experimental-sea-config sea-config.json",
     "sea:build": "bun run bundle:launcher && bun run sea:blob"
   },
   "dependencies": {
