@@ -41,6 +41,11 @@ jobs:
           cp -r packages/apps/gui/.next/static packages/apps/gui/.next/standalone/packages/apps/gui/.next/static
           ls packages/apps/gui/.next/standalone/packages/apps/gui/.next/static/chunks | head -3
 
+      - name: Remove broken symlinks in standalone (Bun .bun/ store race)
+        # Bun standalone 偶发产 broken sym（如 .bun/node_modules/semver），GNU tar
+        # --dereference 遇到会 fatal (macOS bsdtar 静默跳过)；预清理避免 CI 崩
+        run: find packages/apps/gui/.next/standalone -xtype l -delete
+
       - name: Pack gui-assets.tar
         run: |
           cd packages/apps/gui
