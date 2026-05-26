@@ -161,14 +161,97 @@ async function ensureExtracted(cacheDir: string, tarPath: string): Promise<void>
   writeFileSync(sentinel, '');
 }
 
+// ── Port probing & server readiness ──
+function listenOn(port: number): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const srv = createServer();
+    srv.once('error', reject);
+    srv.listen(port, '127.0.0.1', () => {
+      const addr = srv.address();
+      if (addr && typeof addr === 'object') {
+        const got = addr.port;
+        srv.close(() => resolve(got));
+      } else {
+        reject(new Error('listen returned non-object address'));
+      }
+    });
+  });
+}
+
+async function probePort(initial: number): Promise<number> {
+  try {
+    return await listenOn(initial);
+  } catch (e: any) {
+    if (e.code !== 'EADDRINUSE') throw e;
+    console.error(`Port ${initial} is in use; falling back to OS-assigned port.`);
+    return await listenOn(0);
+  }
+}
+
+function waitForReady(port: number, timeoutMs: number): Promise<void> {
+  const start = Date.now();
+  return new Promise((resolve, reject) => {
+    const tick = () => {
+      const sock = connect(port, '127.0.0.1');
+      sock.once('connect', () => { sock.destroy(); resolve(); });
+      sock.once('error', () => {
+        sock.destroy();
+        if (Date.now() - start > timeoutMs) {
+          reject(new Error(`Server not ready after ${timeoutMs}ms`));
+        } else {
+          setTimeout(tick, 50);
+        }
+      });
+    };
+    tick();
+  });
+}
+
+function openBrowser(url: string): void {
+  try {
+    const opts = { detached: true, stdio: 'ignore' as const };
+    if (platform() === 'darwin') {
+      spawn('open', [url], opts).unref();
+    } else if (platform() === 'win32') {
+      // empty "" title is required because start treats first quoted arg as title
+      spawn('cmd', ['/c', 'start', '""', url], opts).unref();
+    } else {
+      spawn('xdg-open', [url], opts).unref();
+    }
+  } catch {
+    console.warn(`Couldn't auto-open browser; open ${url} manually.`);
+  }
+}
+
+let shuttingDown = false;
+function installSignalHandlers(): void {
+  const handler = () => {
+    if (shuttingDown) {
+      console.error('Force exit.');
+      process.exit(1);
+    }
+    shuttingDown = true;
+    console.log('\nShutting down...');
+    // Give Next server ~100ms to flush before exit
+    setTimeout(() => process.exit(0), 100);
+  };
+  process.on('SIGINT', handler);
+  process.on('SIGTERM', handler);
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) { console.log(HELP); return; }
 
   const cacheDir = await computeCacheDir(assetsTar);
   await ensureExtracted(cacheDir, assetsTar);
-  console.log('extracted to:', cacheDir);
-  console.log('TODO: probe port, start server');
+  const port = await probePort(args.port ?? 3737);
+
+  process.env.PORT = String(port);
+  process.env.HOSTNAME = '127.0.0.1';
+
+  console.log(`Would start server at port ${port} from ${cacheDir}`);
+  console.log('TODO: chdir + import + waitForReady + openBrowser');
 }
 
 main().catch((e) => {
