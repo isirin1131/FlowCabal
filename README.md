@@ -2,13 +2,13 @@
 
 AI 辅助小说创作 DAG 工作流引擎
 
-核心功能：用 agent 管理手稿和在其基础上生成的各类自定义记忆文件，用 DAG 式的工作流基于自定义内容和向 agent 的提问注入项拼接提示词，调用 LLM api 以生成新内容。
+核心功能：用 agent 管理手稿和在其基础上生成的各类自定义记忆文件，用 DAG 式的工作流基于自定义内容和向 agent 的提问注入项拼接提示词，调用 LLM API 以生成新内容。
 
 可以将想要运行的节点加入 target_nodes，软件会自动解析依赖的上游节点。
 
 stale_nodes 仅作为提醒，这些节点输出结果可能不是最新的。
 
-目前软件为 beta 版本，主要目的为验证软件定义的 AI 辅助创作范式的效果是否达到预期，GUI 和多 agent 功能的支持尚在路上。
+目前软件为 beta 版本，主要目的为验证软件定义的 AI 辅助创作范式的效果是否达到预期，多 agent 功能的支持尚在路上。
 
 ps：请关注 [LINUX DO](https://linux.do/) 社区 owo
 
@@ -17,7 +17,9 @@ ps：请关注 [LINUX DO](https://linux.do/) 社区 owo
 ### 核心依赖
 
 - **[ai](https://github.com/vercel/ai)** - AI SDK，用于调用各类 LLM API
-- **[yargs](https://github.com/yargs/yargs)** - CLI 参数解析
+- **[next](https://nextjs.org)** 16 + **[react](https://react.dev)** 19 - GUI 框架
+- **[@xyflow/react](https://reactflow.dev)** - DAG 编辑器
+- **[zustand](https://github.com/pmndrs/zustand)** - GUI 状态管理
 - **[zod](https://github.com/colinhacks/zod)** - TypeScript 数据校验
 - **[nanoid](https://github.com/adjust/nanoid)** - 唯一 ID 生成
 
@@ -30,40 +32,53 @@ ps：请关注 [LINUX DO](https://linux.do/) 社区 owo
 - `@ai-sdk/xai` - xAI (Grok)
 - `@ai-sdk/cohere` - Cohere
 
-### 工具
+### 运行时
 
-- **[@clack/prompts](https://github.com/nickcis/clack)** - 终端交互提示
-- **[Bun](https://bun.sh)** - 运行时
+- **[Node.js 22+](https://nodejs.org)** - release binary 运行时（Node SEA 嵌入，用户机器无需预装）
 
 ---
 
 ## 安装
 
-### 从 Release 下载（推荐）
+去 [GitHub Releases](https://github.com/isirin1131/FlowCabal/releases) 下载对应平台。
 
-去 [GitHub Releases](https://github.com/isirin1131/FlowCabal/releases) 下载对应平台的二进制文件：
+### Windows
 
-- Linux: `flowcabal-linux-x64`
-- macOS (Apple Silicon): `flowcabal-darwin-arm64`
-- macOS (Intel): `flowcabal-darwin-x64`
-- Windows: `flowcabal-windows-x64.exe`
+**方式一（推荐）：MSI 安装包**
 
-下载后赋予执行权限（Linux/macOS），然后使用：
+下载 `flowcabal-windows-x64.msi`，双击安装。安装向导会：
+
+- 让你选「仅当前用户」或「全用户」装机范围
+- 把 `flowcabal` 加到 PATH（新开 cmd / PowerShell 即可调用）
+- 在开始菜单加快捷方式
+- 可选在桌面也加快捷方式
+
+> ⚠️ 未签名提示：双击 MSI 时会弹 Windows SmartScreen 警告，点「更多信息」→「仍要运行」即可。
+
+**方式二：裸 .exe**
+
+下载 `flowcabal-windows-x64.exe`，放到任意目录。若双击 .exe 被 SmartScreen 拦下，右键 → 属性 → 解除锁定 → 确定。
+
+### macOS
+
+下载对应架构：
+- Apple Silicon: `flowcabal-darwin-arm64`
+- Intel: `flowcabal-darwin-x64`
 
 ```bash
-./flowcabal init
-./flowcabal workspace create my-novel
+chmod +x flowcabal-darwin-*
+# 首次跑会撞 Gatekeeper（未签名），用 xattr 解掉 quarantine
+xattr -d com.apple.quarantine flowcabal-darwin-*
 ```
 
-### 源码运行
+### Linux
 
-需要先安装 [Bun](https://bun.sh)。
+下载对应架构：
+- x86_64: `flowcabal-linux-x64`
+- ARM64: `flowcabal-linux-arm64`
 
 ```bash
-git clone <repo-url>
-cd FlowCabal
-bun install
-bun run flowcabal <command>
+chmod +x flowcabal-linux-*
 ```
 
 ---
@@ -71,142 +86,33 @@ bun run flowcabal <command>
 ## 快速开始
 
 ```bash
-# 1. 初始化项目
-./flowcabal init
-
-# 2. 创建 workspace
-./flowcabal workspace create my-novel
-
-# 3. 添加 LLM 配置
-./flowcabal llm add my-config
-# 按提示选择供应商、输入 API Key 和 model
-
-# 4. 创建节点
-./flowcabal node add chapter-1
-
-# 5. 添加内容
-./flowcabal node ins-literal chapter-1 --content "第一章：深夜的雨声"
-
-# 6. 执行
-./flowcabal run
+# 在你要存项目数据的目录跑
+cd ~/my-novel-project
+./flowcabal       # macOS / Linux
+# 或者 Windows：flowcabal （MSI 装完已加 PATH；裸 .exe 用 .\flowcabal.exe）
 ```
 
----
+首次运行：
 
-## 命令
+1. 二进制解压内嵌 GUI 资源到平台 cache 目录（约 1-2 秒，仅首次）
+2. 启动 GUI 服务，浏览器自动打开 `http://127.0.0.1:3737`
+3. 在 GUI 里：
+   - 新建 workspace（点左上 +）
+   - 添加 LLM 配置（顶栏 Settings → LLM 加 API Key 和 model）
+   - 拖节点 / 加 ref / 加 literal / 加 agent-inject
+   - 节点右键加入 target → 点 Run
 
-### init
-初始化项目，在当前目录创建 `.flowcabal/` 目录。
+工作目录就是项目根：GUI 在 cwd 下读写 `.flowcabal-project-cache/`（workspace 数据）和 `memory/`（手稿）。换项目就 `cd` 到别的目录再跑。
 
-```bash
-./flowcabal init
+### 命令行选项
+
 ```
+flowcabal [options]
 
-### workspace
-workspace 管理。
-
-```bash
-# 创建 workspace
-./flowcabal workspace create <name>
-
-# 列出所有 workspace
-./flowcabal workspace list
-
-# 切换当前 workspace
-./flowcabal workspace switch <id>
-
-# 查看状态
-./flowcabal workspace status [id]
-
-# 删除 workspace
-./flowcabal workspace delete <id>
-```
-
-### llm
-LLM 配置管理（全局 `~/.config/flowcabal/llm-configs.json`）。
-
-```bash
-# 列出所有配置
-./flowcabal llm list
-
-# 添加配置（交互式）
-./flowcabal llm add <name>
-
-# 删除配置
-./flowcabal llm remove <name>
-
-# 设为默认
-./flowcabal llm set-default <name>
-```
-
-### node
-节点编排（DAG 结构管理）。
-
-```bash
-# 创建节点
-./flowcabal node add <label>
-
-# 删除节点
-./flowcabal node rm <id>
-
-# 重命名节点
-./flowcabal node rename <id> <label>
-
-# 列出所有节点
-./flowcabal node list
-
-# 查看节点详情
-./flowcabal node cat <id>
-
-# 插入 ref block（建立 DAG 连接）
-./flowcabal node ins-ref <id> <upstream>
-
-# 插入 literal block（静态文本）
-./flowcabal node ins-literal <id> --content "文本内容"
-
-# 插入 inject block（Agent 按 hint 注入内容）
-./flowcabal node ins-inject <id> --hint "注入提示"
-
-# 删除 block
-./flowcabal node rm-block <id> <index>
-
-# 将节点加入执行目标
-./flowcabal node target <id>
-
-# 将节点移出执行目标
-./flowcabal node untarget <id>
-```
-
-### run
-执行 DAG。
-
-```bash
-# 执行全部 todo 节点
-./flowcabal run
-
-# 预览执行顺序（不执行）
-./flowcabal run preview
-```
-
-### memory
-记忆管理（角色/世界观/手稿）。
-
-```bash
-# 交互式对话
-./flowcabal memory chat
-
-# 添加手稿（复制 .md 文件到 memory/manuscripts）
-./flowcabal memory add-manuscript <path>
-```
-
----
-
-## 选项
-
-```bash
-# 指定 workspace
-./flowcabal run --workspace <id>
-./flowcabal node list -w <id>
+Options:
+  --port=N      监听端口（默认 3737，被占自动 fallback 到 OS 高位）
+  --no-open     不自动开浏览器
+  -h, --help    显示帮助
 ```
 
 ---
@@ -226,37 +132,64 @@ FlowCabal 是一个基于 DAG（有向无环图）的工作流引擎：
 
 ## 目录结构
 
-```
-.flowcabal/                      # 项目缓存目录
-├── <workspace-id>/              # workspace 目录
-│   └── workspace.json           # workspace 数据
-└── current/                    # 当前 workspace
-    └── workspace.json
+二进制在 cwd 下使用以下目录：
 
-memory/                          # 记忆目录
+```
+.flowcabal-project-cache/        # 项目缓存（GUI / CLI 自动创建）
+├── <workspace-id>/              # 各 workspace 数据
+│   ├── workspace.json
+│   ├── outputs/<node-id>.json
+│   └── errors.log               # 运行错误日志（NDJSON）
+└── current/
+    └── workspace.json           # 当前 workspace pointer
+
+memory/                          # 手稿 / 设定（手动维护）
 ├── index.md                     # 记忆索引
 └── manuscripts/                 # 手稿目录
 ```
 
----
-
-## 配置
-
-LLM 配置存储在 `~/.config/flowcabal/llm-configs.json`，支持以下供应商：
-- OpenAI
-- Anthropic
-- Google
-- Mistral
-- xAI
-- Cohere
-- OpenAI 兼容
+LLM 配置全局存在 `~/.config/flowcabal/llm-configs.json`，所有项目共享：
 
 ```json
 {
-  "default": {
-    "provider": "anthropic",
-    "apiKey": "sk-...",
-    "model": "claude-3-5-sonnet-20241022"
+  "active": "default",
+  "configs": {
+    "default": {
+      "provider": "anthropic",
+      "apiKey": "sk-...",
+      "model": "claude-3-5-sonnet-20241022"
+    }
   }
 }
 ```
+
+支持供应商：OpenAI、Anthropic、Google、Mistral、xAI、Cohere、OpenAI 兼容（自定义 base URL）。
+
+---
+
+## 开发者模式 / 源码运行
+
+需要先装 [Bun](https://bun.sh)（仅开发期；release binary 用 Node 22 SEA，用户机器无需 Bun）。
+
+```bash
+git clone https://github.com/isirin1131/FlowCabal.git
+cd FlowCabal
+bun install
+bun dev   # 启动 GUI dev server (http://localhost:3000)
+```
+
+CLI 命令仍可通过 `bun run flowcabal <cmd>` 使用（release binary 不再包含 CLI 入口）：
+
+```bash
+bun run flowcabal --help              # 总览
+bun run flowcabal init                # init 当前目录
+bun run flowcabal workspace create x  # 创建 workspace
+bun run flowcabal node add chapter-1  # 加节点
+bun run flowcabal run                 # 跑 target_nodes
+```
+
+CLI 详细命令见 `bun run flowcabal --help`。
+
+## License
+
+MIT
