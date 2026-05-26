@@ -19,8 +19,15 @@ import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 
-const __filename_self = fileURLToPath(import.meta.url);
-const localRequire = createRequire(import.meta.url);
+const __filename_self = (() => {
+  // CJS bundle (esbuild --format=cjs) 或 SEA embedderRunCjs：__filename 是 global
+  // ESM dev (bun run launcher.ts)：__filename 未定义，用 import.meta.url
+  // @ts-ignore - __filename only exists in CJS runtime
+  if (typeof __filename !== 'undefined') return __filename;
+  try { return fileURLToPath(import.meta.url); }
+  catch { return ''; }
+})();
+const localRequire = createRequire(__filename_self || pathToFileURL(process.cwd() + '/').href);
 
 // node:sea 是 Node 22+ 模块；Bun 1.x 不支持 → static import 会爆。
 // 用 createRequire 动态加载 + try/catch，让 dev 模式（Bun）也能跑。
