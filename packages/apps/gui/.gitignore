@@ -22,6 +22,9 @@
 # launcher.ts 静态 import build/gui-assets.tar；保留占位文件，
 # CI download-artifact 时会覆盖为真 tarball（不入 commit）
 !/build/gui-assets.tar
+# CI 临时产物：esbuild bundle + Node SEA blob
+/build/launcher.bundle.js
+/build/sea-prep.blob
 
 # misc
 .DS_Store
